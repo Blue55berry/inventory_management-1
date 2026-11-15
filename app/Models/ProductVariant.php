@@ -35,6 +35,32 @@ class ProductVariant {
         );
     }
 
+    public static function findJoined(int $id): ?array {
+        return self::find($id);
+    }
+
+    /**
+     * Get all active variants with joined details.
+     */
+    public static function getAllJoined(): array {
+        return Database::fetchAll(
+            "SELECT pv.*,
+                    p.name as product_name, p.code as parent_sku,
+                    c.name as category_name,
+                    col.name as color_name,
+                    d.name as design_name,
+                    s.name as size_name
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+             LEFT JOIN categories c ON c.id = p.category_id
+             LEFT JOIN colors col ON col.id = pv.color_id
+             LEFT JOIN designs d ON d.id = pv.design_id
+             LEFT JOIN sizes s ON s.id = pv.size_id
+             WHERE pv.is_active = 1
+             ORDER BY pv.id DESC"
+        );
+    }
+
     /**
      * Find variant by Variant Code (e.g. V001).
      */

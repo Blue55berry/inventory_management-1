@@ -208,7 +208,7 @@ class QrGenerationService {
                     $quantity,
                     $qrPrefix,
                     trim($data['notes'] ?? ''),
-                    (int)(Auth::id() ?? 0) ?: null
+                    (session_status() === PHP_SESSION_ACTIVE && class_exists('Auth') && Auth::check()) ? Auth::id() : null
                 ]
             );
             $generationId = (int)Database::lastInsertId();
@@ -350,7 +350,7 @@ class QrGenerationService {
                     $quantity,
                     $qrPrefix,
                     trim($data['notes'] ?? ''),
-                    (int)(Auth::id() ?? 0) ?: null
+                    (session_status() === PHP_SESSION_ACTIVE && class_exists('Auth') && Auth::check()) ? Auth::id() : null
                 ]
             );
             $generationId = (int)Database::lastInsertId();

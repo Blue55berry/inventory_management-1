@@ -136,6 +136,8 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php endif; ?>
                             <?php if (hasPermission('inventory', 'view')): ?>
                             <li><a href="<?= url('production/inventory') ?>" class="<?= ($activeMenu ?? '') === 'prod-inventory' ? 'active' : '' ?>">Finished Goods Inventory</a></li>
+                            <li><a href="<?= url('production/inwards') ?>" class="<?= in_array($activeMenu ?? '', ['inwards', 'prod-inwards']) ? 'active' : '' ?>">Goods Inward (GRN)</a></li>
+                            <li><a href="<?= url('production/stock-adjustments') ?>" class="<?= in_array($activeMenu ?? '', ['stock-adjustments', 'prod-stock-adjustments']) ? 'active' : '' ?>">Stock Adjustments (QR)</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('production_expenses', 'view')): ?>
                             <li><a href="<?= url('production/expenses') ?>" class="<?= ($activeMenu ?? '') === 'production-expenses' ? 'active' : '' ?>">Production Expenses</a></li>
@@ -161,6 +163,29 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php if (hasPermission('reports', 'view')): ?>
                             <li><a href="<?= url('production/reports') ?>" class="<?= ($activeMenu ?? '') === 'reports' ? 'active' : '' ?>">Production Analytics &amp; Reports</a></li>
                             <?php endif; ?>
+                        </ul>
+                    </li>
+                    <?php endif; ?>
+
+                    <li class="nav-divider"></li>
+
+                    <!-- Assets Management -->
+                    <?php 
+                    $canViewAssets = hasPermission('asset_register', 'view') 
+                        || hasPermission('assets', 'view')
+                        || hasPermission('asset_maintenance', 'view');
+                    ?>
+                    <?php if ($canViewAssets): ?>
+                    <li class="nav-item has-submenu">
+                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'assets' ? 'active' : '' ?>">
+                            <i class="bi bi-tools"></i>
+                            <span>Assets Management</span>
+                            <i class="bi bi-chevron-down submenu-arrow"></i>
+                        </a>
+                        <ul class="submenu <?= ($activeModule ?? '') === 'assets' ? 'show' : '' ?>">
+                            <li><a href="<?= url('assets') ?>" class="<?= ($activeMenu ?? '') === 'assets-list' ? 'active' : '' ?>">Asset Register</a></li>
+                            <li><a href="<?= url('assets/create') ?>" class="<?= ($activeMenu ?? '') === 'assets-create' ? 'active' : '' ?>">Register New Asset</a></li>
+                            <li><a href="<?= url('assets/maintenance') ?>" class="<?= ($activeMenu ?? '') === 'assets-maintenance' ? 'active' : '' ?>">Maintenance &amp; Services</a></li>
                         </ul>
                     </li>
                     <?php endif; ?>

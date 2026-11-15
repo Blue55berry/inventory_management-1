@@ -262,6 +262,41 @@ class Router {
         $this->get('production/stock-requests/view/{id}', 'ProductionStockRequestController', 'view', ['AuthMiddleware', ['PermissionMiddleware', 'production_stock_requests', 'view']]);
         $this->post('production/stock-requests/update-status/{id}', 'ProductionStockRequestController', 'updateStatus', ['AuthMiddleware', ['PermissionMiddleware', 'production_stock_requests', 'edit']]);
 
+                // ==========================================
+        // GOODS INWARD (GRN)
+        // ==========================================
+        $this->get('production/inwards', 'InwardController', 'index', ['AuthMiddleware']);
+        $this->get('production/inwards/create', 'InwardController', 'create', ['AuthMiddleware']);
+        $this->post('production/inwards/store', 'InwardController', 'store', ['AuthMiddleware']);
+        $this->get('production/inwards/view/{id}', 'InwardController', 'view', ['AuthMiddleware']);
+        $this->get('production/inwards/print/{id}', 'InwardController', 'print', ['AuthMiddleware']);
+        $this->get('api/inwards/po-items/{poId}', 'InwardController', 'apiPoItems', ['AuthMiddleware']);
+
+        // ==========================================
+        // STOCK ADJUSTMENTS (QR-BASED)
+        // ==========================================
+        $this->get('production/stock-adjustments', 'StockAdjustmentController', 'index', ['AuthMiddleware']);
+        $this->get('production/stock-adjustments/create', 'StockAdjustmentController', 'create', ['AuthMiddleware']);
+        $this->post('production/stock-adjustments/store', 'StockAdjustmentController', 'store', ['AuthMiddleware']);
+        $this->get('production/stock-adjustments/view/{id}', 'StockAdjustmentController', 'view', ['AuthMiddleware']);
+        $this->post('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
+        $this->get('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
+
+        // ==========================================
+        // ASSETS MANAGEMENT
+        // ==========================================
+        $this->get('assets', 'AssetController', 'index', ['AuthMiddleware']);
+        $this->get('assets/create', 'AssetController', 'create', ['AuthMiddleware']);
+        $this->post('assets/store', 'AssetController', 'store', ['AuthMiddleware']);
+        $this->get('assets/view/{id}', 'AssetController', 'view', ['AuthMiddleware']);
+        $this->get('assets/edit/{id}', 'AssetController', 'edit', ['AuthMiddleware']);
+        $this->post('assets/update/{id}', 'AssetController', 'update', ['AuthMiddleware']);
+        $this->get('assets/print/{id}', 'AssetController', 'printLabel', ['AuthMiddleware']);
+        $this->get('assets/maintenance', 'AssetController', 'maintenanceList', ['AuthMiddleware']);
+        $this->get('assets/maintenance/create', 'AssetController', 'maintenanceCreate', ['AuthMiddleware']);
+        $this->post('assets/maintenance/store', 'AssetController', 'maintenanceStore', ['AuthMiddleware']);
+        $this->get('assets/maintenance/view/{id}', 'AssetController', 'maintenanceView', ['AuthMiddleware']);
+
         // Production Reports & CSV / Excel Export
         $this->get('production/reports/export', 'ProductionController', 'exportReports', ['AuthMiddleware']);
         $this->post('production/reports/export', 'ProductionController', 'exportReports', ['AuthMiddleware']);
@@ -433,6 +468,41 @@ class Router {
         $this->post('production/warehouse-rework/delete/{id}', 'ProductionController', 'deleteWarehouseRework', ['AuthMiddleware', ['PermissionMiddleware', 'warehouse_rework', 'delete']]);
         $this->get('production/warehouse-rework/lookup-batch/{batchId}', 'ProductionController', 'lookupBatchVariantsAjax', ['AuthMiddleware', ['PermissionMiddleware', 'warehouse_rework', 'view']]);
 
+
+                // ==========================================
+        // GOODS INWARD (GRN)
+        // ==========================================
+        $this->get('production/inwards', 'InwardController', 'index', ['AuthMiddleware']);
+        $this->get('production/inwards/create', 'InwardController', 'create', ['AuthMiddleware']);
+        $this->post('production/inwards/store', 'InwardController', 'store', ['AuthMiddleware']);
+        $this->get('production/inwards/view/{id}', 'InwardController', 'view', ['AuthMiddleware']);
+        $this->get('production/inwards/print/{id}', 'InwardController', 'print', ['AuthMiddleware']);
+        $this->get('api/inwards/po-items/{poId}', 'InwardController', 'apiPoItems', ['AuthMiddleware']);
+
+        // ==========================================
+        // STOCK ADJUSTMENTS (QR-BASED)
+        // ==========================================
+        $this->get('production/stock-adjustments', 'StockAdjustmentController', 'index', ['AuthMiddleware']);
+        $this->get('production/stock-adjustments/create', 'StockAdjustmentController', 'create', ['AuthMiddleware']);
+        $this->post('production/stock-adjustments/store', 'StockAdjustmentController', 'store', ['AuthMiddleware']);
+        $this->get('production/stock-adjustments/view/{id}', 'StockAdjustmentController', 'view', ['AuthMiddleware']);
+        $this->post('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
+        $this->get('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
+
+        // ==========================================
+        // ASSETS MANAGEMENT
+        // ==========================================
+        $this->get('assets', 'AssetController', 'index', ['AuthMiddleware']);
+        $this->get('assets/create', 'AssetController', 'create', ['AuthMiddleware']);
+        $this->post('assets/store', 'AssetController', 'store', ['AuthMiddleware']);
+        $this->get('assets/view/{id}', 'AssetController', 'view', ['AuthMiddleware']);
+        $this->get('assets/edit/{id}', 'AssetController', 'edit', ['AuthMiddleware']);
+        $this->post('assets/update/{id}', 'AssetController', 'update', ['AuthMiddleware']);
+        $this->get('assets/print/{id}', 'AssetController', 'printLabel', ['AuthMiddleware']);
+        $this->get('assets/maintenance', 'AssetController', 'maintenanceList', ['AuthMiddleware']);
+        $this->get('assets/maintenance/create', 'AssetController', 'maintenanceCreate', ['AuthMiddleware']);
+        $this->post('assets/maintenance/store', 'AssetController', 'maintenanceStore', ['AuthMiddleware']);
+        $this->get('assets/maintenance/view/{id}', 'AssetController', 'maintenanceView', ['AuthMiddleware']);
 
         // Production Reports
         $this->get('production/reports', 'ProductionController', 'reports', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
