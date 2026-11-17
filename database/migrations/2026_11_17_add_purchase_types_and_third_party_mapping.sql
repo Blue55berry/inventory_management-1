@@ -8,7 +8,7 @@ ALTER TABLE `production_purchases`
 
 -- 2. Enhance production_purchase_items with item types, sizes, MRP, and mapping columns
 ALTER TABLE `production_purchase_items`
-  MODIFY COLUMN `item_type` ENUM('FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT', 'GENERAL_SUPPLY') NOT NULL DEFAULT 'FABRIC_ROLL',
+  MODIFY COLUMN `item_type` ENUM('FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT') NOT NULL DEFAULT 'FABRIC_ROLL',
   ADD COLUMN `size` varchar(50) DEFAULT NULL AFTER `color`,
   ADD COLUMN `mrp` decimal(12,2) NOT NULL DEFAULT 0.00 AFTER `unit_price`,
   ADD COLUMN `selling_price` decimal(12,2) NOT NULL DEFAULT 0.00 AFTER `mrp`,

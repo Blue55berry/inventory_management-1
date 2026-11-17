@@ -182,10 +182,8 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                     $rollItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'FABRIC_ROLL');
                     $thirdPartyItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'THIRD_PARTY');
                     $ownProductItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'OWN_PRODUCT');
-                    $supplyItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'GENERAL_SUPPLY');
                     $rollItemCount = count($rollItems);
                     $rollQtySum = (int)array_sum(array_map(fn($it) => max(1, (int)($it['quantity'] ?? 1)), $rollItems));
-                    $supplyCount = count($supplyItems);
                     $totalWeight = array_sum(array_column($rollItems, 'weight_kg'));
                 ?>
                     <tr class="purchase-row" data-search="<?= strtolower(e($purchase['purchase_number'] . ' ' . $pType . ' ' . ($purchase['company'] ?? '') . ' ' . ($purchase['seller_name'] ?? '') . ' ' . ($purchase['invoice_number'] ?? ''))) ?>">
@@ -259,11 +257,6 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                                         </span>
                                         <span class="badge bg-light text-dark border">
                                             <?= number_format($totalWeight, 2) ?> kg
-                                        </span>
-                                    <?php endif; ?>
-                                    <?php if ($supplyCount > 0): ?>
-                                        <span class="badge bg-secondary-subtle text-secondary border">
-                                            <i class="bi bi-box me-1"></i><?= $supplyCount ?> <?= $supplyCount === 1 ? 'Supply' : 'Supplies' ?>
                                         </span>
                                     <?php endif; ?>
                                 </div>

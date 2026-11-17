@@ -5,7 +5,7 @@
     <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
 </div>
 
-<form method="POST" action="<?= url('purchases/store') ?>" enctype="multipart/form-data" id="productionPurchaseForm">
+<form method="POST" action="<?= url('purchases/store') ?>" enctype="multipart/form-data" id="productionPurchaseForm" novalidate>
     <?= CSRF::field() ?>
     <div class="card shadow-sm border mb-4">
         <div class="card-header bg-white py-3"><h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Purchase &amp; Supplier Details</h5></div>
@@ -274,34 +274,6 @@
             </div>
         </div>
     </div>
-
-    <div class="card shadow-sm border mb-4">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div><h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-success"></i>Other Garment Supplies</h5><small class="text-muted">Optional non-fabric products received on this invoice.</small></div>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="addSupply"><i class="bi bi-plus-circle me-1"></i>Add Supply</button>
-        </div>
-        <div class="card-body" id="suppliesContainer">
-            <div id="emptySupplyMessage" class="small text-muted mb-3">No general supplies added.</div>
-            <div id="supplyRows" class="d-flex flex-column gap-3 mb-4"></div>
-            <div class="card border shadow-sm mt-3">
-                <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
-                    <span class="fw-bold small"><i class="bi bi-table me-1 text-success"></i>Other Garment Supplies Details Table</span>
-                    <span class="badge bg-secondary-subtle text-secondary border" id="supplyTableCountBadge">0 Items</span>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
-                        <thead class="table-light small text-uppercase">
-                            <tr><th class="text-center">#</th><th>Other Product No/Code</th><th>Item Name / Description</th><th>HSN</th><th class="text-end">Quantity</th><th>Unit</th><th class="text-end">Unit Price</th><th class="text-end">Base Value</th><th>GST Type</th><th class="text-end">Tax</th><th class="text-end bg-success-subtle text-success">Total Value</th></tr>
-                        </thead>
-                        <tbody id="supplyDetailsTableBody">
-                            <tr><td colspan="11" class="text-center text-muted py-4">Add garment supplies to see their purchase details.</td></tr>
-                        </tbody>
-                        <tfoot id="supplyDetailsTableFoot" class="table-light fw-bold"></tfoot>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
     </div> <!-- /#sectionFabricRoll -->
 
     <!-- 2. THIRD-PARTY PRODUCTS SECTION -->
@@ -317,13 +289,6 @@
                 </button>
             </div>
             <div class="card-body">
-                <div class="alert alert-info border-info-subtle d-flex align-items-center gap-2 py-2 px-3 mb-3 small">
-                    <i class="bi bi-info-circle-fill fs-5 text-info flex-shrink-0"></i>
-                    <div>
-                        <strong>Deferred Category &amp; Attribute Mapping:</strong> Category, Subcategory, Sub-subcategory, and Custom Attributes are not required during purchase inward entry. Once this purchase is saved, you can map them in the <strong>Third-Party Product Mapping</strong> module.
-                    </div>
-                </div>
-
                 <!-- Individual Cards Container -->
                 <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                     <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge">0</span>)</h6>
@@ -343,11 +308,11 @@
                                 <tr>
                                     <th class="text-center" style="width: 35px;">#</th>
                                     <th>Product / Item Name</th>
-                                    <th>Vendor SKU</th>
+                                    <th>Auto SKU</th>
                                     <th>Color</th>
                                     <th>Size</th>
                                     <th class="text-end">Qty (Pcs)</th>
-                                    <th class="text-end">Unit Cost</th>
+                                    <th class="text-end">Buyed Price (₹)</th>
                                     <th class="text-end">Base Value</th>
                                     <th>HSN</th>
                                     <th>GST Type</th>
@@ -402,7 +367,7 @@
                                 <th style="min-width: 200px;">Master Style / Product *</th>
                                 <th style="min-width: 220px;">Variant (Size • Color • SKU) *</th>
                                 <th class="text-end" style="width: 95px;">Qty (Pcs) *</th>
-                                <th class="text-end" style="width: 110px;">Unit Cost (₹) *</th>
+                                <th class="text-end" style="width: 110px;">Buyed Price (₹) *</th>
                                 <th class="text-end" style="width: 100px;">MRP (₹)</th>
                                 <th class="text-end" style="width: 100px;">Selling (₹)</th>
                                 <th style="min-width: 120px;">GST %</th>
@@ -698,110 +663,15 @@
     </div>
 </template>
 
-<template id="supplyTemplate">
-    <div class="supply-card card border shadow-sm mb-3 supply-row" data-index="">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <strong><i class="bi bi-box-seam text-success me-1"></i><span class="supply-title">SUPPLY #1</span> <span class="badge bg-secondary-subtle text-secondary border supply-name-badge d-none"></span></strong>
-            <button type="button" class="btn btn-sm btn-outline-danger remove-supply"><i class="bi bi-trash me-1"></i>Delete</button>
-        </div>
-        <div class="card-body p-3">
-            <div class="row g-3">
-                <div class="col-lg-2 col-md-4">
-                    <label class="form-label">Other Product No/Code</label>
-                    <input class="form-control supply-product-code font-monospace text-uppercase" maxlength="50" placeholder="e.g. OTH-001 or Code">
-                </div>
-                <div class="col-lg-3 col-md-5">
-                    <label class="form-label required">Item Name / Description *</label>
-                    <input class="form-control supply-name text-uppercase" maxlength="255" placeholder="E.G. SEWING NEEDLES, THREAD, BUTTONS" required>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label mb-0">HSN Code</label>
-                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
-                            <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
-                        </button>
-                    </div>
-                    <div class="dropdown hsn-dropdown w-100 position-relative">
-                        <input type="hidden" class="supply-hsn">
-                        <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 38px;">
-                            <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
-                        </button>
-                        <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
-                            <div class="input-group input-group-sm mb-2">
-                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
-                            </div>
-                            <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label required">Quantity *</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.001" data-step="0.001" class="form-control supply-quantity numeric-text-input" value="1" required>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label required">Unit *</label>
-                    <select class="form-select supply-unit">
-                        <option value="PCS">Pieces</option>
-                        <option value="KG">Kilograms</option>
-                        <option value="METRE">Metres</option>
-                        <option value="LITRE">Litres</option>
-                        <option value="BOX">Boxes</option>
-                        <option value="PACK">Packs</option>
-                        <option value="PAIR">Pairs</option>
-                        <option value="SET">Sets</option>
-                        <option value="BUNDLE">Bundles</option>
-                        <option value="OTHER">Other</option>
-                    </select>
-                </div>
-                <div class="col-lg-3 col-md-3 custom-unit d-none">
-                    <label class="form-label required">Unit Name *</label>
-                    <input class="form-control custom-unit-name text-uppercase" maxlength="30" placeholder="e.g. CONE, PACK">
-                </div>
-                <div class="col-lg-3 col-md-3">
-                    <label class="form-label required">Unit Price (₹) *</label>
-                    <div class="input-group">
-                        <span class="input-group-text">₹</span>
-                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control supply-price numeric-text-input" value="0" required>
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">GST</label>
-                    <select class="form-select item-gst-type">
-                        <option value="SGST">SGST</option>
-                        <option value="IGST">IGST</option>
-                        <option value="CGST">CGST</option>
-                        <option value="BOTH">Both (CGST and SGST)</option>
-                        <option value="EXEMPTED" selected>Exempted</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-3 tax-mode-field d-none">
-                    <label class="form-label">Tax Input Type</label>
-                    <select class="form-select item-tax-mode">
-                        <option value="PERCENT">Percentage (%)</option>
-                        <option value="AMOUNT">Amount (₹)</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-3 tax-value-field d-none">
-                    <label class="form-label item-tax-label">Tax</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control item-tax-value numeric-text-input" value="0">
-                </div>
-                <div class="col-lg-2 col-md-3 tax-cgst-field d-none">
-                    <label class="form-label item-cgst-label">CGST</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control item-cgst-value numeric-text-input" value="0">
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
-
 <template id="thirdPartyTemplate">
     <div class="tp-card card border shadow-sm mb-3 tp-row" data-index="">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <div class="d-flex align-items-center gap-2">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
                 <strong><i class="bi bi-box-seam text-info me-1"></i><span class="tp-title">PRODUCT #1</span></strong>
                 <span class="badge bg-secondary-subtle text-secondary border tp-name-badge d-none"></span>
-                <span class="badge bg-light text-dark border tp-sku-badge font-monospace d-none"></span>
+                <span class="badge bg-primary-subtle text-primary border font-monospace tp-sku-badge fw-bold">
+                    <i class="bi bi-upc-scan me-1"></i>SKU: <span class="tp-sku-text">AUTO-GENERATING</span>
+                </span>
             </div>
             <div class="d-flex align-items-center gap-2">
                 <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 tp-card-calc" style="font-size: 12px;">
@@ -811,14 +681,11 @@
             </div>
         </div>
         <div class="card-body p-3">
+            <input type="hidden" class="tp-sku">
             <div class="row g-3">
                 <div class="col-lg-3 col-md-6">
                     <label class="form-label required">Product / Item Name *</label>
                     <input class="form-control tp-name text-uppercase" maxlength="255" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Vendor SKU / Code</label>
-                    <input class="form-control tp-sku font-monospace text-uppercase" maxlength="50" placeholder="E.G. ZARA-001">
                 </div>
                 <div class="col-lg-2 col-md-3">
                     <label class="form-label">Color / Shade</label>
@@ -832,8 +699,8 @@
                     <label class="form-label required">Qty (Pcs) *</label>
                     <input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
                 </div>
-                <div class="col-lg-1 col-md-3">
-                    <label class="form-label required">Cost (₹) *</label>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Buyed (₹) *</label>
                     <div class="input-group">
                         <span class="input-group-text p-1">₹</span>
                         <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-cost numeric-text-input fw-semibold text-end" value="0.00" required>
@@ -846,7 +713,7 @@
                         <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-mrp numeric-text-input text-end" placeholder="0.00">
                     </div>
                 </div>
-                <div class="col-lg-1 col-md-3">
+                <div class="col-lg-2 col-md-3">
                     <label class="form-label">Selling (₹)</label>
                     <div class="input-group">
                         <span class="input-group-text p-1">₹</span>
@@ -857,14 +724,9 @@
                 <!-- Individual GST & Tax options directly near product fields! -->
                 <div class="col-12 mt-2 pt-2 border-top">
                     <div class="p-2.5 rounded border bg-light-subtle d-flex flex-wrap align-items-center gap-3">
-                        <div class="me-2">
-                            <span class="fw-bold small text-primary d-flex align-items-center gap-1">
-                                <i class="bi bi-percent fs-6"></i> Product GST &amp; Tax:
-                            </span>
-                        </div>
                         <div style="min-width: 200px; max-width: 260px;" class="flex-grow-1">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label class="form-label mb-0 small fw-semibold">HSN Code</label>
+                                <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
                                 <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
                                     <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
                                 </button>
@@ -924,13 +786,10 @@
 (() => {
     const form = document.getElementById('productionPurchaseForm');
     const rollsContainer = document.getElementById('rollsContainer');
-    const suppliesContainer = document.getElementById('suppliesContainer');
     const rollTemplate = document.getElementById('fabricRollTemplate');
-    const supplyTemplate = document.getElementById('supplyTemplate');
     const supplierSelect = document.getElementById('purchaseSeller');
     const supplierDetails = document.getElementById('selectedSupplierDetails');
     let rollIndex = 0;
-    let supplyIndex = 0;
     let nextSequence = 1;
     let sequencePrefix = 'FB<?= date('my') ?>';
     window.hsnCodesList = <?= json_encode($hsnCodes ?? []) ?>;
@@ -1061,6 +920,10 @@
     document.addEventListener('paste', handleNumericPaste);
 
     function validateNumericTextInput(input) {
+        if (!input || input.disabled || input.closest('.d-none') || input.offsetParent === null) {
+            if (input) input.setCustomValidity('');
+            return true;
+        }
         const value = input.value.trim();
         let message = '';
         if (value === '') {
@@ -1097,6 +960,7 @@
     });
     form.addEventListener('submit', event => {
         const invalidInput = Array.from(form.querySelectorAll('.numeric-text-input'))
+            .filter(input => !input.disabled && !input.closest('.d-none') && input.offsetParent !== null)
             .find(input => !validateNumericTextInput(input));
         if (invalidInput) {
             event.preventDefault();
@@ -1412,7 +1276,8 @@
 
     function updateSummary() {
         const cards = Array.from(rollsContainer.querySelectorAll('.roll-card'));
-        document.getElementById('fabricDescription').required = cards.length > 0;
+        const fabDesc = document.getElementById('fabricDescription');
+        if (fabDesc) fabDesc.required = (currentPurchaseType === 'FABRIC_ROLL' && cards.length > 0);
         const totalWeight = cards.reduce((sum, card) => sum + (Number(card.querySelector('.roll-weight').value) || 0), 0);
         const totalPrice = cards.reduce((sum, card) => {
             const price = Number(card.querySelector('.roll-price').value) || 0;
@@ -1500,9 +1365,34 @@
         const sRoll = document.getElementById('sectionFabricRoll');
         const sTp = document.getElementById('sectionThirdParty');
         const sOp = document.getElementById('sectionOwnProduct');
-        if (sRoll) sRoll.classList.toggle('d-none', type !== 'FABRIC_ROLL');
-        if (sTp) sTp.classList.toggle('d-none', type !== 'THIRD_PARTY');
-        if (sOp) sOp.classList.toggle('d-none', type !== 'OWN_PRODUCT');
+
+        const isRoll = (type === 'FABRIC_ROLL');
+        const isTp = (type === 'THIRD_PARTY');
+        const isOp = (type === 'OWN_PRODUCT');
+
+        if (sRoll) {
+            sRoll.classList.toggle('d-none', !isRoll);
+            sRoll.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = !isRoll;
+            });
+            const fabDesc = document.getElementById('fabricDescription');
+            if (fabDesc) {
+                fabDesc.required = isRoll;
+                fabDesc.disabled = !isRoll;
+            }
+        }
+        if (sTp) {
+            sTp.classList.toggle('d-none', !isTp);
+            sTp.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = !isTp;
+            });
+        }
+        if (sOp) {
+            sOp.classList.toggle('d-none', !isOp);
+            sOp.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = !isOp;
+            });
+        }
 
         if (type === 'THIRD_PARTY') {
             const tpCards = document.querySelectorAll('#thirdPartyContainer .tp-card');
@@ -1517,6 +1407,40 @@
         }
         updateTotal();
     };
+
+    function generateThirdPartySku(card, index) {
+        const name = (card.querySelector('.tp-name')?.value || '').trim();
+        const color = (card.querySelector('.tp-color')?.value || '').trim();
+        const size = (card.querySelector('.tp-size')?.value || '').trim();
+        const seq = String(index + 1).padStart(2, '0');
+
+        let prefix = 'TP';
+        let nameCode = '';
+        if (name) {
+            const cleanName = name.replace(/[^A-Za-z0-9\s]/g, '').trim();
+            const words = cleanName.split(/\s+/).filter(Boolean);
+            if (words.length > 1) {
+                nameCode = words.map(w => w.substring(0, 3).toUpperCase()).join('');
+            } else if (words.length === 1) {
+                nameCode = words[0].substring(0, 6).toUpperCase();
+            }
+        }
+        if (!nameCode) {
+            nameCode = 'PROD' + seq;
+        }
+
+        const parts = [prefix, nameCode];
+        if (color) {
+            const colClean = color.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase();
+            if (colClean) parts.push(colClean);
+        }
+        if (size) {
+            const szClean = size.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            if (szClean) parts.push(szClean);
+        }
+        parts.push(seq);
+        return parts.join('-');
+    }
 
     let tpItemIndex = 0;
     function addThirdPartyItem() {
@@ -1541,17 +1465,8 @@
         });
 
         const nameInput = card.querySelector('.tp-name');
-        const skuInput = card.querySelector('.tp-sku');
         nameInput.addEventListener('input', (e) => {
             const badge = card.querySelector('.tp-name-badge');
-            if (badge) {
-                const val = e.target.value.trim().toUpperCase();
-                badge.textContent = val;
-                badge.classList.toggle('d-none', !val);
-            }
-        });
-        skuInput.addEventListener('input', (e) => {
-            const badge = card.querySelector('.tp-sku-badge');
             if (badge) {
                 const val = e.target.value.trim().toUpperCase();
                 badge.textContent = val;
@@ -1590,6 +1505,9 @@
         }
 
         updateTaxInputs(card);
+        card.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = (currentPurchaseType !== 'THIRD_PARTY');
+        });
         container.appendChild(card);
         updateThirdPartySummary();
     }
@@ -1616,12 +1534,38 @@
         } else {
             let rowsHtml = '';
             cards.forEach((card, index) => {
+                const autoSku = generateThirdPartySku(card, index);
+                const skuInput = card.querySelector('.tp-sku');
+                if (skuInput) skuInput.value = autoSku;
+                const skuText = card.querySelector('.tp-sku-text');
+                if (skuText) skuText.textContent = autoSku;
+
                 const name = card.querySelector('.tp-name')?.value?.trim() || ('PRODUCT #' + (index + 1));
-                const sku = card.querySelector('.tp-sku')?.value?.trim() || '—';
                 const color = card.querySelector('.tp-color')?.value?.trim() || '—';
                 const size = card.querySelector('.tp-size')?.value?.trim() || '—';
                 const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
                 const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
+                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
+                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
+                const sellingInput = card.querySelector('.tp-selling');
+                const mrpInput = card.querySelector('.tp-mrp');
+
+                if (cost > 0 && selling > 0 && selling < cost) {
+                    sellingInput?.classList.add('is-invalid', 'border-danger');
+                    sellingInput?.setAttribute('title', 'Selling price cannot be less than Buyed price (₹' + cost.toFixed(2) + ')');
+                } else {
+                    sellingInput?.classList.remove('is-invalid', 'border-danger');
+                    sellingInput?.removeAttribute('title');
+                }
+
+                if (mrp > 0 && selling > 0 && mrp < selling) {
+                    mrpInput?.classList.add('is-invalid', 'border-danger');
+                    mrpInput?.setAttribute('title', 'MRP cannot be less than Selling price (₹' + selling.toFixed(2) + ')');
+                } else {
+                    mrpInput?.classList.remove('is-invalid', 'border-danger');
+                    mrpInput?.removeAttribute('title');
+                }
+
                 const base = qty * cost;
                 const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '—';
                 const tax = calculateItemTax(card, base);
@@ -1645,7 +1589,7 @@
                 rowsHtml += `<tr>
                     <td class="text-center fw-bold">${index + 1}</td>
                     <td><strong>${safe(name)}</strong></td>
-                    <td><span class="badge bg-light text-dark border font-monospace">${safe(sku)}</span></td>
+                    <td><span class="badge bg-light text-dark border font-monospace fw-semibold">${safe(autoSku)}</span></td>
                     <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
                     <td><span class="badge bg-light text-dark border">${safe(size)}</span></td>
                     <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')}</td>
@@ -1813,6 +1757,9 @@
             updateTotal();
         });
 
+        row.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = (currentPurchaseType !== 'OWN_PRODUCT');
+        });
         tbody.appendChild(row);
         updateTotal();
     }
@@ -1885,36 +1832,9 @@
             totals.total += base + tax;
             return totals;
         }, {base: 0, tax: 0, total: 0});
-        const supplyRows = Array.from(suppliesContainer.querySelectorAll('.supply-row'));
-        const supplyTotals = {base: 0, tax: 0, total: 0};
-        const tableBody = document.getElementById('supplyDetailsTableBody');
-        const tableFoot = document.getElementById('supplyDetailsTableFoot');
-        document.getElementById('supplyTableCountBadge').textContent = supplyRows.length + (supplyRows.length === 1 ? ' Item' : ' Items');
-        if (!supplyRows.length) {
-            tableBody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Add garment supplies to see their purchase details.</td></tr>';
-            tableFoot.innerHTML = '';
-        } else {
-            tableBody.innerHTML = supplyRows.map((row, index) => {
-                const quantity = Number(row.querySelector('.supply-quantity').value) || 0;
-                const unitPrice = Number(row.querySelector('.supply-price').value) || 0;
-                const hsn = row.querySelector('.supply-hsn')?.value?.trim() || '—';
-                const base = quantity * unitPrice;
-                const tax = calculateItemTax(row, base);
-                const total = base + tax.amount;
-                supplyTotals.base += base;
-                supplyTotals.tax += tax.amount;
-                supplyTotals.total += total;
-                const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : tax.type;
-                const prodCode = row.querySelector('.supply-product-code')?.value?.trim() || '—';
-                return `<tr><td class="text-center">${index + 1}</td><td><span class="badge bg-light text-dark border font-monospace">${safe(prodCode)}</span></td><td>${safe(row.querySelector('.supply-name').value.trim() || '—')}</td><td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td><td class="text-end">${quantity.toLocaleString('en-IN', {maximumFractionDigits:3})}</td><td>${safe(row.querySelector('.supply-unit').selectedOptions[0].textContent)}</td><td class="text-end">${money(unitPrice)}</td><td class="text-end">${money(base)}</td><td>${taxLabel}</td><td class="text-end">${money(tax.amount)}</td><td class="text-end fw-bold text-success">${money(total)}</td></tr>`;
-            }).join('');
-            tableFoot.innerHTML = `<tr><td colspan="7" class="text-end">Totals</td><td class="text-end">${money(supplyTotals.base)}</td><td></td><td class="text-end">${money(supplyTotals.tax)}</td><td class="text-end text-success">${money(supplyTotals.total)}</td></tr>`;
-        }
-        const subtotal = rollTotals.base + supplyTotals.base;
-        const totalTax = rollTotals.tax + supplyTotals.tax;
-        document.getElementById('purchaseSubtotal').textContent = money(subtotal);
-        document.getElementById('purchaseTaxes').textContent = money(totalTax);
-        document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+        document.getElementById('purchaseSubtotal').textContent = money(rollTotals.base);
+        document.getElementById('purchaseTaxes').textContent = money(rollTotals.tax);
+        document.getElementById('purchaseTotal').textContent = money(rollTotals.total);
     }
 
     function updateCodes() {
@@ -1991,78 +1911,11 @@
             reader.onload = () => { card.querySelector('.roll-preview img').src = reader.result; preview.classList.remove('d-none'); updateSummary(); };
             reader.readAsDataURL(file);
         });
+        card.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = (currentPurchaseType !== 'FABRIC_ROLL');
+        });
         rollsContainer.appendChild(card);
         updateCodes();
-    }
-
-    function updateSupplyTitles() {
-        const supplyTarget = document.getElementById('supplyRows') || suppliesContainer;
-        const rows = Array.from(supplyTarget.querySelectorAll('.supply-row'));
-        rows.forEach((row, i) => {
-            const title = row.querySelector('.supply-title');
-            if (title) title.textContent = 'SUPPLY #' + (i + 1);
-        });
-    }
-
-    function addSupply() {
-        const index = supplyIndex++;
-        const row = supplyTemplate.content.firstElementChild.cloneNode(true);
-        if (row.querySelector('.supply-product-code')) {
-            row.querySelector('.supply-product-code').name = `items[${index + 1000}][product_code]`;
-        }
-        row.querySelector('.supply-name').name = `items[${index + 1000}][item_name]`;
-        row.querySelector('.supply-hsn').name = `items[${index + 1000}][hsn_code]`;
-        row.querySelector('.supply-quantity').name = `items[${index + 1000}][quantity]`;
-        row.querySelector('.supply-unit').name = `items[${index + 1000}][unit]`;
-        row.querySelector('.supply-price').name = `items[${index + 1000}][unit_price]`;
-        row.querySelector('.item-gst-type').name = `items[${index + 1000}][gst_type]`;
-        row.querySelector('.item-tax-mode').name = `items[${index + 1000}][tax_mode]`;
-        row.querySelector('.item-tax-value').name = `items[${index + 1000}][tax_value]`;
-        row.querySelector('.item-cgst-value').name = `items[${index + 1000}][cgst_tax_value]`;
-        const type = document.createElement('input');
-        type.type = 'hidden'; type.name = `items[${index + 1000}][item_type]`; type.value = 'GENERAL_SUPPLY'; row.appendChild(type);
-
-        initHsnDropdown(row, '.supply-hsn');
-        row.querySelector('.supply-name').addEventListener('input', (e) => {
-            const badge = row.querySelector('.supply-name-badge');
-            if (badge) {
-                const val = e.target.value.trim().toUpperCase();
-                badge.textContent = val;
-                badge.classList.toggle('d-none', !val);
-            }
-        });
-        row.querySelector('.supply-unit').addEventListener('change', event => {
-            const custom = event.target.value === 'OTHER';
-            const unitContainer = row.querySelector('.custom-unit');
-            unitContainer.classList.toggle('d-none', !custom);
-            const input = row.querySelector('.custom-unit-name');
-            input.required = custom;
-            if (custom) input.name = `items[${index + 1000}][custom_unit]`;
-            else input.removeAttribute('name');
-            updateTotal();
-        });
-        row.querySelectorAll('input').forEach(input => input.addEventListener('input', updateTotal));
-        row.querySelector('.item-gst-type').addEventListener('change', () => {
-            updateTaxInputs(row);
-            updateTotal();
-        });
-        row.querySelector('.item-tax-mode').addEventListener('change', () => {
-            updateTaxInputs(row);
-            updateTotal();
-        });
-        updateTaxInputs(row);
-        row.querySelector('.remove-supply').addEventListener('click', () => {
-            row.remove();
-            const supplyTarget = document.getElementById('supplyRows') || suppliesContainer;
-            if (!supplyTarget.querySelector('.supply-row')) document.getElementById('emptySupplyMessage').classList.remove('d-none');
-            updateSupplyTitles();
-            updateTotal();
-        });
-        document.getElementById('emptySupplyMessage').classList.add('d-none');
-        const supplyTarget = document.getElementById('supplyRows') || suppliesContainer;
-        supplyTarget.appendChild(row);
-        updateSupplyTitles();
-        updateTotal();
     }
 
     function previewLabels() {
@@ -2131,7 +1984,6 @@
     }
 
     document.getElementById('addFabricRoll').addEventListener('click', addRoll);
-    document.getElementById('addSupply').addEventListener('click', addSupply);
     document.getElementById('previewLabels')?.addEventListener('click', previewLabels);
     supplierSelect.addEventListener('change', updateSupplierDetails);
     updateSupplierDetails();
@@ -2208,6 +2060,21 @@
         .catch(error => { console.error(error); alert('Could not load the next fabric roll code. Refresh the page before recording the purchase.'); });
 
     form.addEventListener('submit', event => {
+        if (!supplierSelect || !supplierSelect.value) {
+            event.preventDefault();
+            alert('Please select a registered supplier before saving.');
+            document.getElementById('supplierDropdownBtn')?.focus();
+            return;
+        }
+
+        const purchaseDateInput = document.getElementById('purchaseDate');
+        if (!purchaseDateInput || !purchaseDateInput.value) {
+            event.preventDefault();
+            alert('Please choose a valid purchase date.');
+            purchaseDateInput?.focus();
+            return;
+        }
+
         const itemsPayload = [];
 
         if (currentPurchaseType === 'THIRD_PARTY') {
@@ -2219,12 +2086,71 @@
             }
 
             let hasError = false;
+            let errorMessage = '';
+
             tpCards.forEach((card, idx) => {
+                if (hasError) return;
+
                 const name = card.querySelector('.tp-name')?.value?.trim();
                 const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
                 const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
-                if (!name || qty <= 0 || cost < 0) {
+                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
+                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
+                const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '';
+                const hsnBtn = card.querySelector('.hsn-dropdown-btn');
+
+                if (!name) {
                     hasError = true;
+                    errorMessage = `Product #${idx + 1}: Item name is required.`;
+                    card.querySelector('.tp-name')?.focus();
+                    return;
+                }
+
+                if (qty <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): Quantity must be at least 1.`;
+                    card.querySelector('.tp-quantity')?.focus();
+                    return;
+                }
+
+                if (cost <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): Buyed price must be greater than zero.`;
+                    card.querySelector('.tp-cost')?.focus();
+                    return;
+                }
+
+                if (!hsn) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): HSN code is mandatory. Please select or add an HSN code.`;
+                    if (hsnBtn) {
+                        hsnBtn.classList.add('border-danger', 'is-invalid');
+                        hsnBtn.focus();
+                    }
+                    return;
+                } else if (hsnBtn) {
+                    hsnBtn.classList.remove('border-danger', 'is-invalid');
+                }
+
+                if (selling <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): Selling price is required and must be greater than zero.`;
+                    card.querySelector('.tp-selling')?.focus();
+                    return;
+                }
+
+                if (selling < cost) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): Selling price (₹${selling.toFixed(2)}) cannot be less than Buyed price (₹${cost.toFixed(2)}).`;
+                    card.querySelector('.tp-selling')?.focus();
+                    return;
+                }
+
+                if (mrp > 0 && mrp < selling) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} ("${name}"): MRP (₹${mrp.toFixed(2)}) cannot be less than Selling price (₹${selling.toFixed(2)}).`;
+                    card.querySelector('.tp-mrp')?.focus();
+                    return;
                 }
 
                 const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
@@ -2240,9 +2166,9 @@
                     size: card.querySelector('.tp-size')?.value?.trim() || '',
                     quantity: qty,
                     unit_price: cost,
-                    mrp: Number(card.querySelector('.tp-mrp')?.value) || 0,
-                    selling_price: Number(card.querySelector('.tp-selling')?.value) || 0,
-                    hsn_code: card.querySelector('.tp-hsn')?.value?.trim() || '',
+                    mrp: mrp,
+                    selling_price: selling,
+                    hsn_code: hsn,
                     gst_type: gstType,
                     tax_mode: taxMode,
                     tax_value: taxVal,
@@ -2253,7 +2179,7 @@
 
             if (hasError) {
                 event.preventDefault();
-                alert('Ensure every third-party product has an item name, positive quantity, and non-negative cost.');
+                alert(errorMessage || 'Please check the third-party product fields and correct any errors.');
                 return;
             }
 
@@ -2278,7 +2204,11 @@
             }
 
             let hasError = false;
+            let errorMessage = '';
+
             opRows.forEach((r, idx) => {
+                if (hasError) return;
+
                 const prodSel = r.querySelector('.op-product');
                 const varSel = r.querySelector('.op-variant');
                 const prodId = parseInt(prodSel?.value, 10) || 0;
@@ -2286,10 +2216,44 @@
                 const prodName = prodSel?.selectedOptions[0]?.dataset?.name || prodSel?.selectedOptions[0]?.textContent || '';
                 const qty = Number(r.querySelector('.op-qty')?.value) || 0;
                 const cost = Number(r.querySelector('.op-cost')?.value) || 0;
+                const mrp = Number(r.querySelector('.op-mrp')?.value) || 0;
+                const selling = Number(r.querySelector('.op-selling')?.value) || 0;
 
-                if (prodId <= 0 || qty <= 0 || cost < 0) {
+                if (prodId <= 0) {
                     hasError = true;
+                    errorMessage = `Row #${idx + 1}: Select a Master Style / Product.`;
+                    prodSel?.focus();
+                    return;
                 }
+
+                if (qty <= 0) {
+                    hasError = true;
+                    errorMessage = `Row #${idx + 1}: Quantity must be greater than zero.`;
+                    r.querySelector('.op-qty')?.focus();
+                    return;
+                }
+
+                if (cost <= 0) {
+                    hasError = true;
+                    errorMessage = `Row #${idx + 1}: Buyed price must be greater than zero.`;
+                    r.querySelector('.op-cost')?.focus();
+                    return;
+                }
+
+                if (selling > 0 && selling < cost) {
+                    hasError = true;
+                    errorMessage = `Row #${idx + 1}: Selling price (₹${selling.toFixed(2)}) cannot be less than Buyed price (₹${cost.toFixed(2)}).`;
+                    r.querySelector('.op-selling')?.focus();
+                    return;
+                }
+
+                if (mrp > 0 && selling > 0 && mrp < selling) {
+                    hasError = true;
+                    errorMessage = `Row #${idx + 1}: MRP (₹${mrp.toFixed(2)}) cannot be less than Selling price (₹${selling.toFixed(2)}).`;
+                    r.querySelector('.op-mrp')?.focus();
+                    return;
+                }
+
                 const gstRate = Number(r.querySelector('.op-gst')?.value) || 0;
 
                 itemsPayload.push({
@@ -2302,8 +2266,8 @@
                     size: varSel?.selectedOptions[0]?.dataset?.size || '',
                     quantity: qty,
                     unit_price: cost,
-                    mrp: Number(r.querySelector('.op-mrp')?.value) || 0,
-                    selling_price: Number(r.querySelector('.op-selling')?.value) || 0,
+                    mrp: mrp,
+                    selling_price: selling,
                     hsn_code: '',
                     gst_type: gstRate > 0 ? 'BOTH' : 'EXEMPTED',
                     tax_mode: 'PERCENT',
@@ -2315,7 +2279,7 @@
 
             if (hasError) {
                 event.preventDefault();
-                alert('Ensure every own production row has a style selected, positive quantity, and non-negative unit cost.');
+                alert(errorMessage || 'Ensure every own production row has a style selected, positive quantity, valid buyed price, and correct pricing.');
                 return;
             }
 
@@ -2333,14 +2297,14 @@
 
         // Default: FABRIC_ROLL
         const hasRoll = rollsContainer.querySelector('.roll-card');
-        const hasSupply = suppliesContainer.querySelector('.supply-row');
-        if (!hasRoll && !hasSupply) {
+        if (!hasRoll) {
             event.preventDefault();
-            alert('Add at least one fabric roll or general supply.');
+            alert('Add at least one fabric roll before saving.');
             return;
         }
-        if (hasRoll && !document.getElementById('fabricDescription').value.trim()) {
+        if (!document.getElementById('fabricDescription').value.trim()) {
             event.preventDefault();
+            alert('Please enter a fabric / material description.');
             document.getElementById('fabricDescription').focus();
             return;
         }
@@ -2370,24 +2334,6 @@
                 tax_value: card.querySelector('.item-tax-value')?.value || '0',
                 cgst_tax_value: card.querySelector('.item-cgst-value')?.value || '0',
                 form_index: formIdx
-            });
-        });
-
-        suppliesContainer.querySelectorAll('.supply-row').forEach((row, idx) => {
-            const unitSelect = row.querySelector('.supply-unit');
-            const unit = unitSelect ? unitSelect.value : 'PCS';
-            const customUnit = row.querySelector('.custom-unit-name')?.value?.trim() || '';
-            itemsPayload.push({
-                item_type: 'GENERAL_SUPPLY',
-                item_name: row.querySelector('.supply-name')?.value?.trim() || '',
-                hsn_code: row.querySelector('.supply-hsn')?.value?.trim() || '',
-                quantity: Number(row.querySelector('.supply-quantity')?.value) || 1,
-                unit: unit === 'OTHER' ? customUnit : unit,
-                unit_price: Number(row.querySelector('.supply-price')?.value) || 0,
-                gst_type: row.querySelector('.item-gst-type')?.value || 'EXEMPTED',
-                tax_mode: row.querySelector('.item-tax-mode')?.value || 'PERCENT',
-                tax_value: row.querySelector('.item-tax-value')?.value || '0',
-                cgst_tax_value: row.querySelector('.item-cgst-value')?.value || '0'
             });
         });
 
@@ -2464,5 +2410,6 @@
     };
 
     addRoll();
+    switchPurchaseType('FABRIC_ROLL');
 })();
 </script>

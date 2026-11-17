@@ -6,7 +6,6 @@
 
 <?php
 $fabricItems = array_values(array_filter($items, static fn(array $item): bool => $item['item_type'] === 'FABRIC_ROLL'));
-$supplyItems = array_values(array_filter($items, static fn(array $item): bool => $item['item_type'] === 'GENERAL_SUPPLY'));
 $fabricDescription = $fabricItems[0]['item_name'] ?? '';
 $knownUnits = ['PCS', 'KG', 'METRE', 'LITRE', 'BOX', 'PACK', 'PAIR', 'SET', 'BUNDLE'];
 $taxTypeForItem = static function (array $item): string {
@@ -210,115 +209,6 @@ $taxValueForItem = static function (array $item, string $type): float {
         </div>
     </div>
 
-    <div class="card shadow-sm border mb-4">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div><h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-success"></i>Other Garment Supplies</h5><small class="text-muted">Optional non-fabric products received on this invoice.</small></div>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="addSupply"><i class="bi bi-plus-circle me-1"></i>Add Supply</button>
-        </div>
-        <div class="card-body" id="suppliesContainer">
-            <div id="emptySupplyMessage" class="small text-muted <?= $supplyItems ? 'd-none' : '' ?>">No general supplies added.</div>
-            <div id="supplyRows" class="d-flex flex-column gap-3 mb-4">
-                <?php foreach ($supplyItems as $index => $item): ?>
-                    <?php
-                    $key = (int)$item['id'];
-                    $gstType = $taxTypeForItem($item);
-                    $taxValue = $taxValueForItem($item, $gstType);
-                    $cgstValue = $gstType === 'BOTH' ? (float)($item['cgst_value'] ?? 0) : 0;
-                    $knownUnit = in_array($item['unit'], $knownUnits, true);
-                    ?>
-                    <div class="supply-card card border shadow-sm supply-row" data-item-id="<?= $key ?>">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-                            <strong><i class="bi bi-box-seam text-success me-1"></i><span class="supply-title">SUPPLY #<?= $index + 1 ?></span>
-                                <span class="badge bg-secondary-subtle text-secondary border supply-name-badge <?= empty($item['item_name']) ? 'd-none' : '' ?>"><?= e($item['item_name']) ?></span>
-                            </strong>
-                            <button type="button" class="btn btn-sm btn-outline-danger remove-supply"><i class="bi bi-trash me-1"></i>Delete</button>
-                        </div>
-                        <div class="card-body p-3">
-                            <input type="hidden" name="items[<?= $key ?>][id]" value="<?= $key ?>">
-                            <input type="hidden" name="items[<?= $key ?>][item_type]" value="GENERAL_SUPPLY">
-                            <div class="row g-3">
-                                <div class="col-lg-2 col-md-4">
-                                    <label class="form-label">Other Product No/Code</label>
-                                    <input name="items[<?= $key ?>][product_code]" class="form-control supply-product-code font-monospace text-uppercase" maxlength="50" value="<?= e($item['product_code'] ?? ($item['roll_number'] ?? '')) ?>" placeholder="e.g. OTH-001 or Code">
-                                </div>
-                                <div class="col-lg-3 col-md-5">
-                                    <label class="form-label required">Item Name / Description *</label>
-                                    <input name="items[<?= $key ?>][item_name]" class="form-control supply-name text-uppercase" maxlength="255" value="<?= e($item['item_name']) ?>" required>
-                                </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <label class="form-label mb-0">HSN Code</label>
-                                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
-                                            <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
-                                        </button>
-                                    </div>
-                                    <div class="dropdown hsn-dropdown w-100 position-relative">
-                                        <input type="hidden" name="items[<?= $key ?>][hsn_code]" class="supply-hsn" value="<?= e($item['hsn_code'] ?? '') ?>">
-                                        <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 38px;">
-                                            <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
-                                        </button>
-                                        <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
-                                            <div class="input-group input-group-sm mb-2">
-                                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                                                <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
-                                            </div>
-                                            <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label required">Quantity *</label>
-                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.001" data-step="0.001" name="items[<?= $key ?>][quantity]" class="form-control supply-quantity numeric-text-input" value="<?= e($item['quantity']) ?>" required>
-                                </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label required">Unit *</label>
-                                    <select name="items[<?= $key ?>][unit]" class="form-select supply-unit" required>
-                                        <?php foreach (['PCS'=>'Pieces','KG'=>'Kilograms','METRE'=>'Metres','LITRE'=>'Litres','BOX'=>'Boxes','PACK'=>'Packs','PAIR'=>'Pairs','SET'=>'Sets','BUNDLE'=>'Bundles'] as $unit => $label): ?><option value="<?= e($unit) ?>" <?= $item['unit'] === $unit ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
-                                        <?php if (!$knownUnit): ?><option value="OTHER" selected>Other</option><?php endif; ?>
-                                    </select>
-                                </div>
-                                <div class="col-lg-3 col-md-3 custom-unit <?= $knownUnit ? 'd-none' : '' ?>">
-                                    <label class="form-label required">Unit Name *</label>
-                                    <input name="items[<?= $key ?>][custom_unit]" class="form-control custom-unit-name text-uppercase" maxlength="30" value="<?= !$knownUnit ? e($item['unit']) : '' ?>" <?= !$knownUnit ? 'required' : '' ?>>
-                                </div>
-                                <div class="col-lg-3 col-md-3">
-                                    <label class="form-label required">Unit Price (₹) *</label>
-                                    <div class="input-group">
-                                        <span class="input-group-text">₹</span>
-                                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $key ?>][unit_price]" class="form-control supply-price numeric-text-input" value="<?= e($item['unit_price']) ?>" required>
-                                    </div>
-                                </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label">GST</label>
-                                    <select name="items[<?= $key ?>][gst_type]" class="form-select item-gst-type"><?php foreach (['SGST'=>'SGST','IGST'=>'IGST','CGST'=>'CGST','BOTH'=>'Both (CGST and SGST)','EXEMPTED'=>'Exempted'] as $type => $label): ?><option value="<?= e($type) ?>" <?= $gstType === $type ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?></select>
-                                </div>
-                                <div class="col-lg-2 col-md-3 tax-mode-field <?= $gstType === 'EXEMPTED' ? 'd-none' : '' ?>">
-                                    <label class="form-label">Tax Input Type</label>
-                                    <select name="items[<?= $key ?>][tax_mode]" class="form-select item-tax-mode"><option value="PERCENT" <?= ($item['tax_input_type'] ?? '') !== 'AMOUNT' ? 'selected' : '' ?>>Percentage (%)</option><option value="AMOUNT" <?= ($item['tax_input_type'] ?? '') === 'AMOUNT' ? 'selected' : '' ?>>Amount (₹)</option></select>
-                                </div>
-                                <div class="col-lg-2 col-md-3 tax-value-field <?= $gstType === 'EXEMPTED' ? 'd-none' : '' ?>">
-                                    <label class="form-label item-tax-label"><?= $gstType === 'BOTH' ? 'SGST' : e($gstType) ?></label>
-                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $key ?>][tax_value]" class="form-control item-tax-value numeric-text-input" value="<?= e($taxValue) ?>">
-                                </div>
-                                <div class="col-lg-2 col-md-3 tax-cgst-field <?= $gstType !== 'BOTH' ? 'd-none' : '' ?>">
-                                    <label class="form-label item-cgst-label">CGST</label>
-                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $key ?>][cgst_tax_value]" class="form-control item-cgst-value numeric-text-input" value="<?= e($cgstValue) ?>">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-            <div class="card border shadow-sm mt-3">
-                <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between"><span class="fw-bold small"><i class="bi bi-table me-1 text-success"></i>Other Garment Supplies Details Table</span><span class="badge bg-secondary-subtle text-secondary border" id="supplyTableCountBadge">0 Items</span></div>
-                <div class="table-responsive"><table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
-                    <thead class="table-light small text-uppercase"><tr><th class="text-center">#</th><th>Other Product No/Code</th><th>Item Name / Description</th><th>HSN</th><th class="text-end">Quantity</th><th>Unit</th><th class="text-end">Unit Price</th><th class="text-end">Base Value</th><th>GST Type</th><th class="text-end">Tax</th><th class="text-end bg-success-subtle text-success">Total Value</th></tr></thead>
-                    <tbody id="supplyDetailsTableBody"></tbody><tfoot id="supplyDetailsTableFoot" class="table-light fw-bold"></tfoot>
-                </table></div>
-            </div>
-        </div>
-    </div>
-
     <div class="card border shadow-sm mb-4"><div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-2"><span>Subtotal</span><strong id="purchaseSubtotal">₹0.00</strong></div>
         <div class="d-flex justify-content-between align-items-center mb-2"><span>Taxes</span><strong id="purchaseTaxes">₹0.00</strong></div>
@@ -503,109 +393,12 @@ $taxValueForItem = static function (array $item, string $type): float {
     border-color: rgba(255, 255, 255, 0.4) !important;
 }
 </style>
-<template id="editSupplyTemplate">
-    <div class="supply-card card border shadow-sm mb-3 supply-row">
-        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
-            <strong><i class="bi bi-box-seam text-success me-1"></i><span class="supply-title">SUPPLY #1</span> <span class="badge bg-secondary-subtle text-secondary border supply-name-badge d-none"></span></strong>
-            <button type="button" class="btn btn-sm btn-outline-danger remove-supply"><i class="bi bi-trash me-1"></i>Delete</button>
-        </div>
-        <div class="card-body p-3">
-            <div class="row g-3">
-                <div class="col-lg-2 col-md-4">
-                    <label class="form-label">Other Product No/Code</label>
-                    <input class="form-control supply-product-code font-monospace text-uppercase" maxlength="50" placeholder="e.g. OTH-001 or Code">
-                </div>
-                <div class="col-lg-3 col-md-5">
-                    <label class="form-label required">Item Name / Description *</label>
-                    <input class="form-control supply-name text-uppercase" maxlength="255" placeholder="E.G. SEWING NEEDLES, THREAD, BUTTONS" required>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label mb-0">HSN Code</label>
-                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
-                            <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
-                        </button>
-                    </div>
-                    <div class="dropdown hsn-dropdown w-100 position-relative">
-                        <input type="hidden" class="supply-hsn">
-                        <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 38px;">
-                            <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
-                        </button>
-                        <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
-                            <div class="input-group input-group-sm mb-2">
-                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                                <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
-                            </div>
-                            <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label required">Quantity *</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" class="form-control supply-quantity numeric-text-input" data-min="0.001" data-step="0.001" value="1" required>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label required">Unit *</label>
-                    <select class="form-select supply-unit" required>
-                        <option value="PCS">Pieces</option>
-                        <option value="KG">Kilograms</option>
-                        <option value="METRE">Metres</option>
-                        <option value="LITRE">Litres</option>
-                        <option value="BOX">Boxes</option>
-                        <option value="PACK">Packs</option>
-                        <option value="PAIR">Pairs</option>
-                        <option value="SET">Sets</option>
-                        <option value="BUNDLE">Bundles</option>
-                        <option value="OTHER">Other</option>
-                    </select>
-                </div>
-                <div class="col-lg-3 col-md-3 custom-unit d-none">
-                    <label class="form-label required">Unit Name *</label>
-                    <input class="form-control custom-unit-name text-uppercase" maxlength="30" placeholder="e.g. CONE, PACK">
-                </div>
-                <div class="col-lg-3 col-md-3">
-                    <label class="form-label required">Unit Price (₹) *</label>
-                    <div class="input-group">
-                        <span class="input-group-text">₹</span>
-                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" class="form-control supply-price numeric-text-input" data-min="0" data-step="0.01" value="0" required>
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">GST</label>
-                    <select class="form-select item-gst-type">
-                        <option value="SGST">SGST</option>
-                        <option value="IGST">IGST</option>
-                        <option value="CGST">CGST</option>
-                        <option value="BOTH">Both (CGST and SGST)</option>
-                        <option value="EXEMPTED" selected>Exempted</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-3 tax-mode-field d-none">
-                    <label class="form-label">Tax Input Type</label>
-                    <select class="form-select item-tax-mode">
-                        <option value="PERCENT">Percentage (%)</option>
-                        <option value="AMOUNT">Amount (₹)</option>
-                    </select>
-                </div>
-                <div class="col-lg-2 col-md-3 tax-value-field d-none">
-                    <label class="form-label item-tax-label">Tax</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" class="form-control item-tax-value numeric-text-input" data-min="0" data-max="100" data-step="0.01" value="0">
-                </div>
-                <div class="col-lg-2 col-md-3 tax-cgst-field d-none">
-                    <label class="form-label item-cgst-label">CGST</label>
-                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" class="form-control item-cgst-value numeric-text-input" data-min="0" data-max="100" data-step="0.01" value="0">
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
 
 <script src="<?= asset('js/qrcode.min.js') ?>"></script>
 <script>
 (() => {
     const form = document.getElementById('editProductionPurchaseForm');
     const rollsContainer = document.getElementById('rollsContainer');
-    const suppliesContainer = document.getElementById('supplyRows');
     window.hsnCodesList = <?= json_encode($hsnCodes ?? []) ?>;
     const money = value => '₹' + (Number(value) || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const safe = value => String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -1052,7 +845,6 @@ $taxValueForItem = static function (array $item, string $type): float {
 
     function updateSummary() {
         const rolls = Array.from(rollsContainer.querySelectorAll('.roll-card'));
-        const supplyRows = Array.from(suppliesContainer.querySelectorAll('.supply-row')).filter(row => !row.classList.contains('d-none'));
         const rollTableBody = document.getElementById('rollDetailsTableBody');
         const rollTableRows = [];
         let subtotal = 0, taxes = 0, total = 0, totalWeight = 0, totalRq = 0;
@@ -1112,64 +904,9 @@ $taxValueForItem = static function (array $item, string $type): float {
         }, 0));
         rollTableBody.innerHTML = rollTableRows.length ? rollTableRows.join('') : '<tr><td colspan="14" class="text-center text-muted py-4">No fabric rolls in this purchase.</td></tr>';
 
-        const supplyTableBody = document.getElementById('supplyDetailsTableBody');
-        const supplyTableFoot = document.getElementById('supplyDetailsTableFoot');
-        const supplyTableRows = [];
-        let supplyBase = 0, supplyTax = 0, supplyTotal = 0;
-        supplyRows.forEach((row, index) => {
-            const quantity = Number(row.querySelector('.supply-quantity').value) || 0;
-            const unitPrice = Number(row.querySelector('.supply-price').value) || 0;
-            const hsn = row.querySelector('.supply-hsn')?.value?.trim() || '—';
-            const base = quantity * unitPrice;
-            const tax = calculateTax(row, base);
-            const unitOption = row.querySelector('.supply-unit').selectedOptions[0];
-            const unit = unitOption.value === 'OTHER' ? row.querySelector('.custom-unit-name').value : unitOption.textContent;
-            supplyBase += base;
-            supplyTax += tax.amount;
-            supplyTotal += base + tax.amount;
-            const prodCode = row.querySelector('.supply-product-code')?.value?.trim() || '—';
-            supplyTableRows.push(`<tr><td class="text-center">${index + 1}</td><td><span class="badge bg-light text-dark border font-monospace">${safe(prodCode)}</span></td><td>${safe(row.querySelector('.supply-name').value.trim() || '—')}</td><td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td><td class="text-end">${quantity.toLocaleString('en-IN', {maximumFractionDigits: 3})}</td><td>${safe(unit)}</td><td class="text-end">${money(unitPrice)}</td><td class="text-end">${money(base)}</td><td>${tax.type === 'BOTH' ? 'SGST + CGST' : tax.type}</td><td class="text-end">${money(tax.amount)}</td><td class="text-end fw-bold text-success">${money(base + tax.amount)}</td></tr>`);
-        });
-        document.getElementById('supplyTableCountBadge').textContent = `${supplyRows.length} ${supplyRows.length === 1 ? 'Item' : 'Items'}`;
-        supplyTableBody.innerHTML = supplyTableRows.length ? supplyTableRows.join('') : '<tr><td colspan="11" class="text-center text-muted py-4">Add garment supplies to see their purchase details.</td></tr>';
-        supplyTableFoot.innerHTML = supplyTableRows.length ? `<tr><td colspan="7" class="text-end">Totals</td><td class="text-end">${money(supplyBase)}</td><td></td><td class="text-end">${money(supplyTax)}</td><td class="text-end text-success">${money(supplyTotal)}</td></tr>` : '';
-
-        subtotal += supplyBase;
-        taxes += supplyTax;
-        total += supplyTotal;
         document.getElementById('purchaseSubtotal').textContent = money(subtotal);
         document.getElementById('purchaseTaxes').textContent = money(taxes);
         document.getElementById('purchaseTotal').textContent = money(total);
-    }
-
-    function updateSupplyTitles() {
-        const visibleRows = Array.from(suppliesContainer.querySelectorAll('.supply-row:not(.d-none)'));
-        visibleRows.forEach((row, i) => {
-            const title = row.querySelector('.supply-title');
-            if (title) title.textContent = 'SUPPLY #' + (i + 1);
-        });
-    }
-
-    function addSupplyRow() {
-        const row = document.getElementById('editSupplyTemplate').content.firstElementChild.cloneNode(true);
-        const key = `new-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
-        const itemKey = `new_${key.replace(/[^A-Za-z0-9_]/g, '')}`;
-        const names = {'.supply-product-code':'product_code', '.supply-name':'item_name','.supply-hsn':'hsn_code','.supply-quantity':'quantity','.supply-unit':'unit','.supply-price':'unit_price','.item-gst-type':'gst_type','.item-tax-mode':'tax_mode','.item-tax-value':'tax_value','.item-cgst-value':'cgst_tax_value'};
-        Object.entries(names).forEach(([selector, field]) => {
-            const input = row.querySelector(selector);
-            if (input) input.name = `items[${itemKey}][${field}]`;
-        });
-        const typeInput = document.createElement('input');
-        typeInput.type = 'hidden';
-        typeInput.name = `items[${itemKey}][item_type]`;
-        typeInput.value = 'GENERAL_SUPPLY';
-        row.appendChild(typeInput);
-        initHsnDropdown(row, '.supply-hsn');
-        configureSupplyRow(row);
-        suppliesContainer.appendChild(row);
-        document.getElementById('emptySupplyMessage').classList.add('d-none');
-        updateSupplyTitles();
-        updateSummary();
     }
 
     function previewLabels() {
@@ -1242,57 +979,6 @@ $taxValueForItem = static function (array $item, string $type): float {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('editPurchaseLabelsModal')).show();
     }
 
-    function configureSupplyRow(row) {
-        row.querySelectorAll('input,select').forEach(input => {
-            input.addEventListener('input', updateSummary);
-            input.addEventListener('change', updateSummary);
-        });
-        row.querySelector('.supply-name')?.addEventListener('input', (e) => {
-            const badge = row.querySelector('.supply-name-badge');
-            if (badge) {
-                const val = e.target.value.trim().toUpperCase();
-                badge.textContent = val;
-                badge.classList.toggle('d-none', !val);
-            }
-        });
-        row.querySelector('.item-gst-type').addEventListener('change', () => { updateTaxFields(row); updateSummary(); });
-        row.querySelector('.item-tax-mode').addEventListener('change', () => { updateTaxFields(row); updateSummary(); });
-        row.querySelector('.supply-unit').addEventListener('change', event => {
-            const custom = event.target.value === 'OTHER';
-            const field = row.querySelector('.custom-unit');
-            const input = row.querySelector('.custom-unit-name');
-            field.classList.toggle('d-none', !custom);
-            input.required = custom;
-            if (custom) input.name = event.target.name.replace('[unit]', '[custom_unit]');
-            else input.removeAttribute('name');
-            updateSummary();
-        });
-        row.querySelector('.remove-supply').addEventListener('click', () => {
-            const itemId = row.dataset.itemId;
-            if (itemId) {
-                let removeField = row.querySelector('.remove-item-value');
-                if (!removeField) {
-                    removeField = document.createElement('input');
-                    removeField.type = 'hidden';
-                    removeField.name = `items[${itemId}][remove_item]`;
-                    removeField.className = 'remove-item-value';
-                    removeField.value = '1';
-                    row.appendChild(removeField);
-                }
-                row.classList.add('d-none');
-                row.querySelectorAll('input,select').forEach(input => {
-                    if (!input.classList.contains('remove-item-value') && !input.name.endsWith('[id]') && !input.name.endsWith('[item_type]')) input.disabled = true;
-                });
-            } else {
-                row.remove();
-            }
-            if (!suppliesContainer.querySelector('.supply-row:not(.d-none)')) document.getElementById('emptySupplyMessage').classList.remove('d-none');
-            updateSupplyTitles();
-            updateSummary();
-        });
-        updateTaxFields(row);
-    }
-
     rollsContainer.querySelectorAll('.roll-card').forEach(card => {
         initHsnDropdown(card, '.roll-hsn');
         card.querySelectorAll('input,select').forEach(input => {
@@ -1303,20 +989,13 @@ $taxValueForItem = static function (array $item, string $type): float {
         card.querySelector('.item-tax-mode').addEventListener('change', () => { updateTaxFields(card); updateSummary(); });
         updateTaxFields(card);
     });
-    suppliesContainer.querySelectorAll('.supply-row').forEach(row => {
-        initHsnDropdown(row, '.supply-hsn');
-        configureSupplyRow(row);
-    });
-    updateSupplyTitles();
     document.getElementById('editFabricDescription').addEventListener('input', updateSummary);
-    document.getElementById('addSupply').addEventListener('click', addSupplyRow);
     document.getElementById('previewPurchaseLabels').addEventListener('click', previewLabels);
     form.addEventListener('submit', event => {
         const hasRoll = rollsContainer.querySelector('.roll-card');
-        const hasSupply = suppliesContainer.querySelector('.supply-row:not(.d-none)');
-        if (!hasRoll && !hasSupply) {
+        if (!hasRoll) {
             event.preventDefault();
-            alert('Add at least one fabric roll or general supply.');
+            alert('Add at least one fabric roll.');
             return;
         }
 

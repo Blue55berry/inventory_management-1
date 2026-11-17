@@ -63,7 +63,20 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
     </div>
 
     <table class="items">
-        <thead><tr><th>#</th><th>Purchased Item</th><th>Quantity</th><th class="num">Unit Price</th><th class="num">Subtotal</th><th>GST Type</th><th class="num">Tax</th><th class="num">Total</th></tr></thead>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Purchased Item</th>
+                <th>HSN</th>
+                <th>Quantity</th>
+                <th class="num">Unit Price</th>
+                <th class="num">Subtotal</th>
+                <th>GST Type</th>
+                <th class="num">Rate (%)</th>
+                <th class="num">Tax Amount</th>
+                <th class="num">Total</th>
+            </tr>
+        </thead>
         <tbody>
         <?php foreach ($items as $index => $item): ?>
             <?php
@@ -74,14 +87,40 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                     : ($item['item_name'] ?? '');
                 if ($taxType === 'LEGACY') $taxType = $itemTax > 0 ? 'SGST / CGST' : 'Exempted';
                 if ($taxType === 'BOTH') $taxType = 'SGST + CGST';
+
+                // Percentage Rate Calculation
+                $isPercent = (($item['tax_input_type'] ?? 'PERCENT') === 'PERCENT');
+                $sgstVal = (float)($item['sgst_value'] ?? 0);
+                $cgstVal = (float)($item['cgst_value'] ?? 0);
+                $igstVal = (float)($item['igst_value'] ?? 0);
+                $totalRate = $sgstVal + $cgstVal + $igstVal;
+
+                if ($isPercent && $totalRate > 0) {
+                    if ($igstVal > 0) {
+                        $taxRateText = ($igstVal + 0) . '%';
+                    } elseif ($sgstVal > 0 && $cgstVal > 0) {
+                        $taxRateText = ($totalRate + 0) . '% (' . ($sgstVal + 0) . '% + ' . ($cgstVal + 0) . '%)';
+                    } else {
+                        $taxRateText = ($totalRate + 0) . '%';
+                    }
+                } elseif ($itemTax > 0) {
+                    $taxRateText = 'Fixed';
+                } else {
+                    $taxRateText = '0%';
+                }
             ?>
             <tr>
                 <td><?= $index + 1 ?></td>
-                <td><?= e($description) ?><br><small><?= $item['item_type'] === 'FABRIC_ROLL' ? 'Fabric Roll' : 'Other Garment Supply' ?></small></td>
+                <td>
+                    <?= e($description) ?><br>
+                    <small style="color:#6b7280;"><?= $item['item_type'] === 'FABRIC_ROLL' ? 'Fabric Roll' : ($item['item_type'] === 'THIRD_PARTY' ? 'Third-Party Product' : 'Own Production Product') ?></small>
+                </td>
+                <td><small style="font-family:monospace;"><?= e($item['hsn_code'] ?: '—') ?></small></td>
                 <td><?= number_format((float)$item['quantity'], 3) ?> <?= e($item['unit']) ?><?= !empty($item['weight_kg']) ? ' · ' . number_format((float)$item['weight_kg'], 2) . ' kg' : '' ?></td>
                 <td class="num"><?= e($currency) ?><?= number_format((float)$item['unit_price'], 2) ?></td>
                 <td class="num"><?= e($currency) ?><?= number_format((float)$item['base_amount'], 2) ?></td>
                 <td><?= e($taxLabels[$taxType] ?? $taxType) ?></td>
+                <td class="num font-monospace"><?= e($taxRateText) ?></td>
                 <td class="num"><?= e($currency) ?><?= number_format($itemTax, 2) ?></td>
                 <td class="num"><?= e($currency) ?><?= number_format((float)$item['total_price'], 2) ?></td>
             </tr>
@@ -91,9 +130,23 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
 
     <table class="totals">
         <tr><td>Subtotal</td><td class="num"><?= e($currency) ?><?= number_format((float)$subtotal, 2) ?></td></tr>
-        <?php foreach ($taxes as $type => $amount): if ($amount > 0): ?>
-            <tr><td><?= e($type) ?></td><td class="num"><?= e($currency) ?><?= number_format((float)$amount, 2) ?></td></tr>
-        <?php endif; endforeach; ?>
+        <?php if (!empty($taxSummary)): ?>
+            <?php foreach ($taxSummary as $taxRow): ?>
+                <tr>
+                    <td>
+                        <?= e($taxRow['name']) ?>
+                        <?php if (!empty($taxRow['rate_label'])): ?>
+                            <small style="color:#6b7280; font-weight:normal;">(<?= e($taxRow['rate_label']) ?>)</small>
+                        <?php endif; ?>
+                    </td>
+                    <td class="num"><?= e($currency) ?><?= number_format((float)$taxRow['amount'], 2) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <?php foreach ($taxes as $type => $amount): if ((float)$amount > 0): ?>
+                <tr><td><?= e($type) ?></td><td class="num"><?= e($currency) ?><?= number_format((float)$amount, 2) ?></td></tr>
+            <?php endif; endforeach; ?>
+        <?php endif; ?>
         <tr><td>Total Taxes</td><td class="num"><?= e($currency) ?><?= number_format((float)$totalTax, 2) ?></td></tr>
         <tr class="grand-total"><td>Overall Total</td><td class="num"><?= e($currency) ?><?= number_format((float)$overallTotal, 2) ?></td></tr>
     </table>

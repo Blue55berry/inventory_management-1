@@ -22,8 +22,74 @@ class CloudinaryService {
     }
 
     /**
+     * Convert an image file to AVIF format if supported and file is an image.
+     * Automatically converts JPG, PNG, WEBP, BMP, etc. into high-efficiency AVIF.
+     *
+     * @param string $sourcePath Path to image on disk
+     * @param string $originalName Original filename
+     * @param string|null $mimeType Known MIME type
+     * @return array [path => string, name => string, mime => string, converted => bool]
+     */
+    public static function convertImageToAvif(string $sourcePath, string $originalName, ?string $mimeType = null): array {
+        if (!file_exists($sourcePath) || !function_exists('imageavif')) {
+            $detected = @mime_content_type($sourcePath) ?: ($mimeType ?: 'application/octet-stream');
+            return ['path' => $sourcePath, 'name' => $originalName, 'mime' => $detected, 'converted' => false];
+        }
+
+        $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+        $detectedMime = $mimeType ?: (@mime_content_type($sourcePath) ?: '');
+
+        // Already AVIF
+        if ($ext === 'avif' || $detectedMime === 'image/avif') {
+            return ['path' => $sourcePath, 'name' => $originalName, 'mime' => 'image/avif', 'converted' => false];
+        }
+
+        // Only convert raster images (exclude PDFs, documents, text files, zip, etc.)
+        $isImage = str_starts_with($detectedMime, 'image/') || in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif'], true);
+        if (!$isImage) {
+            return ['path' => $sourcePath, 'name' => $originalName, 'mime' => $detectedMime ?: 'application/octet-stream', 'converted' => false];
+        }
+
+        try {
+            $data = @file_get_contents($sourcePath);
+            if ($data === false) {
+                return ['path' => $sourcePath, 'name' => $originalName, 'mime' => $detectedMime, 'converted' => false];
+            }
+
+            $img = @imagecreatefromstring($data);
+            if ($img === false) {
+                return ['path' => $sourcePath, 'name' => $originalName, 'mime' => $detectedMime, 'converted' => false];
+            }
+
+            // Preserve alpha channel and truecolor
+            imagepalettetotruecolor($img);
+            imagealphablending($img, true);
+            imagesavealpha($img, true);
+
+            $avifTempPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'avif_' . bin2hex(random_bytes(8)) . '.avif';
+            $success = @imageavif($img, $avifTempPath, 80);
+            imagedestroy($img);
+
+            if ($success && file_exists($avifTempPath) && filesize($avifTempPath) > 0) {
+                $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+                return [
+                    'path' => $avifTempPath,
+                    'name' => $baseName . '.avif',
+                    'mime' => 'image/avif',
+                    'converted' => true
+                ];
+            }
+        } catch (\Throwable $e) {
+            error_log("[CloudinaryService] AVIF conversion error: " . $e->getMessage());
+        }
+
+        return ['path' => $sourcePath, 'name' => $originalName, 'mime' => $detectedMime ?: 'image/jpeg', 'converted' => false];
+    }
+
+    /**
      * Upload an image or file to Cloudinary.
-     * If Cloudinary is not configured or network fails, falls back gracefully to local storage.
+     * Automatically converts any uploaded image to AVIF before uploading.
+     * If Cloudinary is not configured or network fails, falls back gracefully.
      *
      * @param array|string $file Either $_FILES array item or absolute local filepath
      * @param string $folder Cloudinary folder path (e.g. 'grm_inventory/sellers/rolls')
@@ -53,16 +119,31 @@ class CloudinaryService {
             return null;
         }
 
-        // Strictly upload to Cloudinary (No local storage)
-        if (self::isConfigured()) {
-            $cloudinaryUrl = self::uploadToCloudinaryApi($tmpPath, $folder, $originalName, $mimeType, $resourceType);
-            if ($cloudinaryUrl) {
-                return $cloudinaryUrl;
+        // Convert image to AVIF format across the entire website
+        $conversion = self::convertImageToAvif($tmpPath, $originalName, $mimeType);
+        $uploadPath = $conversion['path'];
+        $uploadName = $conversion['name'];
+        $uploadMime = $conversion['mime'];
+        $isConverted = $conversion['converted'];
+
+        $effectiveResourceType = ($uploadMime === 'image/avif' || str_starts_with($uploadMime, 'image/')) ? 'image' : $resourceType;
+
+        try {
+            // Strictly upload to Cloudinary (No local storage)
+            if (self::isConfigured()) {
+                $cloudinaryUrl = self::uploadToCloudinaryApi($uploadPath, $folder, $uploadName, $uploadMime, $effectiveResourceType);
+                if ($cloudinaryUrl) {
+                    return $cloudinaryUrl;
+                }
+            }
+
+            error_log("[CloudinaryService] Upload failed or Cloudinary not configured. File not saved locally.");
+            return null;
+        } finally {
+            if ($isConverted && file_exists($uploadPath)) {
+                @unlink($uploadPath);
             }
         }
-
-        error_log("[CloudinaryService] Upload failed or Cloudinary not configured. File not saved locally.");
-        return null;
     }
 
     /**
@@ -90,69 +171,93 @@ class CloudinaryService {
         $cleanFolder = trim($folder, '/');
         $multiHandle = curl_multi_init();
         $handles = [];
+        $tempFilesToClean = [];
 
-        foreach ($files as $key => $file) {
-            if (!is_array($file) || empty($file['tmp_name']) || ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
-                continue;
+        try {
+            foreach ($files as $key => $file) {
+                if (!is_array($file) || empty($file['tmp_name']) || ($file['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+                    continue;
+                }
+
+                $sourcePath = $file['tmp_name'];
+                $sourceName = $file['name'] ?? 'upload';
+                $sourceMime = $file['type'] ?? mime_content_type($sourcePath);
+
+                // Convert image to AVIF format
+                $conversion = self::convertImageToAvif($sourcePath, $sourceName, $sourceMime);
+                $uploadPath = $conversion['path'];
+                $uploadName = $conversion['name'];
+                $uploadMime = $conversion['mime'];
+                if ($conversion['converted']) {
+                    $tempFilesToClean[] = $uploadPath;
+                }
+
+                $effectiveResourceType = ($uploadMime === 'image/avif' || str_starts_with($uploadMime, 'image/')) ? 'image' : $resourceType;
+
+                $timestamp = time();
+                $params = ['folder' => $cleanFolder, 'timestamp' => $timestamp];
+                ksort($params);
+                $paramString = '';
+                foreach ($params as $paramName => $paramValue) {
+                    $paramString .= ($paramString !== '' ? '&' : '') . $paramName . '=' . $paramValue;
+                }
+                $signature = sha1($paramString . $apiSecret);
+                $curlFile = new CURLFile(
+                    $uploadPath,
+                    $uploadMime ?: 'application/octet-stream',
+                    $uploadName
+                );
+                $handle = curl_init();
+                curl_setopt_array($handle, [
+                    CURLOPT_URL => "https://api.cloudinary.com/v1_1/{$cloudName}/{$effectiveResourceType}/upload",
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => [
+                        'file' => $curlFile,
+                        'api_key' => $apiKey,
+                        'timestamp' => $timestamp,
+                        'folder' => $cleanFolder,
+                        'signature' => $signature,
+                    ],
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                    CURLOPT_TIMEOUT => 30,
+                ]);
+                curl_multi_add_handle($multiHandle, $handle);
+                $handleId = is_object($handle) ? spl_object_id($handle) : (int)$handle;
+                $handles[$handleId] = ['key' => $key, 'handle' => $handle];
             }
 
-            $timestamp = time();
-            $params = ['folder' => $cleanFolder, 'timestamp' => $timestamp];
-            ksort($params);
-            $paramString = '';
-            foreach ($params as $paramName => $paramValue) {
-                $paramString .= ($paramString !== '' ? '&' : '') . $paramName . '=' . $paramValue;
+            $running = null;
+            do {
+                $multiStatus = curl_multi_exec($multiHandle, $running);
+                if ($running && $multiStatus === CURLM_OK && curl_multi_select($multiHandle, 1.0) === -1) {
+                    usleep(100000);
+                }
+            } while ($running && $multiStatus === CURLM_OK);
+
+            foreach ($handles as $entry) {
+                $handle = $entry['handle'];
+                $response = curl_multi_getcontent($handle);
+                $httpCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
+                if ($httpCode === 200 && $response) {
+                    $result = json_decode($response, true);
+                    $results[$entry['key']] = $result['secure_url'] ?? $result['url'] ?? null;
+                }
+                if ($results[$entry['key']] === null && env('APP_DEBUG', false)) {
+                    error_log("[CloudinaryService] Batch upload failed (HTTP {$httpCode}): " . (string)$response);
+                }
+                curl_multi_remove_handle($multiHandle, $handle);
+                curl_close($handle);
             }
-            $signature = sha1($paramString . $apiSecret);
-            $curlFile = new CURLFile(
-                $file['tmp_name'],
-                $file['type'] ?? mime_content_type($file['tmp_name']),
-                $file['name'] ?? 'upload'
-            );
-            $handle = curl_init();
-            curl_setopt_array($handle, [
-                CURLOPT_URL => "https://api.cloudinary.com/v1_1/{$cloudName}/{$resourceType}/upload",
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => [
-                    'file' => $curlFile,
-                    'api_key' => $apiKey,
-                    'timestamp' => $timestamp,
-                    'folder' => $cleanFolder,
-                    'signature' => $signature,
-                ],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_SSL_VERIFYPEER => true,
-                CURLOPT_SSL_VERIFYHOST => 2,
-                CURLOPT_TIMEOUT => 30,
-            ]);
-            curl_multi_add_handle($multiHandle, $handle);
-            $handleId = is_object($handle) ? spl_object_id($handle) : (int)$handle;
-            $handles[$handleId] = ['key' => $key, 'handle' => $handle];
+            curl_multi_close($multiHandle);
+        } finally {
+            foreach ($tempFilesToClean as $tempFile) {
+                if (file_exists($tempFile)) {
+                    @unlink($tempFile);
+                }
+            }
         }
-
-        $running = null;
-        do {
-            $multiStatus = curl_multi_exec($multiHandle, $running);
-            if ($running && $multiStatus === CURLM_OK && curl_multi_select($multiHandle, 1.0) === -1) {
-                usleep(100000);
-            }
-        } while ($running && $multiStatus === CURLM_OK);
-
-        foreach ($handles as $entry) {
-            $handle = $entry['handle'];
-            $response = curl_multi_getcontent($handle);
-            $httpCode = curl_getinfo($handle, CURLINFO_HTTP_CODE);
-            if ($httpCode === 200 && $response) {
-                $result = json_decode($response, true);
-                $results[$entry['key']] = $result['secure_url'] ?? $result['url'] ?? null;
-            }
-            if ($results[$entry['key']] === null && env('APP_DEBUG', false)) {
-                error_log("[CloudinaryService] Batch upload failed (HTTP {$httpCode}): " . (string)$response);
-            }
-            curl_multi_remove_handle($multiHandle, $handle);
-            curl_close($handle);
-        }
-        curl_multi_close($multiHandle);
 
         return $results;
     }

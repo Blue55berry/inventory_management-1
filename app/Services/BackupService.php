@@ -647,6 +647,13 @@ class BackupService {
             'cutting_batches',
             'cutting_batch_rolls',
             'cutting_items',
+            // 1. Manufacturing Lifecycle Tables
+            'production_programs',
+            'production_program_items',
+            'production_program_rolls',
+            'cutting_batches',
+            'cutting_batch_rolls',
+            'cutting_items',
             'stitching_batches',
             'stitching_items',
             'stitching_wastage_sales',
@@ -657,72 +664,59 @@ class BackupService {
             'production_batches',
             'production_batch_items',
             'production_outwards',
+            'production_outward_batches',
             'production_expenses',
+            'production_expense_items',
             'roll_damages',
             'wastage_sales',
 
             // 2. Material Suppliers, Purchase & Inward Operations
+            'production_purchases',
+            'production_purchase_items',
             'seller_rolls',
             'purchase_orders',
             'purchase_items',
             'purchase_inwards',
             'purchase_inward_items',
             'warehouse_allocations',
-            'allocation_items',
             'allocation_outwards',
-            'warehouse_returns',
-            'warehouse_return_items',
             'warehouse_damages',
-            'warehouse_transfers',
-            'transfer_items',
-            'deliveries',
-            'warehouse_suppliers',
             'sellers',
 
-            // 3. POS, Sales Channels, Receipts, Cash Operations & Expenses
-            'sales',
-            'sale_items',
-            'payments',
-            'cash_registers',
-            'cash_expenses',
-            'cash_transactions',
-            'bank_deposits',
-            'exchanges',
-            'exchange_items',
-            'returns',
-            'return_items',
-            'shop_damages',
-            'channel_damages',
-            'expenses',
+            // 3. Billing, POS, Receipts & Returns
+            'production_bills',
+            'production_bill_items',
+            'production_bill_item_tags',
+            'production_returns',
+            'production_return_items',
+            'production_stock_requests',
+            'production_stock_request_items',
 
             // 4. Inventory Balances & Movement Transactions
             'stock_transactions',
             'stock_adjustments',
             'stock_balances',
+            'warehouse_qr_codes',
 
-            // 5. Assets, Maintenance Logs & Asset Audits
+            // 5. Assets, Maintenance Logs
             'assets',
             'asset_maintenance_logs',
-            'asset_transfers',
-            'asset_audits',
-            'asset_audit_items',
 
-            // 6. Product Catalog & Styles (In-House Production & Warehouse Catalog)
+            // 6. Product Catalog & Styles
             'product_variants',
             'products',
+            'qr_generations',
+            'qr_generation_items',
 
-            // 7. Test Customers
-            'customers',
-
-            // 8. Test Sales Channels & Infrastructure (Fully Dynamic)
-            'sales_channels',
-            'locations',
+            // 7. Dynamic Locations
             'production_units',
             'warehouses',
             'shops',
+            'sales_channels',
 
-            // 9. System Notifications
+            // 8. System Notifications & Audits
             'notifications',
+            'audit_logs',
         ];
 
         $wipedSummary = [];

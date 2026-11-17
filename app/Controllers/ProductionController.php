@@ -810,45 +810,12 @@ class ProductionController {
             [$sellerId, $sellerId]
         );
 
-        // Dynamically compute and backfill missing codes for general supplies (Other Garment Supplies)
-        $supplyOffsetsByPurchase = [];
         foreach ($purchasedRolls as &$pr) {
-            $isSupply = ($pr['item_type'] === 'GENERAL_SUPPLY');
-            $pId = (int)$pr['purchase_id'];
-            if ($isSupply) {
-                if (!isset($supplyOffsetsByPurchase[$pId])) {
-                    $supplyOffsetsByPurchase[$pId] = 1;
-                }
-                $supplyIndex = $supplyOffsetsByPurchase[$pId]++;
-                $pDate = !empty($pr['purchase_date']) ? $pr['purchase_date'] : ($pr['purchase_created_at'] ?? 'now');
-                $spPrefix = 'SP' . date('my', strtotime($pDate));
-
-                // If product_code / roll_number is empty, generate dynamic default
-                if (empty($pr['product_code']) && empty($pr['roll_number'])) {
-                    $pr['product_code'] = 'OTH-' . sprintf('%03d', $supplyIndex);
-                    $pr['roll_number'] = $pr['product_code'];
-                } elseif (!empty($pr['product_code']) && empty($pr['roll_number'])) {
-                    $pr['roll_number'] = $pr['product_code'];
-                } elseif (empty($pr['product_code']) && !empty($pr['roll_number'])) {
-                    $pr['product_code'] = $pr['roll_number'];
-                }
-
-                // If start_code or qr_code is empty, generate dynamic SP sequence
-                if (empty($pr['start_code']) && empty($pr['sr_qr_code']) && empty($pr['qr_code'])) {
-                    $startCode = sprintf('%s%02d', $spPrefix, $supplyIndex);
-                    $pr['start_code'] = $startCode;
-                    $pr['end_code'] = $startCode;
-                    $pr['qr_code'] = $startCode;
-                } elseif (empty($pr['qr_code'])) {
-                    $pr['qr_code'] = !empty($pr['start_code']) ? $pr['start_code'] : ($pr['sr_qr_code'] ?? '—');
-                }
-            } else {
-                if (empty($pr['roll_number']) && !empty($pr['sr_roll_number'])) {
-                    $pr['roll_number'] = $pr['sr_roll_number'];
-                }
-                if (empty($pr['qr_code']) && !empty($pr['sr_qr_code'])) {
-                    $pr['qr_code'] = $pr['sr_qr_code'];
-                }
+            if (empty($pr['roll_number']) && !empty($pr['sr_roll_number'])) {
+                $pr['roll_number'] = $pr['sr_roll_number'];
+            }
+            if (empty($pr['qr_code']) && !empty($pr['sr_qr_code'])) {
+                $pr['qr_code'] = $pr['sr_qr_code'];
             }
         }
         unset($pr);
@@ -960,21 +927,25 @@ class ProductionController {
 
         foreach ($purchasedRolls as $pr) {
             $isRepl = !empty($pr['is_replacement_inward']);
-            $isSupply = ($pr['item_type'] === 'GENERAL_SUPPLY');
+            $isThirdParty = ($pr['item_type'] === 'THIRD_PARTY');
+            $isOwnProduct = ($pr['item_type'] === 'OWN_PRODUCT');
             $dt = !empty($pr['purchase_created_at']) ? $pr['purchase_created_at'] : (!empty($pr['created_at']) ? $pr['created_at'] : ($pr['purchase_date'] . ' 00:00:00'));
+            $actionLabel = $isRepl ? 'Replacement Inward' : ($isThirdParty ? 'Third-Party Product' : ($isOwnProduct ? 'Own Production Inward' : 'Roll Purchase (Buying)'));
+            $badgeClass = $isRepl ? 'bg-info text-dark' : ($isThirdParty ? 'bg-info-subtle text-info border' : ($isOwnProduct ? 'bg-success text-white' : 'bg-primary text-white'));
+            $badgeIcon = $isRepl ? 'bi-arrow-repeat' : ($isThirdParty ? 'bi-box-seam' : ($isOwnProduct ? 'bi-building-check' : 'bi-bag-check-fill'));
             $auditLog[] = [
                 'type'            => $isRepl ? 'REPLACED' : 'BUYING',
-                'action_label'    => $isRepl ? 'Replacement Inward' : ($isSupply ? 'Supply Purchase' : 'Roll Purchase (Buying)'),
-                'badge_class'     => $isRepl ? 'bg-info text-dark' : ($isSupply ? 'bg-secondary text-white' : 'bg-primary text-white'),
-                'badge_icon'      => $isRepl ? 'bi-arrow-repeat' : ($isSupply ? 'bi-box-seam' : 'bi-bag-check-fill'),
+                'action_label'    => $actionLabel,
+                'badge_class'     => $badgeClass,
+                'badge_icon'      => $badgeIcon,
                 'datetime'        => $dt,
                 'item_type'       => $pr['item_type'],
                 'supply_id'       => $pr['id'],
                 'purchase_id'     => $pr['purchase_id'],
                 'roll_number'     => $pr['product_code'] ?: ($pr['roll_number'] ?: ($pr['sr_roll_number'] ?: '—')),
-                'item_name'       => $pr['item_name'] ?: ($isSupply ? 'Garment Supply' : 'Fabric Roll'),
-                'color'           => $isSupply ? '' : ($pr['color'] ?: '—'),
-                'design'          => $isSupply ? '' : ($pr['design_name'] ?: '—'),
+                'item_name'       => $pr['item_name'] ?: ($isThirdParty ? 'Third-Party Product' : ($isOwnProduct ? 'Own Finished Product' : 'Fabric Roll')),
+                'color'           => $pr['color'] ?: '—',
+                'design'          => $pr['design_name'] ?: '—',
                 'quantity'        => (float)$pr['quantity'],
                 'unit'            => $pr['unit'] ?? 'PCS',
                 'weight'          => (float)($pr['weight_kg'] ?? 0),
@@ -1421,13 +1392,7 @@ class ProductionController {
             "SELECT COUNT(*) AS c FROM production_purchase_items WHERE item_type = 'THIRD_PARTY' AND is_mapped = 0"
         )['c'] ?? 0);
 
-        $supplyStock = Database::fetchAll(
-            "SELECT item_name, unit, SUM(quantity) AS total_quantity, COUNT(*) AS purchase_lines
-             FROM production_purchase_items
-             WHERE item_type = 'GENERAL_SUPPLY'
-             GROUP BY item_name, unit
-             ORDER BY item_name, unit"
-        );
+        $supplyStock = [];
 
         $fabricRollInventory = Database::fetchAll(
             "SELECT sr.id, sr.seller_id, sr.roll_number, sr.color, sr.design_name, sr.design_count,
@@ -1515,16 +1480,52 @@ class ProductionController {
             [(int)$purchase['id']]
         );
         $subtotal = 0.0;
-        $taxes = ['SGST' => 0.0, 'CGST' => 0.0, 'IGST' => 0.0];
+        $taxes = [
+            'SGST' => ['amount' => 0.0, 'rates' => []],
+            'CGST' => ['amount' => 0.0, 'rates' => []],
+            'IGST' => ['amount' => 0.0, 'rates' => []],
+        ];
         foreach ($items as &$item) {
-            $base = (float)$item['unit_price'] * ($item['item_type'] === 'GENERAL_SUPPLY' ? (float)$item['quantity'] : 1);
+            $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
+            $base = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
             $item['base_amount'] = round($base, 2);
             $subtotal += $item['base_amount'];
-            foreach (['SGST' => 'sgst_amount', 'CGST' => 'cgst_amount', 'IGST' => 'igst_amount'] as $type => $field) {
-                $taxes[$type] += (float)($item[$field] ?? 0);
+
+            $taxMode = $item['tax_input_type'] ?? 'PERCENT';
+            $sgstAmt = (float)($item['sgst_amount'] ?? 0);
+            $cgstAmt = (float)($item['cgst_amount'] ?? 0);
+            $igstAmt = (float)($item['igst_amount'] ?? 0);
+
+            $taxes['SGST']['amount'] += $sgstAmt;
+            $taxes['CGST']['amount'] += $cgstAmt;
+            $taxes['IGST']['amount'] += $igstAmt;
+
+            if ($taxMode === 'PERCENT') {
+                $sgVal = (float)($item['sgst_value'] ?? 0);
+                $cgVal = (float)($item['cgst_value'] ?? 0);
+                $igVal = (float)($item['igst_value'] ?? 0);
+                if ($sgstAmt > 0 && $sgVal > 0) $taxes['SGST']['rates'][(string)($sgVal + 0)] = true;
+                if ($cgstAmt > 0 && $cgVal > 0) $taxes['CGST']['rates'][(string)($cgVal + 0)] = true;
+                if ($igstAmt > 0 && $igVal > 0) $taxes['IGST']['rates'][(string)($igVal + 0)] = true;
             }
         }
         unset($item);
+
+        $taxSummary = [];
+        $totalTax = 0.0;
+        foreach ($taxes as $type => $data) {
+            if ($data['amount'] > 0) {
+                $rateLabel = !empty($data['rates'])
+                    ? implode(', ', array_map(static fn($r) => $r . '%', array_keys($data['rates'])))
+                    : '';
+                $taxSummary[$type] = [
+                    'name' => $type,
+                    'amount' => round($data['amount'], 2),
+                    'rate_label' => $rateLabel,
+                ];
+                $totalTax += $data['amount'];
+            }
+        }
 
         $company = SettingsService::getAllGrouped()['company'] ?? [];
         Response::viewOnly('production.purchases.print', [
@@ -1533,8 +1534,9 @@ class ProductionController {
             'company' => $company,
             'prodUnit' => ProductionUnit::getActiveFacility($purchase['production_unit_id'] ?? null),
             'subtotal' => round($subtotal, 2),
-            'taxes' => array_map(static fn(float $amount): float => round($amount, 2), $taxes),
-            'totalTax' => round(array_sum($taxes), 2),
+            'taxes' => array_map(static fn(array $d): float => round($d['amount'], 2), $taxes),
+            'taxSummary' => $taxSummary,
+            'totalTax' => round($totalTax, 2),
             'overallTotal' => (float)$purchase['total_amount'],
         ]);
     }
@@ -1705,20 +1707,15 @@ class ProductionController {
                 Response::back();
                 return;
             }
-            if (!$oldItem && $itemType !== 'GENERAL_SUPPLY') {
-                Session::flash('error', 'Fabric rolls cannot be added through purchase editing.');
+            if (!$oldItem) {
+                Session::flash('error', 'New items cannot be added through purchase editing.');
                 Response::back();
                 return;
             }
             if (!empty($submitted['remove_item'])) {
-                if (!$oldItem || $oldItem['item_type'] !== 'GENERAL_SUPPLY') {
-                    Session::flash('error', 'Only general supply items can be removed from an existing purchase.');
-                    Response::back();
-                    return;
-                }
-                $seenIds[$itemId] = true;
-                $updatedItems[] = ['delete_id' => $itemId];
-                continue;
+                Session::flash('error', 'Purchase items cannot be removed while editing.');
+                Response::back();
+                return;
             }
 
             $gstType = strtoupper(trim((string)($submitted['gst_type'] ?? 'EXEMPTED')));
@@ -1824,13 +1821,10 @@ class ProductionController {
 
         foreach ($existingItems as $existingItem) {
             $existingId = (int)$existingItem['id'];
-            if ($existingItem['item_type'] === 'FABRIC_ROLL' && !isset($seenIds[$existingId])) {
-                Session::flash('error', 'Fabric roll purchase lines cannot be removed while editing.');
+            if (!isset($seenIds[$existingId])) {
+                Session::flash('error', 'Purchase items cannot be removed while editing.');
                 Response::back();
                 return;
-            }
-            if ($existingItem['item_type'] === 'GENERAL_SUPPLY' && !isset($seenIds[$existingId])) {
-                $updatedItems[] = ['delete_id' => $existingId];
             }
         }
         $remainingItems = array_filter($updatedItems, static fn(array $item): bool => !isset($item['delete_id']));
@@ -1943,24 +1937,6 @@ class ProductionController {
                     }
                     continue;
                 }
-                $spPrefix = 'SP' . date('my', strtotime($purchase['purchase_date'] ?: 'now'));
-                $newSupplyIdx = (int)(Database::fetchOne("SELECT COUNT(*) as cnt FROM production_purchase_items WHERE purchase_id = ? AND item_type = 'GENERAL_SUPPLY'", [$purchaseId])['cnt'] ?? 0) + 1;
-                $spCode = sprintf('%s%02d', $spPrefix, $newSupplyIdx);
-                $supplyCode = !empty($item['product_code']) ? $item['product_code'] : ('OTH-' . sprintf('%03d', $newSupplyIdx));
-                Database::execute(
-                    "INSERT INTO production_purchase_items
-                        (purchase_id, item_type, item_name, quantity, unit, unit_price, total_price,
-                         gst_type, tax_input_type, sgst_value, cgst_value, igst_value,
-                         sgst_amount, cgst_amount, igst_amount, hsn_code, roll_number, product_code, start_code, end_code, qr_code)
-                     VALUES (?, 'GENERAL_SUPPLY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [$purchaseId, $item['item_name'], $item['quantity'], $item['unit'], $item['unit_price'], $item['total'],
-                        $item['gst_type'], $item['tax_mode'],
-                        in_array($item['gst_type'], ['SGST', 'BOTH'], true) ? $item['tax_value'] : 0,
-                        $item['gst_type'] === 'CGST' ? $item['tax_value'] : $item['cgst_tax_value'],
-                        $item['gst_type'] === 'IGST' ? $item['tax_value'] : 0,
-                        $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'], $item['hsn_code'],
-                        $supplyCode, $supplyCode, $spCode, $spCode, $spCode]
-                );
             }
             $this->refreshSupplierRollTotals((int)$purchase['seller_id']);
             Database::execute(
@@ -2155,7 +2131,7 @@ class ProductionController {
                 continue;
             }
             $itemType = strtoupper(trim((string)($submitted['item_type'] ?? $purchaseType)));
-            if (!in_array($itemType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT', 'GENERAL_SUPPLY'], true)) {
+            if (!in_array($itemType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
                 $itemType = $purchaseType;
             }
 
@@ -2270,9 +2246,56 @@ class ProductionController {
                 }
 
                 if ($itemName === '') {
-                    Session::flash('error', 'Third-party product lines require a product/item name.');
+                    Session::flash('error', "Product line #" . ($index + 1) . " requires a product/item name.");
                     Response::back();
                     return;
+                }
+
+                if ($quantity <= 0) {
+                    Session::flash('error', "Product line #" . ($index + 1) . " requires a quantity greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($unitPrice <= 0) {
+                    Session::flash('error', "Product line #" . ($index + 1) . " requires a Buyed price greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($hsnCode === '') {
+                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): HSN code is mandatory.");
+                    Response::back();
+                    return;
+                }
+
+                if ($sellingPrice <= 0) {
+                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): Selling price is required and must be greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($sellingPrice < $unitPrice) {
+                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): Selling price (₹" . number_format($sellingPrice, 2) . ") cannot be less than Buyed price (₹" . number_format($unitPrice, 2) . ").");
+                    Response::back();
+                    return;
+                }
+
+                if ($mrp > 0 && $mrp < $sellingPrice) {
+                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): MRP (₹" . number_format($mrp, 2) . ") cannot be less than Selling price (₹" . number_format($sellingPrice, 2) . ").");
+                    Response::back();
+                    return;
+                }
+
+                if ($vendorSku === '') {
+                    $cleanName = substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $itemName)), 0, 6);
+                    $cleanCol = $color !== '' ? substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $color)), 0, 4) : '';
+                    $cleanSz = $size !== '' ? strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $size)) : '';
+                    $parts = ['TP', $cleanName ?: 'PROD'];
+                    if ($cleanCol !== '') $parts[] = $cleanCol;
+                    if ($cleanSz !== '') $parts[] = $cleanSz;
+                    $parts[] = sprintf('%02d', ((int)$index) + 1);
+                    $vendorSku = implode('-', $parts);
                 }
 
                 $baseTotal = round($quantity * $unitPrice, 2);
@@ -2360,9 +2383,38 @@ class ProductionController {
                 }
 
                 if ($itemName === '') {
-                    Session::flash('error', 'Own production product lines require a product or style selection.');
+                    Session::flash('error', "Own production line #" . ($index + 1) . " requires a product or style selection.");
                     Response::back();
                     return;
+                }
+
+                if ($unitPrice <= 0) {
+                    Session::flash('error', "Own production line #" . ($index + 1) . " requires a Buyed price greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($sellingPrice > 0 && $sellingPrice < $unitPrice) {
+                    Session::flash('error', "Own production line #" . ($index + 1) . " (" . $itemName . "): Selling price (₹" . number_format($sellingPrice, 2) . ") cannot be less than Buyed price (₹" . number_format($unitPrice, 2) . ").");
+                    Response::back();
+                    return;
+                }
+
+                if ($mrp > 0 && $sellingPrice > 0 && $mrp < $sellingPrice) {
+                    Session::flash('error', "Own production line #" . ($index + 1) . " (" . $itemName . "): MRP (₹" . number_format($mrp, 2) . ") cannot be less than Selling price (₹" . number_format($sellingPrice, 2) . ").");
+                    Response::back();
+                    return;
+                }
+
+                if ($vendorSku === '') {
+                    $cleanName = substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $itemName)), 0, 6);
+                    $cleanCol = $color !== '' ? substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $color)), 0, 4) : '';
+                    $cleanSz = $size !== '' ? strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $size)) : '';
+                    $parts = ['TP', $cleanName ?: 'PROD'];
+                    if ($cleanCol !== '') $parts[] = $cleanCol;
+                    if ($cleanSz !== '') $parts[] = $cleanSz;
+                    $parts[] = sprintf('%02d', ((int)$index) + 1);
+                    $vendorSku = implode('-', $parts);
                 }
 
                 $baseTotal = round($quantity * $unitPrice, 2);
@@ -2411,57 +2463,6 @@ class ProductionController {
                 ];
                 continue;
             }
-
-            // 4. GENERAL SUPPLY FALLBACK
-            $productCode = trim((string)($submitted['product_code'] ?? ''));
-            $itemName = trim((string)($submitted['item_name'] ?? ''));
-            $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
-            $unit = strtoupper(trim((string)($submitted['unit'] ?? 'PCS')));
-
-            $baseTotal = round($quantity * $unitPrice, 2);
-            $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
-                ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-            $cgstAmount = $gstType === 'CGST'
-                ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
-                : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
-            $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-            $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
-
-            $items[] = [
-                'type' => 'GENERAL_SUPPLY',
-                'item_name' => mb_strtoupper($itemName),
-                'quantity' => $quantity,
-                'unit' => $unit,
-                'weight' => null,
-                'unit_price' => $unitPrice,
-                'mrp' => 0.0,
-                'selling_price' => 0.0,
-                'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
-                'gst_type' => $gstType,
-                'tax_mode' => $taxMode,
-                'tax_value' => $taxValue,
-                'cgst_tax_value' => $cgstTaxValue,
-                'tax_amount' => $taxAmount,
-                'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
-                'cgst_value' => $gstType === 'CGST' ? $taxValue : $cgstTaxValue,
-                'igst_value' => $gstType === 'IGST' ? $taxValue : 0,
-                'sgst_amount' => $sgstAmount,
-                'cgst_amount' => $cgstAmount,
-                'igst_amount' => $igstAmount,
-                'line_total' => $baseTotal + $taxAmount,
-                'roll_number' => $productCode !== '' ? mb_strtoupper($productCode) : null,
-                'color' => null,
-                'size' => null,
-                'design_name' => null,
-                'design_count' => null,
-                'product_code' => $productCode !== '' ? mb_strtoupper($productCode) : null,
-                'vendor_sku' => null,
-                'product_id' => null,
-                'variant_id' => null,
-                'is_mapped' => 1,
-                'form_index' => (string)$index,
-                'photo_url' => null,
-            ];
         }
 
         if (!$items) {
@@ -12730,7 +12731,7 @@ class ProductionController {
 
         $photoUrl = null;
         if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-            $allowedExts = ['jpg', 'jpeg', 'png', 'webp'];
+            $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'avif'];
             $ext = strtolower(pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION));
             if (in_array($ext, $allowedExts, true)) {
                 if (class_exists('CloudinaryService')) {
@@ -16455,7 +16456,7 @@ class ProductionController {
         $photoUrl = null;
         $fileKey = !empty($_FILES['receipt_file']['name']) ? 'receipt_file' : (!empty($_FILES['photo']['name']) ? 'photo' : null);
         if ($fileKey && $_FILES[$fileKey]['error'] === UPLOAD_ERR_OK) {
-            $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+            $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'pdf'];
             $ext = strtolower(pathinfo($_FILES[$fileKey]['name'], PATHINFO_EXTENSION));
             if (in_array($ext, $allowedExts, true)) {
                 if (class_exists('CloudinaryService')) {
@@ -16594,7 +16595,7 @@ class ProductionController {
         // Handle photo / receipt / bill image upload
         $photoUrl = $existing['photo_url'] ?? null;
         if (!empty($_FILES['photo']['name']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
-            $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
+            $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'pdf'];
             $ext = strtolower(pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION));
             if (in_array($ext, $allowedExts, true)) {
                 $newPhoto = null;

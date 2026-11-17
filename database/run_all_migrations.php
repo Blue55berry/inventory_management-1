@@ -42,19 +42,20 @@ function tableExists(PDO $db, string $table): bool {
 }
 
 // -------------------------------------------------------------
-// STEP 1: IMPORT BASELINE DATA DUMP (pre_rebuild_backup_utf8.sql)
+// STEP 1: IMPORT UNIFIED MASTER SCHEMA (schema.sql) & SEED (seed.sql)
 // -------------------------------------------------------------
-echo "[1/7] Importing master data from pre_rebuild_backup_utf8.sql...\n";
-$dumpFile = BASE_PATH . '/database/backups/pre_rebuild_backup_utf8.sql';
-if (!file_exists($dumpFile)) {
-    throw new RuntimeException("Dump file not found: {$dumpFile}");
+echo "[1/7] Importing master schema (82 active tables) from schema.sql...\n";
+$schemaFile = BASE_PATH . '/database/schema.sql';
+$seedFile = BASE_PATH . '/database/seed.sql';
+if (!file_exists($schemaFile)) {
+    throw new RuntimeException("Schema file not found: {$schemaFile}");
 }
 
 // Run through mysql CLI for speed and accurate multi-query execution
 $config = require BASE_PATH . '/config/database.php';
 $mysqlBin = 'C:\\xampp\\mysql\\bin\\mysql.exe';
 if (file_exists($mysqlBin)) {
-    $cmd = sprintf(
+    $cmdSchema = sprintf(
         '"%s" --host=%s --port=%s --user=%s %s %s < "%s"',
         $mysqlBin,
         escapeshellarg($config['host']),
@@ -62,21 +63,42 @@ if (file_exists($mysqlBin)) {
         escapeshellarg($config['username']),
         !empty($config['password']) ? '--password=' . escapeshellarg($config['password']) : '',
         escapeshellarg($config['database']),
-        $dumpFile
+        $schemaFile
     );
-    // Execute command via shell_exec
-    $out = shell_exec($cmd . ' 2>&1');
-    if ($out && strpos($out, 'ERROR') !== false) {
-        echo "  Notice from mysql CLI: $out\n";
+    $outSchema = shell_exec($cmdSchema . ' 2>&1');
+    if ($outSchema && strpos($outSchema, 'ERROR') !== false) {
+        echo "  Notice from mysql CLI (schema): $outSchema\n";
     } else {
-        echo "  Master dump imported successfully via mysql CLI.\n";
+        echo "  Master schema imported successfully via mysql CLI.\n";
+    }
+
+    if (file_exists($seedFile)) {
+        echo "  Importing clean seed data (Admin only)...\n";
+        $cmdSeed = sprintf(
+            '"%s" --host=%s --port=%s --user=%s %s %s < "%s"',
+            $mysqlBin,
+            escapeshellarg($config['host']),
+            escapeshellarg($config['port']),
+            escapeshellarg($config['username']),
+            !empty($config['password']) ? '--password=' . escapeshellarg($config['password']) : '',
+            escapeshellarg($config['database']),
+            $seedFile
+        );
+        $outSeed = shell_exec($cmdSeed . ' 2>&1');
+        if ($outSeed && strpos($outSeed, 'ERROR') !== false) {
+            echo "  Notice from mysql CLI (seed): $outSeed\n";
+        } else {
+            echo "  Clean seed data imported successfully.\n";
+        }
     }
 } else {
     // Pure PHP fallback
     echo "  mysql.exe not found, running pure PHP importer...\n";
-    $sql = file_get_contents($dumpFile);
     $db->exec("SET FOREIGN_KEY_CHECKS = 0;");
-    $db->exec($sql);
+    $db->exec(file_get_contents($schemaFile));
+    if (file_exists($seedFile)) {
+        $db->exec(file_get_contents($seedFile));
+    }
     $db->exec("SET FOREIGN_KEY_CHECKS = 1;");
     echo "  Import completed via PDO.\n";
 }
@@ -104,22 +126,6 @@ if (!tableExists($db, 'designs')) {
           UNIQUE KEY `uq_designs_name` (`name`),
           UNIQUE KEY `uq_designs_code` (`code`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    ");
-}
-
-// Seed default designs if empty
-$designCount = (int)$db->query("SELECT COUNT(*) FROM `designs`")->fetchColumn();
-if ($designCount === 0) {
-    echo "  Seeding default designs...\n";
-    $db->exec("
-        INSERT INTO `designs` (`id`, `name`, `code`, `slug`, `sort_order`, `is_active`) VALUES
-        (1, 'Plain / Solid', 'PLN', 'plain-solid', 1, 1),
-        (2, 'Striped', 'STP', 'striped', 2, 1),
-        (3, 'Checked', 'CHK', 'checked', 3, 1),
-        (4, 'Printed', 'PRT', 'printed', 4, 1),
-        (5, 'Floral', 'FLR', 'floral', 5, 1),
-        (6, 'Textured', 'TXT', 'textured', 6, 1)
-        ON DUPLICATE KEY UPDATE `name`=VALUES(`name`);
     ");
 }
 
@@ -311,34 +317,6 @@ if (!columnExists($db, 'sellers', 'production_deleted_at')) {
     $db->exec("ALTER TABLE `sellers` ADD COLUMN `production_deleted_at` datetime DEFAULT NULL AFTER `is_active`");
 }
 
-// Migration 3: 2026_11_11_add_product_price_logs.sql
-echo "  Applying 2026_11_11_add_product_price_logs.sql...\n";
-if (!tableExists($db, 'product_price_logs')) {
-    $db->exec("
-        CREATE TABLE IF NOT EXISTS `product_price_logs` (
-          `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-          `variant_id` int(10) unsigned DEFAULT NULL,
-          `product_id` int(10) unsigned DEFAULT NULL,
-          `sku` varchar(100) NOT NULL,
-          `old_selling_price` decimal(10,2) NOT NULL,
-          `new_selling_price` decimal(10,2) NOT NULL,
-          `old_mrp` decimal(10,2) NOT NULL,
-          `new_mrp` decimal(10,2) NOT NULL,
-          `cost_price` decimal(10,2) NOT NULL,
-          `markup_percentage` decimal(10,4) DEFAULT NULL,
-          `discount_percentage` decimal(10,4) NOT NULL,
-          `revision_notes` text NOT NULL,
-          `user_id` int(10) unsigned DEFAULT NULL,
-          `user_name` varchar(200) NOT NULL,
-          `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (`id`),
-          KEY `idx_price_logs_variant_created` (`variant_id`,`created_at`),
-          KEY `idx_price_logs_product` (`product_id`),
-          KEY `idx_price_logs_user` (`user_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-    ");
-}
-
 // Migration 4: 2026_11_12_add_production_billing_unit.sql
 echo "  Applying 2026_11_12_add_production_billing_unit.sql...\n";
 if (tableExists($db, 'production_bills') && !columnExists($db, 'production_bills', 'production_unit_id')) {
@@ -425,7 +403,7 @@ if (tableExists($db, 'production_purchases') && !columnExists($db, 'production_p
 }
 if (tableExists($db, 'production_purchase_items')) {
     try {
-        $db->exec("ALTER TABLE `production_purchase_items` MODIFY COLUMN `item_type` ENUM('FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT', 'GENERAL_SUPPLY') NOT NULL DEFAULT 'FABRIC_ROLL'");
+        $db->exec("ALTER TABLE `production_purchase_items` MODIFY COLUMN `item_type` ENUM('FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT') NOT NULL DEFAULT 'FABRIC_ROLL'");
     } catch (Exception $e) {}
     $tpItemCols = [
         'product_id' => "int(10) unsigned DEFAULT NULL AFTER `item_name`",
@@ -559,13 +537,13 @@ echo "--------------------------------------------------------\n";
 $keyTables = [
     'users', 'roles', 'permissions', 'role_permissions',
     'categories', 'subcategories', 'designs', 'colors', 'sizes',
-    'products', 'product_variants', 'product_price_logs',
+    'products', 'product_variants',
     'qr_generations', 'qr_generation_items', 'warehouse_qr_codes',
     'production_programs', 'cutting_batches', 'stitching_batches',
     'qc_batches', 'label_batches', 'production_batches',
     'sellers', 'seller_rolls', 'production_purchases',
     'stock_balances', 'stock_transactions', 'warehouse_allocations',
-    'allocation_items', 'production_units', 'warehouses', 'shops'
+    'production_units', 'warehouses', 'shops'
 ];
 
 foreach ($keyTables as $tbl) {

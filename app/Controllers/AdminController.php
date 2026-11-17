@@ -1089,8 +1089,8 @@ class AdminController {
 
         $imageInfo = getimagesize($file['tmp_name']);
         $mimeType = $imageInfo['mime'] ?? '';
-        if (!$imageInfo || !in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true)) {
-            throw new RuntimeException('Upload a valid JPG, PNG, or WEBP logo image.');
+        if (!$imageInfo || !in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp', 'image/avif'], true)) {
+            throw new RuntimeException('Upload a valid JPG, PNG, WEBP, or AVIF logo image.');
         }
 
         $file['type'] = $mimeType;

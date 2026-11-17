@@ -81,6 +81,27 @@
                     $taxType = $item['gst_type'] ?? 'LEGACY';
                     if ($taxType === 'BOTH') $taxType = 'SGST + CGST';
                     if ($taxType === 'LEGACY') $taxType = $tax > 0 ? 'Legacy SGST + CGST' : 'Exempted';
+
+                    // Tax Rate calculation
+                    $isPercent = (($item['tax_input_type'] ?? 'PERCENT') === 'PERCENT');
+                    $sgstVal = (float)($item['sgst_value'] ?? 0);
+                    $cgstVal = (float)($item['cgst_value'] ?? 0);
+                    $igstVal = (float)($item['igst_value'] ?? 0);
+                    $totalRate = $sgstVal + $cgstVal + $igstVal;
+
+                    if ($isPercent && $totalRate > 0) {
+                        if ($igstVal > 0) {
+                            $itemTaxRateText = ($igstVal + 0) . '%';
+                        } elseif ($sgstVal > 0 && $cgstVal > 0) {
+                            $itemTaxRateText = ($totalRate + 0) . '% (' . ($sgstVal + 0) . '% + ' . ($cgstVal + 0) . '%)';
+                        } else {
+                            $itemTaxRateText = ($totalRate + 0) . '%';
+                        }
+                    } elseif ($tax > 0) {
+                        $itemTaxRateText = 'Fixed';
+                    } else {
+                        $itemTaxRateText = '0%';
+                    }
                     $searchData = strtolower(implode(' ', [
                         $item['item_name'] ?? '',
                         $item['item_type'] ?? '',
@@ -138,7 +159,12 @@
                     <td><?= number_format((float)$item['quantity'], 3) ?> <?= e($item['unit']) ?><?= !empty($item['weight_kg']) ? '<br><small class="text-muted">' . number_format((float)$item['weight_kg'], 2) . ' kg</small>' : '' ?></td>
                     <td class="text-end">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
                     <td class="text-end">₹<?= number_format($base, 2) ?></td>
-                    <td><?= e($taxType) ?></td>
+                    <td>
+                        <span class="badge bg-light text-dark border"><?= e($taxType) ?></span>
+                        <?php if (!empty($itemTaxRateText)): ?>
+                            <small class="text-muted d-block font-monospace mt-0.5"><?= e($itemTaxRateText) ?></small>
+                        <?php endif; ?>
+                    </td>
                     <td class="text-end">₹<?= number_format($tax, 2) ?></td>
                     <td class="text-end fw-bold">₹<?= number_format((float)$item['total_price'], 2) ?></td>
                     <td class="text-center">
@@ -150,10 +176,6 @@
                         <?php elseif ($item['item_type'] === 'THIRD_PARTY'): ?>
                             <a class="btn btn-outline-warning btn-action-icon text-dark" href="<?= url('purchases/mapping?search=' . urlencode($item['item_name'])) ?>" title="Map Product Hierarchy &amp; Attributes">
                                 <i class="bi bi-diagram-3-fill"></i>
-                            </a>
-                        <?php elseif ($item['item_type'] === 'GENERAL_SUPPLY'): ?>
-                            <a class="btn btn-outline-success btn-action-icon" href="<?= url('production/purchases/supply-qr/' . $purchase['id'] . '?item_id=' . $item['id']) ?>" target="_blank" rel="noopener" title="Thermal Print Supply Label">
-                                <i class="bi bi-tags-fill"></i>
                             </a>
                         <?php else: ?>
                             <span class="text-muted small">—</span>
