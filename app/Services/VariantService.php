@@ -162,6 +162,12 @@ class VariantService {
         $designId = !empty($data['design_id']) ? (int)$data['design_id'] : null;
         $sizeId = !empty($data['size_id']) ? (int)$data['size_id'] : null;
 
+        // Calculate attribute uniqueness hash
+        $colorVal = $colorId ? (int)$colorId : 0;
+        $designVal = $designId ? (int)$designId : 0;
+        $sizeVal = $sizeId ? (int)$sizeId : 0;
+        $attrHash = $productId . ':' . $colorVal . ':' . $designVal . ':' . $sizeVal;
+
         // Check duplicate combination
         if (self::checkDuplicateCombination($productId, $colorId, $designId, $sizeId)) {
             throw new RuntimeException("A variant with this exact combination of Color, Design, and Size already exists in this Catalog!");
@@ -181,11 +187,12 @@ class VariantService {
             throw new RuntimeException("SKU '{$sku}' is already taken. Please customize the SKU.");
         }
 
-        // Stable QR Code: Default to SKU unless custom provided
-        $qrCode = !empty($data['qr_code']) ? strtoupper(trim($data['qr_code'])) : $sku;
+        // Stable QR Code: Default directly to Variant ID (e.g. V0001) for single stable variant QR
+        $qrCode = !empty($data['qr_code']) ? strtoupper(trim($data['qr_code'])) : $variantCode;
         $qrExists = Database::fetchOne("SELECT id FROM product_variants WHERE qr_code = ?", [$qrCode]);
         if ($qrExists) {
-            throw new RuntimeException("QR Code '{$qrCode}' is already registered for another variant.");
+            // If candidate QR exists (e.g. V0001 taken), fallback to SKU or next code
+            $qrCode = $sku;
         }
 
         $mrp = max(0.0, (float)($data['mrp'] ?? 0));
@@ -200,14 +207,15 @@ class VariantService {
         try {
             Database::execute(
                 "INSERT INTO product_variants 
-                 (variant_code, product_id, size_id, color_id, design_id, sku, hsn_code, gst_rate, qr_code, mrp, purchase_price, production_cost, selling_price, is_active)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (variant_code, product_id, size_id, color_id, design_id, attr_hash, sku, hsn_code, gst_rate, qr_code, mrp, purchase_price, production_cost, selling_price, is_active)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     $variantCode,
                     $productId,
                     $sizeId,
                     $colorId,
                     $designId,
+                    $attrHash,
                     $sku,
                     $hsnCode,
                     $gstRate,
@@ -260,6 +268,12 @@ class VariantService {
             }
         }
 
+        // Compute updated attribute hash
+        $cVal = $colorId ? (int)$colorId : 0;
+        $dVal = $designId ? (int)$designId : 0;
+        $sVal = $sizeId ? (int)$sizeId : 0;
+        $attrHash = (int)$variant['product_id'] . ':' . $cVal . ':' . $dVal . ':' . $sVal;
+
         $mrp = isset($data['mrp']) ? max(0.0, (float)$data['mrp']) : (float)$variant['mrp'];
         $sellingPrice = isset($data['selling_price']) ? max(0.0, (float)$data['selling_price']) : (float)$variant['selling_price'];
         $productionCost = isset($data['production_cost']) ? max(0.0, (float)$data['production_cost']) : (float)$variant['production_cost'];
@@ -272,12 +286,12 @@ class VariantService {
         try {
             Database::execute(
                 "UPDATE product_variants SET
-                    color_id = ?, design_id = ?, size_id = ?,
+                    color_id = ?, design_id = ?, size_id = ?, attr_hash = ?,
                     mrp = ?, selling_price = ?, production_cost = ?, purchase_price = ?,
                     hsn_code = ?, gst_rate = ?, is_active = ?
                  WHERE id = ?",
                 [
-                    $colorId, $designId, $sizeId,
+                    $colorId, $designId, $sizeId, $attrHash,
                     $mrp, $sellingPrice, $productionCost, $purchasePrice,
                     $hsnCode, $gstRate, $isActive,
                     $id
@@ -435,5 +449,99 @@ class VariantService {
         $sql .= " ORDER BY pv.id DESC";
 
         return Database::fetchAll($sql, $params);
+    }
+
+    /**
+     * Find or create a Color record by name.
+     */
+    public static function findOrCreateColor(?string $colorName): ?int {
+        $name = trim($colorName ?? '');
+        if ($name === '') return null;
+
+        $existing = Database::fetchOne("SELECT id FROM colors WHERE LOWER(name) = LOWER(?)", [$name]);
+        if ($existing) return (int)$existing['id'];
+
+        Database::execute("INSERT INTO colors (name, is_active) VALUES (?, 1)", [strtoupper($name)]);
+        return (int)Database::lastInsertId();
+    }
+
+    /**
+     * Find or create a Size record by name / code.
+     */
+    public static function findOrCreateSize(?string $sizeName): ?int {
+        $name = trim($sizeName ?? '');
+        if ($name === '') return null;
+
+        $existing = Database::fetchOne("SELECT id FROM sizes WHERE LOWER(name) = LOWER(?) OR LOWER(code) = LOWER(?)", [$name, $name]);
+        if ($existing) return (int)$existing['id'];
+
+        $code = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', $name), 0, 10)) ?: strtoupper($name);
+        Database::execute("INSERT INTO sizes (name, code, is_active) VALUES (?, ?, 1)", [strtoupper($name), $code]);
+        return (int)Database::lastInsertId();
+    }
+
+    /**
+     * Find or create a Design record by name.
+     */
+    public static function findOrCreateDesign(?string $designName): ?int {
+        $name = trim($designName ?? '');
+        if ($name === '') return null;
+
+        $existing = Database::fetchOne("SELECT id FROM designs WHERE LOWER(name) = LOWER(?)", [$name]);
+        if ($existing) return (int)$existing['id'];
+
+        $code = strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', $name), 0, 10)) ?: strtoupper($name);
+        Database::execute("INSERT INTO designs (name, code, is_active) VALUES (?, ?, 1)", [strtoupper($name), $code]);
+        return (int)Database::lastInsertId();
+    }
+
+    /**
+     * Find an existing variant matching catalog + attributes, or create a brand new one.
+     * Enforces the single stable QR per variant requirement.
+     */
+    public static function findOrCreateVariantForInward(int $productId, array $attrs = []): array {
+        $colorId = !empty($attrs['color_id']) ? (int)$attrs['color_id'] : self::findOrCreateColor($attrs['color'] ?? null);
+        $sizeId = !empty($attrs['size_id']) ? (int)$attrs['size_id'] : self::findOrCreateSize($attrs['size'] ?? null);
+        $designId = !empty($attrs['design_id']) ? (int)$attrs['design_id'] : self::findOrCreateDesign($attrs['design_name'] ?? null);
+
+        $colorVal = $colorId ?: 0;
+        $designVal = $designId ?: 0;
+        $sizeVal = $sizeId ?: 0;
+        $hash = $productId . ':' . $colorVal . ':' . $designVal . ':' . $sizeVal;
+
+        // Check if matching variant already exists
+        $existing = Database::fetchOne("SELECT * FROM product_variants WHERE attr_hash = ?", [$hash]);
+        if ($existing) {
+            $mrp = isset($attrs['mrp']) ? (float)$attrs['mrp'] : (float)$existing['mrp'];
+            $selling = isset($attrs['selling_price']) ? (float)$attrs['selling_price'] : (float)$existing['selling_price'];
+            $cost = isset($attrs['unit_price']) ? (float)$attrs['unit_price'] : (float)$existing['purchase_price'];
+
+            if ($selling > 0 || $mrp > 0) {
+                Database::execute("
+                    UPDATE product_variants 
+                    SET mrp = GREATEST(mrp, ?), 
+                        selling_price = CASE WHEN ? > 0 THEN ? ELSE selling_price END,
+                        purchase_price = CASE WHEN ? > 0 THEN ? ELSE purchase_price END
+                    WHERE id = ?
+                ", [$mrp, $selling, $selling, $cost, $cost, $existing['id']]);
+            }
+            return ProductVariant::find((int)$existing['id']);
+        }
+
+        // Otherwise create new variant
+        return self::createVariant([
+            'product_id'     => $productId,
+            'color_id'       => $colorId,
+            'design_id'      => $designId,
+            'size_id'        => $sizeId,
+            'sku'            => $attrs['vendor_sku'] ?? null,
+            'hsn_code'       => $attrs['hsn_code'] ?? null,
+            'gst_rate'       => $attrs['gst_rate'] ?? 5.0,
+            'mrp'            => $attrs['mrp'] ?? 0,
+            'selling_price'  => $attrs['selling_price'] ?? 0,
+            'purchase_price' => $attrs['unit_price'] ?? 0,
+            'production_cost'=> $attrs['unit_price'] ?? 0,
+            'is_active'      => 1
+        ]);
     }
 }

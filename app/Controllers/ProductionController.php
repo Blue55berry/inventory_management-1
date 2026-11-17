@@ -51,7 +51,15 @@ class ProductionController {
         try {
             $colInwItems = Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'is_inwarded'");
             if (!$colInwItems) {
-                Database::execute("ALTER TABLE production_purchase_items ADD COLUMN is_inwarded TINYINT(1) DEFAULT 0, ADD COLUMN inwarded_at DATETIME DEFAULT NULL, ADD COLUMN inwarded_by INT UNSIGNED DEFAULT NULL, ADD COLUMN product_id INT UNSIGNED DEFAULT NULL, ADD COLUMN variant_id INT UNSIGNED DEFAULT NULL");
+                Database::execute("ALTER TABLE production_purchase_items ADD COLUMN is_inwarded TINYINT(1) DEFAULT 0");
+            }
+            $colInwAt = Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'inwarded_at'");
+            if (!$colInwAt) {
+                Database::execute("ALTER TABLE production_purchase_items ADD COLUMN inwarded_at DATETIME DEFAULT NULL AFTER is_inwarded, ADD COLUMN inwarded_by INT UNSIGNED DEFAULT NULL AFTER inwarded_at");
+            }
+            $colTaxTreat = Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'tax_treatment'");
+            if (!$colTaxTreat) {
+                Database::execute("ALTER TABLE production_purchase_items ADD COLUMN tax_treatment ENUM('INCLUDED', 'EXCLUDED') NOT NULL DEFAULT 'INCLUDED' AFTER tax_input_type");
             }
         } catch (\Throwable $e) {}
         try {
@@ -1472,7 +1480,7 @@ class ProductionController {
 
         $items = Database::fetchAll(
             "SELECT item_type, item_name, quantity, unit, weight_kg, unit_price, total_price,
-                    tax_input_type, gst_type, sgst_value, cgst_value, igst_value,
+                    tax_input_type, tax_treatment, gst_type, sgst_value, cgst_value, igst_value,
                     sgst_amount, cgst_amount, igst_amount, roll_number, color, design_name, hsn_code
              FROM production_purchase_items
              WHERE purchase_id = ?
@@ -1486,8 +1494,15 @@ class ProductionController {
             'IGST' => ['amount' => 0.0, 'rates' => []],
         ];
         foreach ($items as &$item) {
+            $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
             $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
-            $base = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+            $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+            $itemTax = (float)($item['sgst_amount'] ?? 0) + (float)($item['cgst_amount'] ?? 0) + (float)($item['igst_amount'] ?? 0);
+            if ($taxTreatment === 'INCLUDED') {
+                $base = max(0, (float)$item['total_price'] - $itemTax);
+            } else {
+                $base = $gross;
+            }
             $item['base_amount'] = round($base, 2);
             $subtotal += $item['base_amount'];
 
@@ -1682,8 +1697,70 @@ class ProductionController {
 
         $seenIds = [];
         $updatedItems = [];
-        $calculateTaxAmount = static function (float $base, string $mode, float $value): float {
-            return round($mode === 'AMOUNT' ? $value : ($base * $value / 100), 2);
+        $calculateLineTaxes = static function(float $grossAmount, string $taxTreatment, string $gstType, string $taxMode, float $taxValue, float $cgstTaxValue): array {
+            if ($gstType === 'EXEMPTED' || $grossAmount <= 0) {
+                return [
+                    'base' => round($grossAmount, 2),
+                    'tax' => 0.0,
+                    'sgst' => 0.0,
+                    'cgst' => 0.0,
+                    'igst' => 0.0,
+                    'total' => round($grossAmount, 2),
+                ];
+            }
+
+            if ($taxTreatment === 'INCLUDED') {
+                if ($taxMode === 'PERCENT') {
+                    $totalRate = ($gstType === 'BOTH') ? ($taxValue + $cgstTaxValue) : $taxValue;
+                    if ($totalRate > 0) {
+                        $base = round($grossAmount / (1 + ($totalRate / 100)), 2);
+                        $tax = round($grossAmount - $base, 2);
+                        if ($gstType === 'BOTH') {
+                            $sgst = round($tax * ($taxValue / $totalRate), 2);
+                            $cgst = round($tax - $sgst, 2);
+                            $igst = 0.0;
+                        } elseif ($gstType === 'IGST') {
+                            $igst = $tax; $sgst = 0.0; $cgst = 0.0;
+                        } elseif ($gstType === 'SGST') {
+                            $sgst = $tax; $cgst = 0.0; $igst = 0.0;
+                        } elseif ($gstType === 'CGST') {
+                            $cgst = $tax; $sgst = 0.0; $igst = 0.0;
+                        } else {
+                            $sgst = 0.0; $cgst = 0.0; $igst = 0.0;
+                        }
+                        return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($grossAmount, 2)];
+                    }
+                } else {
+                    $fixedTax = ($gstType === 'BOTH') ? ($taxValue + $cgstTaxValue) : $taxValue;
+                    $tax = min($grossAmount, $fixedTax);
+                    $base = round($grossAmount - $tax, 2);
+                    if ($gstType === 'BOTH' && $fixedTax > 0) {
+                        $sgst = round($tax * ($taxValue / $fixedTax), 2);
+                        $cgst = round($tax - $sgst, 2);
+                        $igst = 0.0;
+                    } elseif ($gstType === 'IGST') {
+                        $igst = $tax; $sgst = 0.0; $cgst = 0.0;
+                    } elseif ($gstType === 'SGST') {
+                        $sgst = $tax; $cgst = 0.0; $igst = 0.0;
+                    } elseif ($gstType === 'CGST') {
+                        $cgst = $tax; $sgst = 0.0; $igst = 0.0;
+                    } else {
+                        $sgst = 0.0; $cgst = 0.0; $igst = 0.0;
+                    }
+                    return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($grossAmount, 2)];
+                }
+            }
+
+            // EXCLUDED mode
+            $base = round($grossAmount, 2);
+            $calcTax = static function(float $b, string $mode, float $val): float {
+                return $mode === 'AMOUNT' ? round($val, 2) : round(($b * $val) / 100, 2);
+            };
+            $sgst = in_array($gstType, ['SGST', 'BOTH'], true) ? $calcTax($base, $taxMode, $taxValue) : 0.0;
+            $cgst = ($gstType === 'CGST') ? $calcTax($base, $taxMode, $taxValue) : (($gstType === 'BOTH') ? $calcTax($base, $taxMode, $cgstTaxValue) : 0.0);
+            $igst = ($gstType === 'IGST') ? $calcTax($base, $taxMode, $taxValue) : 0.0;
+            $tax = round($sgst + $cgst + $igst, 2);
+            return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($base + $tax, 2)];
         };
         foreach ($submittedItems as $key => $submitted) {
             if (!is_array($submitted)) {
@@ -1701,19 +1778,19 @@ class ProductionController {
                 Response::back();
                 return;
             }
-            $itemType = strtoupper(trim((string)($submitted['item_type'] ?? '')));
+            $itemType = strtoupper(trim((string)($submitted['item_type'] ?? ($oldItem['item_type'] ?? $purchase['purchase_type']))));
             if ($oldItem && $itemType !== $oldItem['item_type']) {
                 Session::flash('error', 'Purchase item types cannot be changed while editing.');
                 Response::back();
                 return;
             }
-            if (!$oldItem) {
-                Session::flash('error', 'New items cannot be added through purchase editing.');
+            if (!$oldItem && $purchase['purchase_type'] === 'FABRIC_ROLL') {
+                Session::flash('error', 'New fabric rolls cannot be added through purchase editing.');
                 Response::back();
                 return;
             }
-            if (!empty($submitted['remove_item'])) {
-                Session::flash('error', 'Purchase items cannot be removed while editing.');
+            if (!empty($submitted['remove_item']) && $purchase['purchase_type'] === 'FABRIC_ROLL') {
+                Session::flash('error', 'Fabric rolls cannot be removed while editing.');
                 Response::back();
                 return;
             }
@@ -1786,31 +1863,103 @@ class ProductionController {
                         return;
                     }
                 }
+            } elseif ($itemType === 'THIRD_PARTY') {
+                $vendorSku = trim((string)($submitted['vendor_sku'] ?? $oldItem['vendor_sku'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? $oldItem['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? $oldItem['size'] ?? ''));
+                $hsnCode = trim((string)($submitted['hsn_code'] ?? $oldItem['hsn_code'] ?? ''));
+                $mrp = (float)($submitted['mrp'] ?? $oldItem['mrp'] ?? 0);
+                $sellingPrice = (float)($submitted['selling_price'] ?? $oldItem['selling_price'] ?? 0);
+                if ($sellingPrice <= 0 && $mrp > 0) {
+                    $sellingPrice = $mrp;
+                }
+
+                if ($itemName === '') {
+                    Session::flash('error', 'Item name is required for third-party products.');
+                    Response::back();
+                    return;
+                }
+                if ($quantity <= 0) {
+                    Session::flash('error', "Quantity must be greater than zero for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($unitPrice <= 0) {
+                    Session::flash('error', "Buyed price must be greater than zero for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($hsnCode === '') {
+                    Session::flash('error', "HSN code is mandatory for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($sellingPrice <= 0) {
+                    Session::flash('error', "Selling price is required for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($sellingPrice < $unitPrice) {
+                    Session::flash('error', "Selling price (₹" . number_format($sellingPrice, 2) . ") cannot be less than Buyed price (₹" . number_format($unitPrice, 2) . ") for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($mrp > 0 && $mrp < $sellingPrice) {
+                    Session::flash('error', "MRP (₹" . number_format($mrp, 2) . ") cannot be less than Selling price (₹" . number_format($sellingPrice, 2) . ") for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+
+                $productCode = $vendorSku !== '' ? $vendorSku : ($oldItem['product_code'] ?? null);
+                $rollNumber = null;
+                $design = null;
+                $designCount = null;
+                $weight = null;
+                $photoUrl = null;
+                $unit = 'PCS';
             } else {
                 $productCode = trim((string)($submitted['product_code'] ?? $oldItem['product_code'] ?? ''));
                 $rollNumber = $productCode !== '' ? mb_strtoupper($productCode) : ($oldItem['roll_number'] ?? null);
-                $color = $design = null;
-                $designCount = $weight = null;
+                $vendorSku = trim((string)($submitted['vendor_sku'] ?? $oldItem['vendor_sku'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? $oldItem['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? $oldItem['size'] ?? ''));
+                $mrp = (float)($submitted['mrp'] ?? $oldItem['mrp'] ?? 0);
+                $sellingPrice = (float)($submitted['selling_price'] ?? $oldItem['selling_price'] ?? 0);
+                $design = trim((string)($submitted['design_name'] ?? $oldItem['design_name'] ?? ''));
+                $designCount = (int)($submitted['design_count'] ?? $oldItem['design_count'] ?? 0);
+                $weight = (float)($submitted['weight_kg'] ?? $oldItem['weight_kg'] ?? 0);
                 $photoUrl = null;
             }
 
+            $taxTreatment = strtoupper(trim((string)($submitted['tax_treatment'] ?? $oldItem['tax_treatment'] ?? 'INCLUDED')));
+            if (!in_array($taxTreatment, ['INCLUDED', 'EXCLUDED'], true)) $taxTreatment = 'INCLUDED';
+
             $hsnCode = trim((string)($submitted['hsn_code'] ?? $oldItem['hsn_code'] ?? ''));
-            $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true) ? $calculateTaxAmount($baseAmount, $taxMode, $taxValue) : 0.0;
-            $cgstAmount = $gstType === 'CGST'
-                ? $calculateTaxAmount($baseAmount, $taxMode, $taxValue)
-                : ($gstType === 'BOTH' ? $calculateTaxAmount($baseAmount, $taxMode, $cgstTaxValue) : 0.0);
-            $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseAmount, $taxMode, $taxValue) : 0.0;
+            $grossAmount = round($itemType === 'FABRIC_ROLL' ? $unitPrice : $quantity * $unitPrice, 2);
+            $lineTaxes = $calculateLineTaxes($grossAmount, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+            $baseAmount = $lineTaxes['base'];
+            $sgstAmount = $lineTaxes['sgst'];
+            $cgstAmount = $lineTaxes['cgst'];
+            $igstAmount = $lineTaxes['igst'];
+            $lineTotal = $lineTaxes['total'];
+
             $updatedItems[] = [
                 'id' => $itemId, 'type' => $itemType, 'item_name' => mb_strtoupper($itemName),
                 'quantity' => $quantity, 'unit' => $unit, 'unit_price' => $unitPrice,
                 'base_amount' => $baseAmount, 'weight' => $weight, 'roll_number' => $rollNumber,
                 'product_code' => !empty($productCode) ? mb_strtoupper($productCode) : (!empty($oldItem['product_code']) ? $oldItem['product_code'] : null),
-                'color' => $color, 'design_name' => $design, 'design_count' => $designCount,
+                'vendor_sku' => $vendorSku ?? null,
+                'mrp' => $mrp ?? 0,
+                'selling_price' => $sellingPrice ?? 0,
+                'color' => $color,
+                'size' => $size ?? null,
+                'design_name' => $design, 'design_count' => $designCount,
                 'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
+                'tax_treatment' => $taxTreatment,
                 'gst_type' => $gstType, 'tax_mode' => $taxMode, 'tax_value' => $taxValue,
                 'cgst_tax_value' => $cgstTaxValue, 'sgst_amount' => $sgstAmount,
                 'cgst_amount' => $cgstAmount, 'igst_amount' => $igstAmount,
-                'total' => $baseAmount + $sgstAmount + $cgstAmount + $igstAmount,
+                'total' => $lineTotal,
                 'seller_roll_id' => (int)($oldItem['seller_roll_id'] ?? 0),
                 'photo_url' => $photoUrl,
             ];
@@ -1819,12 +1968,14 @@ class ProductionController {
             }
         }
 
-        foreach ($existingItems as $existingItem) {
-            $existingId = (int)$existingItem['id'];
-            if (!isset($seenIds[$existingId])) {
-                Session::flash('error', 'Purchase items cannot be removed while editing.');
-                Response::back();
-                return;
+        if ($purchase['purchase_type'] === 'FABRIC_ROLL') {
+            foreach ($existingItems as $existingItem) {
+                $existingId = (int)$existingItem['id'];
+                if (!isset($seenIds[$existingId])) {
+                    Session::flash('error', 'Fabric rolls cannot be removed while editing.');
+                    Response::back();
+                    return;
+                }
             }
         }
         $remainingItems = array_filter($updatedItems, static fn(array $item): bool => !isset($item['delete_id']));
@@ -1869,6 +2020,17 @@ class ProductionController {
             } catch (\Throwable $e) {}
 
             Database::beginTransaction();
+
+            // Delete removed items for non-roll purchases
+            if ($purchase['purchase_type'] !== 'FABRIC_ROLL') {
+                foreach ($existingItems as $existingItem) {
+                    $existingId = (int)$existingItem['id'];
+                    if (!isset($seenIds[$existingId])) {
+                        Database::execute("DELETE FROM production_purchase_items WHERE id = ? AND purchase_id = ?", [$existingId, $purchaseId]);
+                    }
+                }
+            }
+
             foreach ($updatedItems as $item) {
                 if (isset($item['delete_id'])) {
                     Database::execute("DELETE FROM production_purchase_items WHERE id = ? AND purchase_id = ?", [$item['delete_id'], $purchaseId]);
@@ -1877,17 +2039,18 @@ class ProductionController {
                 if ($item['id'] > 0) {
                     Database::execute(
                         "UPDATE production_purchase_items
-                         SET item_name = ?, quantity = ?, unit = ?, weight_kg = ?, unit_price = ?, total_price = ?,
-                             gst_type = ?, tax_input_type = ?, sgst_value = ?, cgst_value = ?, igst_value = ?,
-                             sgst_amount = ?, cgst_amount = ?, igst_amount = ?, roll_number = ?, color = ?,
+                         SET item_name = ?, quantity = ?, unit = ?, weight_kg = ?, unit_price = ?, mrp = ?, selling_price = ?, vendor_sku = ?, total_price = ?,
+                             gst_type = ?, tax_input_type = ?, tax_treatment = ?, sgst_value = ?, cgst_value = ?, igst_value = ?,
+                             sgst_amount = ?, cgst_amount = ?, igst_amount = ?, roll_number = ?, color = ?, size = ?,
                              design_name = ?, design_count = ?, hsn_code = ?, product_code = ?
                          WHERE id = ? AND purchase_id = ?",
-                        [$item['item_name'], $item['quantity'], $item['unit'], $item['weight'], $item['unit_price'], $item['total'],
-                            $item['gst_type'], $item['tax_mode'], in_array($item['gst_type'], ['SGST', 'BOTH'], true) ? $item['tax_value'] : 0,
+                        [$item['item_name'], $item['quantity'], $item['unit'], $item['weight'], $item['unit_price'],
+                            $item['mrp'] ?? 0, $item['selling_price'] ?? 0, $item['vendor_sku'] ?? null, $item['total'],
+                            $item['gst_type'], $item['tax_mode'], $item['tax_treatment'], in_array($item['gst_type'], ['SGST', 'BOTH'], true) ? $item['tax_value'] : 0,
                             $item['gst_type'] === 'CGST' ? $item['tax_value'] : $item['cgst_tax_value'],
                             $item['gst_type'] === 'IGST' ? $item['tax_value'] : 0,
                             $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'], $item['roll_number'], $item['color'],
-                            $item['design_name'], $item['design_count'], $item['hsn_code'], $item['product_code'], $item['id'], $purchaseId]
+                            $item['size'] ?? null, $item['design_name'], $item['design_count'], $item['hsn_code'], $item['product_code'], $item['id'], $purchaseId]
                     );
                     if ($item['type'] === 'FABRIC_ROLL' && $item['seller_roll_id'] > 0) {
                         $sellerRoll = Database::fetchOne("SELECT * FROM seller_rolls WHERE id = ?", [$item['seller_roll_id']]);
@@ -1936,6 +2099,22 @@ class ProductionController {
                         }
                     }
                     continue;
+                } else {
+                    // Newly inserted item during edit
+                    Database::execute(
+                        "INSERT INTO production_purchase_items
+                         (purchase_id, item_type, item_name, quantity, unit, weight_kg, unit_price, mrp, selling_price, vendor_sku, total_price,
+                          gst_type, tax_input_type, tax_treatment, sgst_value, cgst_value, igst_value, sgst_amount, cgst_amount, igst_amount,
+                          roll_number, color, size, design_name, design_count, hsn_code, product_code, is_mapped)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                        [$purchaseId, $item['type'], $item['item_name'], $item['quantity'], $item['unit'], $item['weight'],
+                            $item['unit_price'], $item['mrp'] ?? 0, $item['selling_price'] ?? 0, $item['vendor_sku'] ?? null, $item['total'],
+                            $item['gst_type'], $item['tax_mode'], $item['tax_treatment'], in_array($item['gst_type'], ['SGST', 'BOTH'], true) ? $item['tax_value'] : 0,
+                            $item['gst_type'] === 'CGST' ? $item['tax_value'] : $item['cgst_tax_value'],
+                            $item['gst_type'] === 'IGST' ? $item['tax_value'] : 0,
+                            $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'], $item['roll_number'], $item['color'],
+                            $item['size'] ?? null, $item['design_name'], $item['design_count'], $item['hsn_code'], $item['product_code']]
+                    );
                 }
             }
             $this->refreshSupplierRollTotals((int)$purchase['seller_id']);
@@ -2122,8 +2301,70 @@ class ProductionController {
 
         $items = [];
         $fabricDescription = mb_strtoupper(trim((string)($_POST['fabric_description'] ?? '')));
-        $calculateTaxAmount = static function (float $base, string $mode, float $value): float {
-            return round($mode === 'AMOUNT' ? $value : ($base * $value / 100), 2);
+        $calculateLineTaxes = static function(float $grossAmount, string $taxTreatment, string $gstType, string $taxMode, float $taxValue, float $cgstTaxValue): array {
+            if ($gstType === 'EXEMPTED' || $grossAmount <= 0) {
+                return [
+                    'base' => round($grossAmount, 2),
+                    'tax' => 0.0,
+                    'sgst' => 0.0,
+                    'cgst' => 0.0,
+                    'igst' => 0.0,
+                    'total' => round($grossAmount, 2),
+                ];
+            }
+
+            if ($taxTreatment === 'INCLUDED') {
+                if ($taxMode === 'PERCENT') {
+                    $totalRate = ($gstType === 'BOTH') ? ($taxValue + $cgstTaxValue) : $taxValue;
+                    if ($totalRate > 0) {
+                        $base = round($grossAmount / (1 + ($totalRate / 100)), 2);
+                        $tax = round($grossAmount - $base, 2);
+                        if ($gstType === 'BOTH') {
+                            $sgst = round($tax * ($taxValue / $totalRate), 2);
+                            $cgst = round($tax - $sgst, 2);
+                            $igst = 0.0;
+                        } elseif ($gstType === 'IGST') {
+                            $igst = $tax; $sgst = 0.0; $cgst = 0.0;
+                        } elseif ($gstType === 'SGST') {
+                            $sgst = $tax; $cgst = 0.0; $igst = 0.0;
+                        } elseif ($gstType === 'CGST') {
+                            $cgst = $tax; $sgst = 0.0; $igst = 0.0;
+                        } else {
+                            $sgst = 0.0; $cgst = 0.0; $igst = 0.0;
+                        }
+                        return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($grossAmount, 2)];
+                    }
+                } else {
+                    $fixedTax = ($gstType === 'BOTH') ? ($taxValue + $cgstTaxValue) : $taxValue;
+                    $tax = min($grossAmount, $fixedTax);
+                    $base = round($grossAmount - $tax, 2);
+                    if ($gstType === 'BOTH' && $fixedTax > 0) {
+                        $sgst = round($tax * ($taxValue / $fixedTax), 2);
+                        $cgst = round($tax - $sgst, 2);
+                        $igst = 0.0;
+                    } elseif ($gstType === 'IGST') {
+                        $igst = $tax; $sgst = 0.0; $cgst = 0.0;
+                    } elseif ($gstType === 'SGST') {
+                        $sgst = $tax; $cgst = 0.0; $igst = 0.0;
+                    } elseif ($gstType === 'CGST') {
+                        $cgst = $tax; $sgst = 0.0; $igst = 0.0;
+                    } else {
+                        $sgst = 0.0; $cgst = 0.0; $igst = 0.0;
+                    }
+                    return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($grossAmount, 2)];
+                }
+            }
+
+            // EXCLUDED mode
+            $base = round($grossAmount, 2);
+            $calcTax = static function(float $b, string $mode, float $val): float {
+                return $mode === 'AMOUNT' ? round($val, 2) : round(($b * $val) / 100, 2);
+            };
+            $sgst = in_array($gstType, ['SGST', 'BOTH'], true) ? $calcTax($base, $taxMode, $taxValue) : 0.0;
+            $cgst = ($gstType === 'CGST') ? $calcTax($base, $taxMode, $taxValue) : (($gstType === 'BOTH') ? $calcTax($base, $taxMode, $cgstTaxValue) : 0.0);
+            $igst = ($gstType === 'IGST') ? $calcTax($base, $taxMode, $taxValue) : 0.0;
+            $tax = round($sgst + $cgst + $igst, 2);
+            return ['base' => $base, 'tax' => $tax, 'sgst' => $sgst, 'cgst' => $cgst, 'igst' => $igst, 'total' => round($base + $tax, 2)];
         };
 
         foreach ($submittedItems as $index => $submitted) {
@@ -2139,6 +2380,10 @@ class ProductionController {
             $unitPriceInput = $submitted['unit_price'] ?? null;
             $quantity = is_numeric($quantityInput) ? (float)$quantityInput : 0;
             $unitPrice = is_numeric($unitPriceInput) ? (float)$unitPriceInput : -1;
+            $taxTreatment = strtoupper(trim((string)($submitted['tax_treatment'] ?? 'INCLUDED')));
+            if (!in_array($taxTreatment, ['INCLUDED', 'EXCLUDED'], true)) {
+                $taxTreatment = 'INCLUDED';
+            }
             $gstType = strtoupper(trim((string)($submitted['gst_type'] ?? 'EXEMPTED')));
             $taxMode = strtoupper(trim((string)($submitted['tax_mode'] ?? 'PERCENT')));
             $taxInput = $submitted['tax_value'] ?? '0';
@@ -2185,14 +2430,12 @@ class ProductionController {
                     return;
                 }
                 $quantity = (int)$quantity;
-                $baseTotal = round($unitPrice, 2);
-                $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $cgstAmount = $gstType === 'CGST'
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
-                    : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
-                $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+                $lineTaxes = $calculateLineTaxes($unitPrice, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+                $sgstAmount = $lineTaxes['sgst'];
+                $cgstAmount = $lineTaxes['cgst'];
+                $igstAmount = $lineTaxes['igst'];
+                $taxAmount = $lineTaxes['tax'];
+                $baseTotal = $lineTaxes['base'];
 
                 $items[] = [
                     'type' => 'FABRIC_ROLL',
@@ -2201,6 +2444,7 @@ class ProductionController {
                     'unit' => 'PCS',
                     'weight' => $weight,
                     'unit_price' => $unitPrice,
+                    'tax_treatment' => $taxTreatment,
                     'mrp' => 0.0,
                     'selling_price' => 0.0,
                     'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
@@ -2215,7 +2459,7 @@ class ProductionController {
                     'sgst_amount' => $sgstAmount,
                     'cgst_amount' => $cgstAmount,
                     'igst_amount' => $igstAmount,
-                    'line_total' => $baseTotal + $taxAmount,
+                    'line_total' => $lineTaxes['total'],
                     'roll_number' => $rollNumber,
                     'color' => $color,
                     'size' => null,
@@ -2298,14 +2542,13 @@ class ProductionController {
                     $vendorSku = implode('-', $parts);
                 }
 
-                $baseTotal = round($quantity * $unitPrice, 2);
-                $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $cgstAmount = $gstType === 'CGST'
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
-                    : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
-                $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+                $grossTotal = round($quantity * $unitPrice, 2);
+                $lineTaxes = $calculateLineTaxes($grossTotal, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+                $sgstAmount = $lineTaxes['sgst'];
+                $cgstAmount = $lineTaxes['cgst'];
+                $igstAmount = $lineTaxes['igst'];
+                $taxAmount = $lineTaxes['tax'];
+                $baseTotal = $lineTaxes['base'];
 
                 $items[] = [
                     'type' => 'THIRD_PARTY',
@@ -2314,6 +2557,7 @@ class ProductionController {
                     'unit' => 'PCS',
                     'weight' => null,
                     'unit_price' => $unitPrice,
+                    'tax_treatment' => $taxTreatment,
                     'mrp' => $mrp,
                     'selling_price' => $sellingPrice,
                     'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
@@ -2328,7 +2572,7 @@ class ProductionController {
                     'sgst_amount' => $sgstAmount,
                     'cgst_amount' => $cgstAmount,
                     'igst_amount' => $igstAmount,
-                    'line_total' => $baseTotal + $taxAmount,
+                    'line_total' => $lineTaxes['total'],
                     'roll_number' => null,
                     'color' => $color !== '' ? $color : null,
                     'size' => $size !== '' ? $size : null,
@@ -2417,14 +2661,13 @@ class ProductionController {
                     $vendorSku = implode('-', $parts);
                 }
 
-                $baseTotal = round($quantity * $unitPrice, 2);
-                $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $cgstAmount = $gstType === 'CGST'
-                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
-                    : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
-                $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
-                $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+                $grossTotal = round($quantity * $unitPrice, 2);
+                $lineTaxes = $calculateLineTaxes($grossTotal, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+                $sgstAmount = $lineTaxes['sgst'];
+                $cgstAmount = $lineTaxes['cgst'];
+                $igstAmount = $lineTaxes['igst'];
+                $taxAmount = $lineTaxes['tax'];
+                $baseTotal = $lineTaxes['base'];
 
                 $items[] = [
                     'type' => 'OWN_PRODUCT',
@@ -2433,6 +2676,7 @@ class ProductionController {
                     'unit' => 'PCS',
                     'weight' => null,
                     'unit_price' => $unitPrice,
+                    'tax_treatment' => $taxTreatment,
                     'mrp' => $mrp,
                     'selling_price' => $sellingPrice,
                     'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
@@ -2447,7 +2691,7 @@ class ProductionController {
                     'sgst_amount' => $sgstAmount,
                     'cgst_amount' => $cgstAmount,
                     'igst_amount' => $igstAmount,
-                    'line_total' => $baseTotal + $taxAmount,
+                    'line_total' => $lineTaxes['total'],
                     'roll_number' => null,
                     'color' => $color !== '' ? $color : null,
                     'size' => $size !== '' ? $size : null,
@@ -2594,25 +2838,67 @@ class ProductionController {
                         $rollPhotoTargets[(string)$item['form_index']] = $sellerRollId;
                     }
                 } elseif ($item['type'] === 'THIRD_PARTY') {
-                    $supplySeqIndex++;
-                    $tpPrefix = 'TP' . date('my', strtotime($purchaseDate));
-                    $tpCode = sprintf('%s%03d', $tpPrefix, $supplySeqIndex);
-                    $itemStartCode = $tpCode;
-                    $itemEndCode = $tpCode;
-                    $itemQrCode = $tpCode;
-                    if (empty($itemProductCode)) {
-                        $itemProductCode = $tpCode;
+                    // 1. Ensure Catalog exists in products table
+                    $catalogName = mb_strtoupper(trim($item['item_name']));
+                    $prod = Database::fetchOne("SELECT id, code FROM products WHERE UPPER(name) = UPPER(?)", [$catalogName]);
+                    if ($prod) {
+                        $item['product_id'] = (int)$prod['id'];
+                    } else {
+                        $pCode = 'TP-' . substr(strtoupper(preg_replace('/[^A-Z0-9]/', '', $catalogName)), 0, 8);
+                        Database::execute(
+                            "INSERT INTO products (name, code, category_id, subcategory_id, source_type, hsn_code, is_active)
+                             VALUES (?, ?, 1, 1, 'EXTERNAL_PURCHASE', ?, 1)",
+                            [$catalogName, $pCode, $item['hsn_code']]
+                        );
+                        $item['product_id'] = (int)Database::lastInsertId();
                     }
+
+                    // 2. Find or create Variant via VariantService
+                    $var = VariantService::findOrCreateVariantForInward((int)$item['product_id'], [
+                        'color'         => $item['color'],
+                        'size'          => $item['size'],
+                        'vendor_sku'    => $item['vendor_sku'],
+                        'hsn_code'      => $item['hsn_code'],
+                        'mrp'           => $item['mrp'],
+                        'selling_price' => $item['selling_price'],
+                        'unit_price'    => $item['unit_price'],
+                    ]);
+
+                    $item['variant_id'] = (int)$var['id'];
+                    $vCode = $var['variant_code'];
+                    $itemProductCode = $var['sku'];
+                    $itemStartCode = $vCode;
+                    $itemEndCode = $vCode;
+                    $itemQrCode = $vCode;
+                    $item['is_mapped'] = 1;
                 } elseif ($item['type'] === 'OWN_PRODUCT') {
-                    $supplySeqIndex++;
-                    $opPrefix = 'OP' . date('my', strtotime($purchaseDate));
-                    $opCode = sprintf('%s%03d', $opPrefix, $supplySeqIndex);
-                    $itemStartCode = $opCode;
-                    $itemEndCode = $opCode;
-                    $itemQrCode = $opCode;
-                    if (empty($itemProductCode)) {
-                        $itemProductCode = $opCode;
+                    if (empty($item['variant_id']) && !empty($item['product_id'])) {
+                        $var = VariantService::findOrCreateVariantForInward((int)$item['product_id'], [
+                            'color'         => $item['color'],
+                            'size'          => $item['size'],
+                            'vendor_sku'    => $item['product_code'],
+                            'hsn_code'      => $item['hsn_code'],
+                            'mrp'           => $item['mrp'],
+                            'selling_price' => $item['selling_price'],
+                            'unit_price'    => $item['unit_price'],
+                        ]);
+                        $item['variant_id'] = (int)$var['id'];
+                        $vCode = $var['variant_code'];
+                        $itemProductCode = $var['sku'];
+                        $itemStartCode = $vCode;
+                        $itemEndCode = $vCode;
+                        $itemQrCode = $vCode;
+                    } elseif (!empty($item['variant_id'])) {
+                        $var = ProductVariant::find((int)$item['variant_id']);
+                        if ($var) {
+                            $vCode = $var['variant_code'];
+                            $itemProductCode = $var['sku'];
+                            $itemStartCode = $vCode;
+                            $itemEndCode = $vCode;
+                            $itemQrCode = $vCode;
+                        }
                     }
+                    $item['is_mapped'] = 1;
                 } else {
                     $supplySeqIndex++;
                     $spPrefix = 'SP' . date('my', strtotime($purchaseDate));
@@ -2629,21 +2915,37 @@ class ProductionController {
                     "INSERT INTO production_purchase_items
                         (purchase_id, item_type, item_name, product_id, variant_id, quantity, unit, weight_kg,
                          unit_price, mrp, selling_price, total_price,
-                         gst_type, tax_input_type, sgst_value, cgst_value, igst_value,
+                         gst_type, tax_input_type, tax_treatment, sgst_value, cgst_value, igst_value,
                          sgst_amount, cgst_amount, igst_amount,
                          roll_number, color, size, design_name, design_count, seller_roll_id, hsn_code,
                          product_code, vendor_sku, start_code, end_code, qr_code, is_mapped)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [$purchaseId, $item['type'], $item['item_name'], $item['product_id'], $item['variant_id'],
                      $item['quantity'], $item['unit'], $item['weight'],
                      $item['unit_price'], $item['mrp'], $item['selling_price'], $item['line_total'],
-                     $item['gst_type'], $item['tax_mode'],
+                     $item['gst_type'], $item['tax_mode'], $item['tax_treatment'],
                      $item['sgst_value'], $item['cgst_value'], $item['igst_value'],
                      $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'],
                      $item['roll_number'], $item['color'], $item['size'],
                      $item['design_name'], $item['design_count'], $sellerRollId, $item['hsn_code'],
                      $itemProductCode, $item['vendor_sku'], $itemStartCode, $itemEndCode, $itemQrCode, $item['is_mapped']]
                 );
+
+                // Auto-increase stock in stock_balances for linked variant
+                if (!empty($item['variant_id'])) {
+                    StockService::increase(
+                        variantId: (int)$item['variant_id'],
+                        locationType: 'PRODUCTION_UNIT',
+                        locationId: 1,
+                        stockState: 'AVAILABLE',
+                        quantity: (float)$item['quantity'],
+                        transactionType: 'PURCHASE_INWARD',
+                        referenceType: 'production_purchases',
+                        referenceId: $purchaseId,
+                        userId: Auth::id() ?: 1,
+                        notes: "Inward PO #{$purchaseNumber} ({$item['item_name']})"
+                    );
+                }
             }
 
             Database::commit();
@@ -3089,7 +3391,77 @@ class ProductionController {
             return;
         }
 
-        // 1. Check if already recorded in Production Damage Management
+        // 1. First check if scanned code is a Product Variant (by variant_code, qr_code, or SKU)
+        $variant = Database::fetchOne(
+            "SELECT pv.*, p.id as product_id, p.name as product_name, p.code as product_code,
+                    sz.name as size_name, cl.name as color_name
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+             LEFT JOIN sizes sz ON sz.id = pv.size_id
+             LEFT JOIN colors cl ON cl.id = pv.color_id
+             WHERE UPPER(TRIM(pv.variant_code)) = ? OR UPPER(TRIM(pv.qr_code)) = ? OR UPPER(TRIM(pv.sku)) = ?
+             LIMIT 1",
+            [$scanCode, $scanCode, $scanCode]
+        );
+
+        if ($variant) {
+            // Check available stock in stock_balances
+            $availStock = (float)(Database::fetchOne(
+                "SELECT COALESCE(SUM(quantity), 0) as qty FROM stock_balances WHERE variant_id = ? AND stock_state = 'AVAILABLE'",
+                [(int)$variant['id']]
+            )['qty'] ?? 0);
+
+            if ($availStock <= 0) {
+                Response::json([
+                    'success' => false,
+                    'message' => "Variant {$variant['variant_code']} ({$variant['sku']}) has 0 available stock in inventory. Cannot record damage on out-of-stock items!",
+                ], 400);
+                return;
+            }
+
+            $loss = (float)(!empty($variant['selling_price']) && $variant['selling_price'] > 0
+                ? $variant['selling_price']
+                : (!empty($variant['mrp']) && $variant['mrp'] > 0
+                    ? $variant['mrp']
+                    : (!empty($variant['production_cost']) && $variant['production_cost'] > 0
+                        ? $variant['production_cost']
+                        : 500.00)));
+            $weight = (float)(!empty($variant['weight']) && $variant['weight'] > 0 ? $variant['weight'] : 0.25);
+            $prodName = $variant['product_name'] ?: 'Garment Product';
+            $sizeStr = $variant['size_name'] ?? '';
+            $colorStr = $variant['color_name'] ?? '';
+            $rollDesc = $prodName . ($sizeStr || $colorStr ? " ({$sizeStr}" . ($colorStr ? "/{$colorStr}" : '') . ")" : '');
+
+            Response::json([
+                'success' => true,
+                'item_type' => 'PRODUCT',
+                'damage_kind' => 'PRODUCT',
+                'supply_item_id' => null,
+                'product_id' => (int)$variant['product_id'],
+                'variant_id' => (int)$variant['id'],
+                'product_name' => $prodName,
+                'sku' => $variant['sku'],
+                'variant_code' => $variant['variant_code'],
+                'size' => $sizeStr,
+                'color' => $colorStr,
+                'seller_id' => null,
+                'seller_name' => 'In-House / Purchased Variant',
+                'roll_id' => null,
+                'roll_number' => $rollDesc,
+                'quantity' => 1,
+                'weight' => $weight,
+                'price' => $loss,
+                'loss' => $loss,
+                'piece_weight' => $weight,
+                'piece_loss' => $loss,
+                'code' => $scanCode,
+                'available_stock' => $availStock,
+                'message' => "Product Variant found: {$variant['variant_code']} - {$prodName} (Available Stock: {$availStock} Pcs)"
+            ]);
+            return;
+        }
+
+        // 2. For non-variant items (e.g. fabric rolls), check if already recorded in Damage Management
         $existingDamage = Database::fetchOne(
             "SELECT damage_number, damage_reason, status FROM roll_damages WHERE qr_code = ? LIMIT 1",
             [$scanCode]
@@ -3116,8 +3488,42 @@ class ProductionController {
         $rawScan = trim((string)($_GET['code'] ?? ''));
         $scanCode = strtoupper(trim(explode('|', $rawScan, 2)[0]));
         $scanCode = trim(ltrim($scanCode, '#'));
+
+        // Check if scanning a product variant for edit
+        $var = Database::fetchOne(
+            "SELECT pv.*, p.id as product_id, p.name as product_name,
+                    sz.name as size_name, cl.name as color_name
+             FROM product_variants pv
+             JOIN products p ON p.id = pv.product_id
+             LEFT JOIN sizes sz ON sz.id = pv.size_id
+             LEFT JOIN colors cl ON cl.id = pv.color_id
+             WHERE UPPER(TRIM(pv.variant_code)) = ? OR UPPER(TRIM(pv.qr_code)) = ? OR UPPER(TRIM(pv.sku)) = ?
+             LIMIT 1",
+            [$scanCode, $scanCode, $scanCode]
+        );
+        if ($var) {
+            $loss = (float)(!empty($var['selling_price']) && $var['selling_price'] > 0
+                ? $var['selling_price']
+                : (!empty($var['mrp']) && $var['mrp'] > 0
+                    ? $var['mrp']
+                    : 500.00));
+            $weight = (float)(!empty($var['weight']) && $var['weight'] > 0 ? $var['weight'] : 0.25);
+            Response::json([
+                'success' => true,
+                'item_type' => 'PRODUCT',
+                'product_id' => (int)$var['product_id'],
+                'variant_id' => (int)$var['id'],
+                'product_name' => $var['product_name'],
+                'roll_number' => $var['product_name'] . (!empty($var['size_name']) ? " ({$var['size_name']})" : ''),
+                'weight' => $weight,
+                'price' => $loss,
+                'code' => $scanCode,
+            ]);
+            return;
+        }
+
         if (!preg_match('/^([A-Z]{2}\d{4})(\d+)$/', $scanCode, $matches)) {
-            Response::json(['success' => false, 'message' => 'Scan a valid fabric roll QR label.'], 400);
+            Response::json(['success' => false, 'message' => 'Scan a valid fabric roll QR label or product variant code.'], 400);
             return;
         }
 
@@ -3443,9 +3849,9 @@ class ProductionController {
                  JOIN products p ON p.id = pv.product_id
                  LEFT JOIN sizes sz ON sz.id = pv.size_id
                  LEFT JOIN colors cl ON cl.id = pv.color_id
-                 WHERE pv.sku = ? OR pv.qr_code = ?
+                 WHERE UPPER(TRIM(pv.variant_code)) = ? OR UPPER(TRIM(pv.sku)) = ? OR UPPER(TRIM(pv.qr_code)) = ?
                  LIMIT 1",
-                [$scanCode, $scanCode]
+                [$scanCode, $scanCode, $scanCode]
             );
             if ($varItem) {
                 $prodItem = $varItem;
@@ -4647,14 +5053,33 @@ class ProductionController {
         $newDamageCountByRoll = [];
         foreach ($qrEntries as $qrEntry) {
             $qrCode = $qrEntry['code'];
-            $existingQrDamage = Database::fetchOne(
-                "SELECT damage_number FROM roll_damages WHERE qr_code = ? LIMIT 1",
-                [$qrCode]
+
+            // Check if this QR matches a product variant
+            $variantCheck = Database::fetchOne(
+                "SELECT id, sku, variant_code FROM product_variants WHERE UPPER(TRIM(variant_code)) = ? OR UPPER(TRIM(qr_code)) = ? OR UPPER(TRIM(sku)) = ? LIMIT 1",
+                [$qrCode, $qrCode, $qrCode]
             );
-            if ($existingQrDamage) {
-                Session::flash('error', "QR label {$qrCode} is already recorded in damage report {$existingQrDamage['damage_number']}.");
-                Response::back();
-                return;
+            if (!$variantCheck) {
+                $existingQrDamage = Database::fetchOne(
+                    "SELECT damage_number FROM roll_damages WHERE qr_code = ? LIMIT 1",
+                    [$qrCode]
+                );
+                if ($existingQrDamage) {
+                    Session::flash('error', "QR label {$qrCode} is already recorded in damage report {$existingQrDamage['damage_number']}.");
+                    Response::back();
+                    return;
+                }
+            } else {
+                // Verify available stock for this variant
+                $variantAvail = (float)(Database::fetchOne(
+                    "SELECT COALESCE(SUM(quantity), 0) as qty FROM stock_balances WHERE variant_id = ? AND stock_state = 'AVAILABLE'",
+                    [(int)$variantCheck['id']]
+                )['qty'] ?? 0);
+                if ($variantAvail < 1) {
+                    Session::flash('error', "Variant {$variantCheck['variant_code']} ({$variantCheck['sku']}) has 0 available stock in inventory. Cannot record damage.");
+                    Response::back();
+                    return;
+                }
             }
 
             // A. Check Fabric Roll
@@ -4793,8 +5218,8 @@ class ProductionController {
                          JOIN products p ON p.id = pv.product_id
                          LEFT JOIN sizes sz ON sz.id = pv.size_id
                          LEFT JOIN colors cl ON cl.id = pv.color_id
-                         WHERE pv.sku = ? OR pv.qr_code = ? LIMIT 1",
-                        [$qrCode, $qrCode]
+                         WHERE UPPER(TRIM(pv.variant_code)) = ? OR UPPER(TRIM(pv.sku)) = ? OR UPPER(TRIM(pv.qr_code)) = ? LIMIT 1",
+                        [$qrCode, $qrCode, $qrCode]
                     );
                 }
 
@@ -4983,6 +5408,46 @@ class ProductionController {
                     [$damageNumber, $damageId]
                 );
                 $totalLossAmount += (float)$item['loss_amount'];
+
+                // Deduct damaged product from inventory stock_balances via StockService
+                if ($item['item_type'] === 'PRODUCT' && !empty($item['variant_id'])) {
+                    $varId = (int)$item['variant_id'];
+                    $stockLoc = Database::fetchOne(
+                        "SELECT location_type, location_id FROM stock_balances WHERE variant_id = ? AND stock_state = 'AVAILABLE' AND quantity >= 1 LIMIT 1",
+                        [$varId]
+                    );
+                    $locType = $stockLoc['location_type'] ?? 'PRODUCTION_UNIT';
+                    $locId = (int)($stockLoc['location_id'] ?? 1);
+
+                    try {
+                        StockService::decrease(
+                            $varId,
+                            $locType,
+                            $locId,
+                            'AVAILABLE',
+                            1.0,
+                            'DAMAGE',
+                            'roll_damages',
+                            $damageId,
+                            $userId,
+                            "Damage recorded: {$damageNumber} - " . ($item['damage_reason'] ?? 'Defect')
+                        );
+                        StockService::increase(
+                            $varId,
+                            $locType,
+                            $locId,
+                            'DAMAGED',
+                            1.0,
+                            'DAMAGE',
+                            'roll_damages',
+                            $damageId,
+                            $userId,
+                            "Damage quarantine: {$damageNumber}"
+                        );
+                    } catch (\Throwable $stkEx) {
+                        error_log("Damage stock adjustment warning for variant {$varId}: " . $stkEx->getMessage());
+                    }
+                }
 
                 AuditService::log('production', 'create', 'roll_damages', $damageId, null, [
                     'damage_number' => $damageNumber,
@@ -17508,14 +17973,18 @@ class ProductionController {
             return;
         }
 
-        // Fetch purchase items with linked seller_rolls
+        // Fetch purchase items with linked seller_rolls, variants, and categories
         $items = Database::fetchAll(
             "SELECT ppi.*, sr.roll_number AS sr_roll_number, sr.start_code, sr.end_code, sr.start_seq, sr.end_seq,
-                    sr.qr_code, sr.weight AS sr_weight, sr.material_type AS sr_material_type, sr.color AS sr_color,
+                    sr.qr_code AS sr_qr_code, sr.weight AS sr_weight, sr.material_type AS sr_material_type, sr.color AS sr_color,
                     sr.design_name AS sr_design_name, sr.price AS sr_price, sr.photo_url AS sr_photo_url,
-                    sr.quantity AS sr_quantity
+                    sr.quantity AS sr_quantity,
+                    pv.variant_code AS pv_variant_code, pv.sku AS pv_sku, pv.mrp AS pv_mrp, pv.selling_price AS pv_selling_price,
+                    c.name AS cat_name
              FROM production_purchase_items ppi
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
+             LEFT JOIN product_variants pv ON pv.id = ppi.variant_id
+             LEFT JOIN categories c ON c.id = ppi.mapped_category_id
              WHERE ppi.purchase_id = ?
              ORDER BY ppi.id ASC",
             [$purchaseId]
@@ -17529,14 +17998,16 @@ class ProductionController {
             'material_type' => $purchase['seller_material_type'],
         ];
 
-        // Collect fabric rolls and generate QR stickers per roll quantity
+        // Generate unified QR stickers for all purchase items
         $rolls = [];
         $stickers = [];
-        $supplierTitle = mb_strtoupper(trim($purchase['supplier_company'] ?: ($purchase['supplier_name'] ?? 'SUPPLIER')));
+        $supplierTitle = mb_strtoupper(trim($purchase['supplier_company'] ?: ($purchase['supplier_name'] ?? 'GRM INVENTORY APPARELS')));
         $globalStickerIndex = 1;
 
         foreach ($items as $idx => $it) {
-            if ($it['item_type'] === 'FABRIC_ROLL') {
+            $itemType = $it['item_type'] ?? 'FABRIC_ROLL';
+
+            if ($itemType === 'FABRIC_ROLL') {
                 $rollNum = $it['sr_roll_number'] ?: ($it['roll_number'] ?: ('ROLL-' . ($idx + 1)));
                 $totalWeight = (float)($it['sr_weight'] ?: ($it['weight_kg'] ?: 0));
                 $totalPrice = (float)($it['sr_price'] ?: ($it['unit_price'] ?: ($it['total_price'] ?: 0)));
@@ -17615,9 +18086,15 @@ class ProductionController {
                     $pieceCode = sprintf('%s%0' . $padLen . 'd', $prefix, $seq);
                     $qrPayload = $pieceCode;
                     $pieceLabel = $totalPieces > 1 ? ($rollNum . ' (' . ($pieceIdx + 1) . '/' . $totalPieces . ')') : $rollNum;
+                    $vId = !empty($it['pv_variant_code']) 
+                        ? $it['pv_variant_code'] 
+                        : (!empty($it['variant_id']) 
+                            ? ('V-' . sprintf('%05d', $it['variant_id'])) 
+                            : ('V-ROLL-' . sprintf('%03d', $it['id'])));
 
                     $sticker = [
                         'index'            => $globalStickerIndex++,
+                        'item_type'        => 'FABRIC_ROLL',
                         'item_index'       => $idx + 1,
                         'piece_index'      => $pieceIdx + 1,
                         'total_qty'        => $totalPieces,
@@ -17627,11 +18104,17 @@ class ProductionController {
                         'po_number'        => $purchase['purchase_number'],
                         'invoice_number'   => $purchase['invoice_number'] ?? '-',
                         'supplier_name'    => $supplierTitle,
-                        'fabric_type'      => $materialType,
-                        'color'            => $color,
+                        'brand_title'      => $supplierTitle,
+                        'category'         => 'FABRIC ROLL',
+                        'item_name'        => $materialType,
+                        'v_id'             => $vId,
+                        'sku'              => $pieceCode,
+                        'color'            => $color ?: '—',
+                        'size'             => null,
                         'design_name'      => $design,
                         'weight'           => $pieceWeight,
                         'total_weight'     => $totalWeight,
+                        'mrp'              => 0,
                         'price'            => $piecePrice,
                         'code'             => $pieceCode,
                         'qr_payload'       => $qrPayload,
@@ -17643,6 +18126,60 @@ class ProductionController {
                 }
 
                 $rolls[] = $it;
+            } else {
+                // THIRD_PARTY or OWN_PRODUCT
+                $itemName = mb_strtoupper(trim($it['item_name']));
+                $sku = trim((string)($it['vendor_sku'] ?: ($it['product_code'] ?: ('TP-' . sprintf('%04d', $it['id'])))));
+                $color = mb_strtoupper(trim((string)($it['color'] ?? '—')));
+                $size = mb_strtoupper(trim((string)($it['size'] ?? '—')));
+                $mrp = (float)($it['mrp'] ?: ($it['pv_mrp'] ?? 0));
+                $sellingPrice = (float)($it['selling_price'] ?: ($it['pv_selling_price'] ?: ($it['unit_price'] ?? 0)));
+                // Standard V-ID format based on Variant ID
+                $vId = !empty($it['pv_variant_code']) 
+                    ? $it['pv_variant_code'] 
+                    : (!empty($it['variant_id']) 
+                        ? ('V' . str_pad((string)$it['variant_id'], 4, '0', STR_PAD_LEFT)) 
+                        : ('V' . str_pad((string)$it['id'], 4, '0', STR_PAD_LEFT)));
+
+                // QR payload encodes the stable variant code identity (single QR per variant)
+                $qrPayload = !empty($it['pv_variant_code']) ? $it['pv_variant_code'] : $vId;
+
+                $category = !empty($it['cat_name']) ? mb_strtoupper($it['cat_name']) : ($itemType === 'THIRD_PARTY' ? 'THIRD-PARTY APPAREL' : 'APPAREL');
+                $qty = max(1, (int)$it['quantity']);
+                $numStickers = min(100, $qty);
+
+                for ($p = 0; $p < $numStickers; $p++) {
+                    $stickers[] = [
+                        'index'            => $globalStickerIndex++,
+                        'item_type'        => $itemType,
+                        'item_index'       => $idx + 1,
+                        'piece_index'      => $p + 1,
+                        'total_qty'        => $qty,
+                        'roll_id'          => 0,
+                        'roll_number'      => $itemName,
+                        'base_roll_number' => $itemName,
+                        'po_number'        => $purchase['purchase_number'],
+                        'invoice_number'   => $purchase['invoice_number'] ?? '-',
+                        'supplier_name'    => $supplierTitle,
+                        'brand_title'      => $supplierTitle,
+                        'category'         => $category,
+                        'fabric_type'      => $category,
+                        'item_name'        => $itemName,
+                        'v_id'             => $vId,
+                        'sku'              => $sku,
+                        'color'            => $color,
+                        'size'             => $size,
+                        'design_name'      => '',
+                        'weight'           => 0,
+                        'total_weight'     => 0,
+                        'mrp'              => $mrp,
+                        'price'            => $sellingPrice,
+                        'code'             => $vId,
+                        'qr_payload'       => $qrPayload,
+                        'is_damaged'       => false,
+                        'purchase_date'    => date('d M Y', strtotime($purchase['purchase_date'])),
+                    ];
+                }
             }
         }
 

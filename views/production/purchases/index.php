@@ -300,11 +300,9 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                                     <a class="btn btn-action-icon btn-outline-primary" href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Purchase Invoice">
                                         <i class="bi bi-printer"></i>
                                     </a>
-                                    <?php if ($pType === 'FABRIC_ROLL'): ?>
-                                        <a class="btn btn-action-icon btn-dark" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Roll QR Labels">
-                                            <i class="bi bi-qr-code text-warning"></i>
-                                        </a>
-                                    <?php endif; ?>
+                                    <a class="btn btn-action-icon btn-dark" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Labels">
+                                        <i class="bi bi-qr-code text-warning"></i>
+                                    </a>
                                 <?php endif; ?>
                                 <?php if (hasPermission('production_purchases', 'edit') || hasPermission('sellers', 'edit')): ?>
                                     <a class="btn btn-action-icon btn-outline-primary" href="<?= url('production/purchases/edit/' . $purchase['id']) ?>" title="Edit Purchase">

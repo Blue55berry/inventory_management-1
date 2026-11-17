@@ -16,6 +16,7 @@
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
+        <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark"><i class="bi bi-qr-code me-1 text-warning"></i>Print Thermal QR Labels</a>
         <a href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Invoice</a>
     </div>
 </div>
@@ -65,17 +66,85 @@
             </div>
         </div>
     </div>
+    <?php
+        $hasSgst = false;
+        $hasCgst = false;
+        $hasIgst = false;
+        $sgstRates = [];
+        $cgstRates = [];
+        $igstRates = [];
+
+        foreach ($items as $it) {
+            $tType = $it['gst_type'] ?? 'EXEMPTED';
+            $sgAmt = (float)($it['sgst_amount'] ?? 0);
+            $cgAmt = (float)($it['cgst_amount'] ?? 0);
+            $igAmt = (float)($it['igst_amount'] ?? 0);
+            $isPct = (($it['tax_input_type'] ?? 'PERCENT') === 'PERCENT');
+
+            if (in_array($tType, ['SGST', 'BOTH'], true) || $sgAmt > 0) {
+                $hasSgst = true;
+                if ($isPct && (float)($it['sgst_value'] ?? 0) > 0) {
+                    $sgstRates[(string)((float)$it['sgst_value'] + 0)] = true;
+                }
+            }
+            if (in_array($tType, ['CGST', 'BOTH'], true) || $cgAmt > 0) {
+                $hasCgst = true;
+                if ($isPct && (float)($it['cgst_value'] ?? 0) > 0) {
+                    $cgstRates[(string)((float)$it['cgst_value'] + 0)] = true;
+                }
+            }
+            if ($tType === 'IGST' || $igAmt > 0) {
+                $hasIgst = true;
+                if ($isPct && (float)($it['igst_value'] ?? 0) > 0) {
+                    $igstRates[(string)((float)$it['igst_value'] + 0)] = true;
+                }
+            }
+        }
+
+        $sgstTitle = count($sgstRates) === 1 ? 'SGST (' . array_key_first($sgstRates) . '%)' : 'SGST';
+        $cgstTitle = count($cgstRates) === 1 ? 'CGST (' . array_key_first($cgstRates) . '%)' : 'CGST';
+        $igstTitle = count($igstRates) === 1 ? 'IGST (' . array_key_first($igstRates) . '%)' : 'IGST';
+        $hasAnyTax = $hasSgst || $hasCgst || $hasIgst;
+        $taxColCount = ($hasSgst ? 1 : 0) + ($hasCgst ? 1 : 0) + ($hasIgst ? 1 : 0) + (!$hasAnyTax ? 1 : 0);
+    ?>
     <div class="table-responsive">
         <table class="table table-hover align-middle mb-0" id="purchasedItemsTable">
-            <thead class="table-light"><tr><th>#</th><th>Item Details</th><th>HSN</th><th>Quantity</th><th class="text-end">Unit Price</th><th class="text-end">Subtotal</th><th>GST</th><th class="text-end">Tax</th><th class="text-end">Total</th><th class="text-center">Action / QR</th></tr></thead>
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Item Details</th>
+                    <th>HSN</th>
+                    <th>Quantity</th>
+                    <th class="text-end">Unit Price</th>
+                    <th class="text-end">Subtotal</th>
+                    <?php if ($hasSgst): ?><th class="text-end"><?= e($sgstTitle) ?></th><?php endif; ?>
+                    <?php if ($hasCgst): ?><th class="text-end"><?= e($cgstTitle) ?></th><?php endif; ?>
+                    <?php if ($hasIgst): ?><th class="text-end"><?= e($igstTitle) ?></th><?php endif; ?>
+                    <?php if (!$hasAnyTax): ?><th class="text-end">Tax</th><?php endif; ?>
+                    <th class="text-end">Total</th>
+                    <th class="text-center">Action / QR</th>
+                </tr>
+            </thead>
             <tbody id="purchasedItemsBody">
             <?php
                 $subtotal = 0.0;
                 $taxTotal = 0.0;
+                $sgstTotal = 0.0;
+                $cgstTotal = 0.0;
+                $igstTotal = 0.0;
                 foreach ($items as $index => $item):
                     $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
-                    $base = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
-                    $tax = (float)($item['sgst_amount'] ?? 0) + (float)($item['cgst_amount'] ?? 0) + (float)($item['igst_amount'] ?? 0);
+                    $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+                    $sgAmt = (float)($item['sgst_amount'] ?? 0);
+                    $cgAmt = (float)($item['cgst_amount'] ?? 0);
+                    $igAmt = (float)($item['igst_amount'] ?? 0);
+                    $tax = $sgAmt + $cgAmt + $igAmt;
+                    $sgstTotal += $sgAmt;
+                    $cgstTotal += $cgAmt;
+                    $igstTotal += $igAmt;
+
+                    $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
+                    $base = ($taxTreatment === 'INCLUDED') ? max(0, (float)$item['total_price'] - $tax) : $gross;
                     $subtotal += $base;
                     $taxTotal += $tax;
                     $taxType = $item['gst_type'] ?? 'LEGACY';
@@ -157,16 +226,39 @@
                     </td>
                     <td><span class="badge bg-light text-dark border font-monospace"><?= e($item['hsn_code'] ?: '—') ?></span></td>
                     <td><?= number_format((float)$item['quantity'], 3) ?> <?= e($item['unit']) ?><?= !empty($item['weight_kg']) ? '<br><small class="text-muted">' . number_format((float)$item['weight_kg'], 2) . ' kg</small>' : '' ?></td>
-                    <td class="text-end">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
-                    <td class="text-end">₹<?= number_format($base, 2) ?></td>
-                    <td>
-                        <span class="badge bg-light text-dark border"><?= e($taxType) ?></span>
-                        <?php if (!empty($itemTaxRateText)): ?>
-                            <small class="text-muted d-block font-monospace mt-0.5"><?= e($itemTaxRateText) ?></small>
-                        <?php endif; ?>
+                    <td class="text-end">
+                        ₹<?= number_format((float)$item['unit_price'], 2) ?>
+                        <small class="text-muted d-block" style="font-size:10px;"><?= (($item['tax_treatment'] ?? 'INCLUDED') === 'EXCLUDED') ? 'GST Excl.' : 'GST Incl.' ?></small>
                     </td>
-                    <td class="text-end">₹<?= number_format($tax, 2) ?></td>
-                    <td class="text-end fw-bold">₹<?= number_format((float)$item['total_price'], 2) ?></td>
+                    <td class="text-end font-monospace">₹<?= number_format($base, 2) ?></td>
+                    <?php if ($hasSgst): ?>
+                        <td class="text-end font-monospace">
+                            ₹<?= number_format($sgAmt, 2) ?>
+                            <?php if (count($sgstRates) > 1 && $isPercent && $sgstVal > 0): ?>
+                                <small class="text-muted d-block" style="font-size:10px;">(<?= ($sgstVal + 0) ?>%)</small>
+                            <?php endif; ?>
+                        </td>
+                    <?php endif; ?>
+                    <?php if ($hasCgst): ?>
+                        <td class="text-end font-monospace">
+                            ₹<?= number_format($cgAmt, 2) ?>
+                            <?php if (count($cgstRates) > 1 && $isPercent && $cgstVal > 0): ?>
+                                <small class="text-muted d-block" style="font-size:10px;">(<?= ($cgstVal + 0) ?>%)</small>
+                            <?php endif; ?>
+                        </td>
+                    <?php endif; ?>
+                    <?php if ($hasIgst): ?>
+                        <td class="text-end font-monospace">
+                            ₹<?= number_format($igAmt, 2) ?>
+                            <?php if (count($igstRates) > 1 && $isPercent && $igstVal > 0): ?>
+                                <small class="text-muted d-block" style="font-size:10px;">(<?= ($igstVal + 0) ?>%)</small>
+                            <?php endif; ?>
+                        </td>
+                    <?php endif; ?>
+                    <?php if (!$hasAnyTax): ?>
+                        <td class="text-end text-muted">—</td>
+                    <?php endif; ?>
+                    <td class="text-end fw-bold font-monospace">₹<?= number_format((float)$item['total_price'], 2) ?></td>
                     <td class="text-center">
                         <div class="action-btns-group justify-content-center">
                         <?php if ($item['item_type'] === 'FABRIC_ROLL' && !empty($item['seller_roll_id'])): ?>
@@ -174,26 +266,50 @@
                                 <i class="bi bi-qr-code"></i>
                             </a>
                         <?php elseif ($item['item_type'] === 'THIRD_PARTY'): ?>
+                            <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
+                                <i class="bi bi-qr-code text-primary"></i>
+                            </a>
                             <a class="btn btn-outline-warning btn-action-icon text-dark" href="<?= url('purchases/mapping?search=' . urlencode($item['item_name'])) ?>" title="Map Product Hierarchy &amp; Attributes">
                                 <i class="bi bi-diagram-3-fill"></i>
                             </a>
                         <?php else: ?>
-                            <span class="text-muted small">—</span>
+                            <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
+                                <i class="bi bi-qr-code text-primary"></i>
+                            </a>
                         <?php endif; ?>
                         </div>
                     </td>
                 </tr>
             <?php endforeach; ?>
                 <tr id="noItemsMatchRow" class="d-none">
-                    <td colspan="10" class="text-center text-muted py-4">
+                    <td colspan="<?= 7 + $taxColCount ?>" class="text-center text-muted py-4">
                         <i class="bi bi-search me-1"></i> No matching purchased items found.
                     </td>
                 </tr>
             </tbody>
             <tfoot class="table-light">
-                <tr><th colspan="5" class="text-end">Subtotal</th><th class="text-end">₹<?= number_format($subtotal, 2) ?></th><th colspan="3"></th><th></th></tr>
-                <tr><th colspan="8" class="text-end">Taxes</th><th class="text-end">₹<?= number_format($taxTotal, 2) ?></th><th></th></tr>
-                <tr><th colspan="8" class="text-end">Overall Total</th><th class="text-end text-success">₹<?= number_format((float)$purchase['total_amount'], 2) ?></th><th></th></tr>
+                <tr>
+                    <th colspan="5" class="text-end">Subtotal</th>
+                    <th class="text-end font-monospace">₹<?= number_format($subtotal, 2) ?></th>
+                    <?php if ($hasSgst): ?><th class="text-end font-monospace">₹<?= number_format($sgstTotal, 2) ?></th><?php endif; ?>
+                    <?php if ($hasCgst): ?><th class="text-end font-monospace">₹<?= number_format($cgstTotal, 2) ?></th><?php endif; ?>
+                    <?php if ($hasIgst): ?><th class="text-end font-monospace">₹<?= number_format($igstTotal, 2) ?></th><?php endif; ?>
+                    <?php if (!$hasAnyTax): ?><th class="text-end">—</th><?php endif; ?>
+                    <th class="text-end font-monospace">₹<?= number_format((float)$purchase['total_amount'], 2) ?></th>
+                    <th></th>
+                </tr>
+                <?php if ($hasAnyTax): ?>
+                <tr>
+                    <th colspan="<?= 5 + $taxColCount ?>" class="text-end text-muted small">Total Taxes</th>
+                    <th class="text-end font-monospace text-muted small">₹<?= number_format($taxTotal, 2) ?></th>
+                    <th></th>
+                </tr>
+                <?php endif; ?>
+                <tr>
+                    <th colspan="<?= 5 + $taxColCount ?>" class="text-end">Overall Total</th>
+                    <th class="text-end text-success font-monospace fs-6">₹<?= number_format((float)$purchase['total_amount'], 2) ?></th>
+                    <th></th>
+                </tr>
             </tfoot>
         </table>
     </div>

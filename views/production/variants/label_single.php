@@ -120,26 +120,17 @@
                     <div style="font-size: 10px; font-weight: 800;" class="font-monospace text-truncate">
                         <?= e($variant['product_name']) ?>
                     </div>
-                    <div><strong>V-ID:</strong> <span class="font-monospace"><?= e($variant['variant_code']) ?></span></div>
+                    <div><strong>V-ID:</strong> <span class="font-monospace fw-bold text-dark"><?= e($variant['variant_code']) ?></span></div>
                     <div><strong>SKU:</strong> <span class="font-monospace fw-bold" style="font-size: 9.5px;"><?= e($variant['sku']) ?></span></div>
-                    <?php if (!empty($variant['color_name'])): ?>
-                    <div><strong>Color:</strong> <?= e($variant['color_name']) ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($variant['design_name'])): ?>
-                    <div><strong>Design:</strong> <?= e($variant['design_name']) ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($variant['size_name'])): ?>
-                    <div><strong>Size:</strong> <span class="badge bg-dark text-white px-1 py-0" style="font-size: 9.5px;"><?= e($variant['size_name']) ?></span></div>
-                    <?php endif; ?>
                 </div>
             </div>
 
             <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top border-dark" style="font-size: 10.5px;">
                 <div class="price-badge">MRP: ₹<?= number_format((float)$variant['mrp'], 2) ?></div>
-                <div class="price-badge text-primary" style="font-size: 12px;">SALE: ₹<?= number_format((float)$variant['selling_price'], 2) ?></div>
+                <div class="price-badge text-dark" style="font-size: 12px;">PRICE: ₹<?= number_format((float)$variant['selling_price'], 2) ?></div>
             </div>
-            <div class="text-center font-monospace mt-1" style="font-size: 8.5px; letter-spacing: 0.5px;">
-                <?= e($variant['qr_code'] ?: $variant['sku']) ?>
+            <div class="text-center font-monospace mt-1 fw-bold" style="font-size: 9.5px; letter-spacing: 0.5px;">
+                <?= e($variant['variant_code'] ?: ($variant['qr_code'] ?: $variant['sku'])) ?>
             </div>
         </div>
     </div>

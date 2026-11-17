@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars($pageTitle ?? 'Roll QR Labels') ?> — GRM Inventory</title>
+    <title><?= htmlspecialchars($pageTitle ?? 'Thermal QR Labels') ?> — GRM Inventory</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -15,7 +15,7 @@
         body {
             background-color: var(--bs-body-bg);
             color: var(--bs-body-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 20px;
         }
@@ -35,139 +35,139 @@
             margin-bottom: 24px;
         }
 
-        /* Sticker Card: Standard 50x30mm thermal label layout */
-        .stickers-wrapper {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            justify-content: flex-start;
+        /* Labels Grid */
+        .labels-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
         }
 
-        .roll-label-card {
-            width: 275px;
-            min-height: 155px;
-            background: #ffffff;
-            border: 1.5px solid #0f172a;
-            border-radius: 8px;
-            padding: 10px 12px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        @media (max-width: 1200px) {
+            .labels-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 850px) {
+            .labels-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 550px) {
+            .labels-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 50x30mm Standard Garment Thermal Sticker Card (Unified Variant Style) */
+        .thermal-label-card {
+            background: #fff;
+            border: 1.5px solid #000;
+            border-radius: 6px;
+            padding: 8px 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            page-break-inside: avoid;
+            break-inside: avoid;
+            position: relative;
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
-            gap: 6px;
-            position: relative;
-            break-inside: avoid;
-            page-break-inside: avoid;
+            justify-content: space-between;
+            min-height: 155px;
             transition: transform 0.15s ease, box-shadow 0.15s ease;
         }
 
-        .roll-label-card:hover {
+        .thermal-label-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.08);
         }
 
-        .label-header {
-            border-bottom: 1px dashed #cbd5e1;
-            padding-bottom: 4px;
-            margin-bottom: 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
+        .thermal-header {
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+            margin-bottom: 5px;
         }
 
-        .company-tag {
-            font-size: 8.5px;
+        .company-title {
+            font-size: 11px;
             font-weight: 800;
-            letter-spacing: 0.5px;
-            color: #1e293b;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
             line-height: 1.2;
-            max-width: 190px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            color: #000;
         }
 
-        .po-tag {
+        .category-sub {
             font-size: 8px;
             font-weight: 700;
-            color: #0284c7;
-            font-family: monospace;
-            background: #e0f2fe;
-            padding: 1px 4px;
-            border-radius: 3px;
+            text-transform: uppercase;
+            color: #475569;
+            margin-top: 1px;
         }
 
-        .label-body {
+        .qr-section {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
 
         .qr-box {
-            width: 76px;
-            height: 76px;
+            width: 70px;
+            height: 70px;
             flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: center;
             background: #fff;
-            padding: 2px;
-            border: 1px solid #e2e8f0;
-            border-radius: 4px;
         }
 
-        .qr-box img, .qr-box canvas {
-            width: 100% !important;
-            height: 100% !important;
+        .qr-box canvas, .qr-box img {
+            width: 70px !important;
+            height: 70px !important;
         }
 
-        .label-meta {
-            flex-grow: 1;
+        .meta-list {
             font-size: 9.5px;
             line-height: 1.35;
+            min-width: 0;
+            color: #1e293b;
         }
 
-        .roll-badge-num {
-            font-family: monospace;
-            font-size: 11px;
-            font-weight: 900;
+        .meta-list strong {
+            font-weight: 800;
             color: #0f172a;
-            display: block;
-            margin-bottom: 2px;
-            letter-spacing: 0.5px;
         }
 
-        .meta-line {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            color: #334155;
+        .product-name-row {
+            font-size: 9.5px;
+            font-weight: 800;
+            font-family: monospace;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-        }
-
-        .meta-line strong {
             color: #0f172a;
+            margin-bottom: 2px;
         }
 
-        .label-footer {
-            border-top: 1px dashed #cbd5e1;
-            padding-top: 4px;
-            margin-top: 6px;
+        .thermal-footer {
+            border-top: 1px solid #000;
+            margin-top: 5px;
+            padding-top: 3px;
             display: flex;
-            justify-content: flex-end;
+            justify-content: space-between;
             align-items: center;
-            font-size: 8px;
-            color: #64748b;
+            font-size: 9.5px;
+            font-weight: 800;
         }
 
-        .single-print-btn {
-            padding: 1px 6px;
-            font-size: 9px;
-            border-radius: 3px;
-            line-height: 1.3;
+        .code-display {
+            text-align: center;
+            font-family: monospace;
+            font-size: 8px;
+            margin-top: 2px;
+            letter-spacing: 0.5px;
+            word-break: break-all;
+            color: #334155;
         }
 
         /* PRINT STYLES */
@@ -177,22 +177,25 @@
                 padding: 0 !important;
                 margin: 0 !important;
             }
-            .action-bar, .single-print-btn, .roll-select-box, .no-print, .label-footer, .unselected-roll, .d-print-none {
+            .action-bar, .no-print, .roll-select-box, .btn, .d-print-none {
                 display: none !important;
             }
             .roll-qr-container {
                 max-width: none !important;
                 margin: 0 !important;
+                padding: 0 !important;
             }
-            .stickers-wrapper {
+            .labels-grid {
+                display: grid !important;
+                grid-template-columns: repeat(4, 1fr) !important;
                 gap: 8px !important;
-                justify-content: flex-start !important;
             }
-            .roll-label-card {
+            .thermal-label-card {
                 border: 1.5px solid #000 !important;
                 box-shadow: none !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+                margin: 0 !important;
             }
         }
     </style>
@@ -205,20 +208,25 @@
         || hasPermission('production_purchases', 'edit') 
         || hasPermission('sellers', 'create') 
         || hasPermission('sellers', 'edit');
+
+    $pType = $purchase['purchase_type'] ?? 'FABRIC_ROLL';
+    $pTypeLabel = $pType === 'THIRD_PARTY' ? 'Third-Party Products' : ($pType === 'OWN_PRODUCT' ? 'Own Production' : 'Fabric Roll');
     ?>
-    <!-- Top Action & Info Bar -->
+
+    <!-- Top Action & Info Bar (Hidden in Print) -->
     <div class="action-bar no-print">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
                 <div class="d-flex align-items-center gap-2 mb-1">
-                    <span class="badge bg-primary fs-6 px-2 py-1"><i class="bi bi-qr-code-scan me-1"></i> Roll QR Module</span>
+                    <span class="badge bg-dark fs-6 px-2.5 py-1 text-white border"><i class="bi bi-qr-code text-warning me-1"></i> Thermal QR Labels</span>
                     <h3 class="mb-0 fw-bold fs-4 text-dark"><?= htmlspecialchars($purchase['purchase_number']) ?></h3>
+                    <span class="badge bg-primary-subtle text-primary border"><?= e($pTypeLabel) ?></span>
                 </div>
                 <div class="text-muted small">
-                    <strong>Supplier:</strong> <?= htmlspecialchars($purchase['supplier_company'] ?: ($purchase['supplier_name'] ?? 'Direct Supplier')) ?>
+                    <strong>Supplier:</strong> <?= htmlspecialchars(($purchase['supplier_company'] ?? null) ?: (($purchase['seller_company'] ?? null) ?: (($purchase['supplier_name'] ?? null) ?: ($purchase['seller_name'] ?? 'Direct Supplier')))) ?>
                     · <strong>PO Date:</strong> <?= date('d M Y', strtotime($purchase['purchase_date'])) ?>
                     · <strong>Invoice:</strong> <?= htmlspecialchars($purchase['invoice_number'] ?: 'N/A') ?>
-                    · <strong>Total Rolls:</strong> <span class="badge bg-success-subtle text-success border border-success"><?= count($stickers) ?> Rolls</span>
+                    · <strong>Total Labels:</strong> <span class="badge bg-success-subtle text-success border border-success"><?= count($stickers) ?> Labels</span>
                 </div>
             </div>
 
@@ -230,73 +238,82 @@
                     <input class="form-check-input ms-0" type="checkbox" id="selectAllRolls" <?= $canManageRolls ? 'checked onchange="toggleSelectAllRolls(this.checked)" style="cursor: pointer;"' : 'disabled style="cursor: not-allowed; opacity: 0.5;"' ?>>
                     <label class="form-check-label small fw-bold text-dark <?= $canManageRolls ? 'cursor-pointer' : '' ?> mb-0" for="selectAllRolls">Select All (<span id="selectedCount"><?= count($stickers) ?></span>/<?= count($stickers) ?>)<?= !$canManageRolls ? ' <span class="badge bg-secondary-subtle text-secondary border px-1.5 py-0.5 ms-1" style="font-size:10px;">View Only</span>' : '' ?></label>
                 </div>
-                <button type="button" class="btn btn-dark btn-sm fw-bold px-3 shadow-sm" id="printSelectedBtn" <?= $canManageRolls ? 'onclick="printSelectedLabels()"' : 'disabled style="opacity: 0.5; cursor: not-allowed;" title="Printing disabled in view-only access"' ?>>
+                <button type="button" class="btn btn-dark btn-sm fw-bold px-3 shadow-sm" id="printSelectedBtn" <?= $canManageRolls ? 'onclick="printSelectedLabels()"' : 'disabled style="opacity: 0.5; cursor: not-allowed;"' ?>>
                     <i class="bi bi-printer me-1 text-warning"></i> Print Selected QR Labels (<span id="btnSelectedCount"><?= count($stickers) ?></span>)
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- Rolls Status Bar -->
+    <!-- Empty State -->
     <?php if (empty($stickers)): ?>
         <div class="card border-0 shadow-sm p-5 text-center bg-white rounded-3">
             <i class="bi bi-inbox fs-1 text-secondary opacity-50 mb-3"></i>
-            <h4 class="fw-bold text-dark">No Fabric Rolls In This Purchase</h4>
-            <p class="text-muted">No roll items were recorded for this purchase.</p>
+            <h4 class="fw-bold text-dark">No Items In This Purchase</h4>
+            <p class="text-muted">No inwarded items found to generate QR labels.</p>
             <div class="mt-3 d-flex justify-content-center gap-2">
                 <a href="<?= url('production/purchases/edit/' . $purchase['id']) ?>" class="btn btn-primary btn-sm">
-                    <i class="bi bi-plus-circle me-1"></i> Edit Purchase &amp; Add Rolls
+                    <i class="bi bi-plus-circle me-1"></i> Edit Purchase &amp; Add Items
                 </a>
             </div>
         </div>
     <?php else: ?>
-        <div class="mb-1 d-flex justify-content-between align-items-center no-print">
+        <div class="mb-2 d-flex justify-content-between align-items-center no-print">
             <span class="text-muted small fw-semibold">
-                <i class="bi bi-layers me-1 text-primary"></i> Displaying <strong><?= count($stickers) ?></strong> thermal fabric roll label stickers (50x30mm standard):
+                <i class="bi bi-layers me-1 text-primary"></i> Displaying <strong><?= count($stickers) ?></strong> unified thermal QR label stickers (50x30mm standard):
             </span>
-            <span class="badge bg-secondary-subtle text-secondary border">Check rolls to print only selected labels</span>
+            <span class="badge bg-secondary-subtle text-secondary border">Standard Garment Thermal Layout</span>
         </div>
 
-        <div class="stickers-wrapper" id="stickersContainer">
+        <!-- Unified Labels Grid -->
+        <div class="labels-grid" id="stickersContainer">
             <?php foreach ($stickers as $stk): ?>
-                <div class="roll-label-card" id="card-<?= $stk['index'] ?>">
-                    <div class="label-header">
-                        <div class="d-flex align-items-center gap-1">
-                            <input type="checkbox" class="form-check-input roll-select-box no-print" id="check-roll-<?= $stk['index'] ?>" data-index="<?= $stk['index'] ?>" checked <?= $canManageRolls ? 'onchange="updateSelectedCount()" title="Check to print this roll label" style="margin-top: 0; cursor: pointer;"' : 'disabled style="margin-top: 0; cursor: not-allowed; opacity: 0.5;" title="Selection disabled in view-only access"' ?>>
-                            <div class="company-tag" title="<?= htmlspecialchars($stk['supplier_name']) ?>">
-                                <?= htmlspecialchars($stk['supplier_name']) ?>
-                            </div>
+                <div class="thermal-label-card" id="card-<?= $stk['index'] ?>">
+                    <!-- Top Brand Header: Given Brand Name Print -->
+                    <div class="thermal-header">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <input type="checkbox" class="form-check-input roll-select-box no-print me-1" id="check-roll-<?= $stk['index'] ?>" data-index="<?= $stk['index'] ?>" checked <?= $canManageRolls ? 'onchange="updateSelectedCount()"' : 'disabled' ?>>
+                            <div class="company-title flex-grow-1 text-center"><?= e($stk['brand_title']) ?></div>
+                            <div class="no-print" style="width: 16px;"></div>
                         </div>
-                        <div class="po-tag"><?= htmlspecialchars($stk['po_number']) ?></div>
+                        <div class="category-sub text-center">
+                            <?= e($stk['category']) ?>
+                        </div>
                     </div>
 
-                    <div class="label-body">
-                        <!-- Dynamic QR Canvas/Image -->
-                        <div class="qr-box" id="qr-box-<?= $stk['index'] ?>" data-qr='<?= htmlspecialchars($stk['qr_payload'], ENT_QUOTES, 'UTF-8') ?>'></div>
-
-                        <div class="label-meta">
-                            <div class="d-flex align-items-center justify-content-between">
-                                <span class="roll-badge-num"><?= htmlspecialchars($stk['roll_number']) ?></span>
-                                <?php if (!empty($stk['is_damaged'])): ?>
-                                    <span class="badge bg-danger text-white py-0 px-1" style="font-size:7.5px">DAMAGED</span>
+                    <!-- Middle: QR and Attributes -->
+                    <div class="qr-section">
+                        <div class="qr-box sticker-qr-item" data-code="<?= e($stk['qr_payload']) ?>"></div>
+                        <div class="meta-list flex-grow-1">
+                            <div class="product-name-row" title="<?= e($stk['item_name']) ?>">
+                                <?= e($stk['item_name']) ?>
+                            </div>
+                            <div><strong>V-ID:</strong> <span class="font-monospace fw-bold text-dark"><?= e($stk['v_id']) ?></span></div>
+                            <div><strong>SKU:</strong> <span class="font-monospace fw-bold text-dark" style="font-size: 8.5px;"><?= e($stk['sku']) ?></span></div>
+                            <?php if (($stk['item_type'] ?? '') === 'FABRIC_ROLL'): ?>
+                                <?php if (!empty($stk['color']) && $stk['color'] !== '—'): ?>
+                                <div><strong>Col:</strong> <?= e($stk['color']) ?></div>
                                 <?php endif; ?>
-                            </div>
-                            <div class="meta-line">
-                                <span>Fabric:</span> <strong><?= htmlspecialchars(mb_strimwidth($stk['fabric_type'], 0, 16, '...')) ?></strong>
-                            </div>
-                            <div class="meta-line">
-                                <span>Color:</span> <strong><?= htmlspecialchars($stk['color'] ?: 'STANDARD') ?></strong>
-                            </div>
-                            <div class="meta-line">
-                                <span>Weight:</span> <strong style="color:#0284c7"><?= number_format((float)$stk['weight'], 2) ?> kg</strong>
-                                <?php if ($stk['total_qty'] > 1): ?>
-                                    <small class="text-muted" style="font-size:8px">(piece)</small>
+                                <?php if (!empty($stk['weight']) && (float)$stk['weight'] > 0): ?>
+                                <div><strong>Weight:</strong> <?= number_format((float)$stk['weight'], 2) ?> kg</div>
                                 <?php endif; ?>
-                            </div>
-                            <div class="meta-line">
-                                <span>Code:</span> <strong class="font-monospace" style="font-size: 10.5px; font-weight: 800; color: #0f172a; letter-spacing: 0.3px;"><?= htmlspecialchars($stk['code']) ?></strong>
-                            </div>
+                            <?php endif; ?>
                         </div>
+                    </div>
+
+                    <!-- Footer: Pricing -->
+                    <div class="thermal-footer">
+                        <?php if ((float)$stk['mrp'] > 0): ?>
+                            <div class="text-muted">MRP: ₹<?= number_format((float)$stk['mrp'], 2) ?></div>
+                        <?php else: ?>
+                            <div class="text-muted" style="font-size: 8px;">PO: <?= e($stk['po_number']) ?></div>
+                        <?php endif; ?>
+                        <div class="text-dark">PRICE: ₹<?= number_format((float)$stk['price'], 2) ?></div>
+                    </div>
+
+                    <!-- Sub-footer: Scannable string -->
+                    <div class="code-display">
+                        <?= e($stk['qr_payload']) ?>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -305,134 +322,66 @@
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Generate clean, high-readability low-density QR codes (large bold pixels like industrial 21x21 QR)
-    document.querySelectorAll('.qr-box').forEach(function(box) {
-        const payload = box.getAttribute('data-qr');
-        if (payload && typeof QRCode !== 'undefined') {
-            try {
-                // Clear any existing children
-                box.innerHTML = '';
-                new QRCode(box, {
-                    text: payload,
-                    width: 72,
-                    height: 72,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.L
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.sticker-qr-item').forEach(function(el) {
+            const code = el.getAttribute('data-code');
+            if (code) {
+                new QRCode(el, {
+                    text: code,
+                    width: 70,
+                    height: 70,
+                    correctLevel: QRCode.CorrectLevel.M
                 });
-                // Remove browser tooltip popups from img/canvas
-                setTimeout(function() {
-                    box.removeAttribute('title');
-                    box.querySelectorAll('img, canvas').forEach(function(el) {
-                        el.removeAttribute('title');
-                        el.setAttribute('alt', payload);
-                    });
-                }, 40);
-            } catch (err) {
-                console.error("QR Code Error:", err);
             }
+        });
+        updateSelectedCount();
+    });
+
+    function updateSelectedCount() {
+        const checkboxes = document.querySelectorAll('.roll-select-box');
+        const checkedBoxes = document.querySelectorAll('.roll-select-box:checked');
+        const total = checkboxes.length;
+        const count = checkedBoxes.length;
+
+        const selCountSpan = document.getElementById('selectedCount');
+        const btnCountSpan = document.getElementById('btnSelectedCount');
+        const selectAllSwitch = document.getElementById('selectAllRolls');
+
+        if (selCountSpan) selCountSpan.textContent = count;
+        if (btnCountSpan) btnCountSpan.textContent = count;
+
+        if (selectAllSwitch && total > 0) {
+            selectAllSwitch.checked = (count === total);
+            selectAllSwitch.indeterminate = (count > 0 && count < total);
         }
-    });
 
-    updateSelectedCount();
-});
+        checkboxes.forEach(cb => {
+            const card = document.getElementById('card-' + cb.getAttribute('data-index'));
+            if (card) {
+                if (cb.checked) {
+                    card.classList.remove('d-print-none', 'opacity-50');
+                } else {
+                    card.classList.add('d-print-none', 'opacity-50');
+                }
+            }
+        });
+    }
 
-const canManageRolls = <?= json_encode((bool)$canManageRolls) ?>;
+    function toggleSelectAllRolls(checked) {
+        document.querySelectorAll('.roll-select-box').forEach(cb => {
+            cb.checked = checked;
+        });
+        updateSelectedCount();
+    }
 
-function toggleSelectAllRolls(checked) {
-    if (!canManageRolls) return;
-    document.querySelectorAll('.roll-select-box').forEach(cb => {
-        cb.checked = checked;
-    });
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const boxes = document.querySelectorAll('.roll-select-box');
-    let count = 0;
-    boxes.forEach(cb => {
-        const card = document.getElementById('card-' + cb.dataset.index);
-        if (cb.checked) {
-            count++;
-            if (card) card.classList.remove('d-print-none', 'unselected-roll');
-        } else {
-            if (card) card.classList.add('d-print-none', 'unselected-roll');
+    function printSelectedLabels() {
+        const count = document.querySelectorAll('.roll-select-box:checked').length;
+        if (count === 0) {
+            alert('Please select at least one label to print.');
+            return;
         }
-    });
-    const countEl = document.getElementById('selectedCount');
-    const btnCountEl = document.getElementById('btnSelectedCount');
-    const selectAll = document.getElementById('selectAllRolls');
-    if (countEl) countEl.textContent = count;
-    if (btnCountEl) btnCountEl.textContent = count;
-    if (selectAll) selectAll.checked = (count === boxes.length && boxes.length > 0);
-
-    const printBtn = document.getElementById('printSelectedBtn');
-    if (printBtn) {
-        printBtn.disabled = (count === 0);
+        window.print();
     }
-}
-
-function printSelectedLabels() {
-    if (!canManageRolls) {
-        alert('Action restricted: You only have view permission.');
-        return;
-    }
-    const checked = document.querySelectorAll('.roll-select-box:checked');
-    if (checked.length === 0) {
-        alert('Please select at least 1 roll sticker to print.');
-        return;
-    }
-    updateSelectedCount();
-    window.print();
-}
-
-function printSingleLabel(index) {
-    if (!canManageRolls) {
-        alert('Action restricted: You only have view permission.');
-        return;
-    }
-    const card = document.getElementById('card-' + index);
-    if (!card) return;
-
-    const printWin = window.open('', '_blank', 'width=380,height=300');
-    if (!printWin) {
-        alert('Please allow popups to print individual roll label.');
-        return;
-    }
-
-    // Clone card and strip non-print elements
-    const clone = card.cloneNode(true);
-    clone.querySelectorAll('.no-print, .single-print-btn, .roll-select-box, .label-footer').forEach(el => el.remove());
-    const cardHtml = clone.outerHTML;
-
-    printWin.document.open();
-    printWin.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Roll Label Print</title>
-            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-            <style>
-                body { margin: 0; padding: 10px; font-family: sans-serif; }
-                .roll-label-card { width: 270px; border: 1.5px solid #000; padding: 8px 10px; border-radius: 6px; }
-                .single-print-btn, .roll-select-box, .no-print, .label-footer { display: none !important; }
-                .company-tag { font-size: 8.5px; font-weight: 800; text-transform: uppercase; }
-                .po-tag { font-size: 8px; font-family: monospace; font-weight: bold; }
-                .qr-box { width: 72px; height: 72px; }
-                .qr-box img, .qr-box canvas { width: 100% !important; height: 100% !important; }
-                .roll-badge-num { font-size: 11px; font-weight: 900; font-family: monospace; }
-                .label-meta { font-size: 9px; line-height: 1.3; }
-            </style>
-        </head>
-        <body onload="window.print(); setTimeout(() => window.close(), 500);">
-            ${cardHtml}
-        </body>
-        </html>
-    `);
-    printWin.document.close();
-}
 </script>
-
 </body>
 </html>

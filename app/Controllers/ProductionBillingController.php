@@ -341,14 +341,15 @@ class ProductionBillingController
         $billId = max(0, (int)($_GET['bill_id'] ?? 0));
         $needle = strtoupper($query);
 
-        // Check if scanned tag / QR matches a quarantined item in Damage Management
+        // Check if scanned tag / QR matches a quarantined fabric roll in Damage Management
         $damagedMatch = Database::fetchOne(
             "SELECT rd.damage_number, rd.damage_reason, rd.qr_code, rd.damaged_weight, rd.status,
                     sr.roll_number
              FROM roll_damages rd
              LEFT JOIN seller_rolls sr ON sr.id = rd.seller_roll_id
              WHERE (UPPER(TRIM(rd.qr_code)) = ? OR UPPER(TRIM(sr.roll_number)) = ? OR UPPER(TRIM(sr.qr_code)) = ?)
-               AND rd.status NOT IN ('CANCELLED', 'REJECTED')",
+               AND rd.status NOT IN ('CANCELLED', 'REJECTED')
+               AND (rd.item_type IS NULL OR rd.item_type != 'PRODUCT' OR rd.variant_id IS NULL)",
             [$needle, $needle, $needle]
         );
 
@@ -452,7 +453,11 @@ class ProductionBillingController
                     $sellingPrice = max(0.0, (float)$variantMatch['selling_price']);
                     if ($sellingPrice <= 0) $sellingPrice = $mrp;
 
-                    $virtualTag = ($variantMatch['qr_code'] ?: $variantMatch['sku']) . '-TAG-' . date('His');
+                    $vCode = $variantMatch['variant_code'] ?: $variantMatch['sku'];
+                    $vTags = [];
+                    for ($t = 1; $t <= (int)$availableQty; $t++) {
+                        $vTags[] = $vCode . '-' . sprintf('%03d', $t);
+                    }
                     $variantItems[] = [
                         'qc_item_id' => 0,
                         'qc_batch_id' => 0,
@@ -460,13 +465,14 @@ class ProductionBillingController
                         'product_name' => (string)$variantMatch['product_name'],
                         'program_number' => (string)$variantMatch['parent_sku'],
                         'sku' => (string)$variantMatch['sku'],
+                        'variant_code' => (string)$variantMatch['variant_code'],
                         'size_name' => (string)($variantMatch['size_name'] ?? 'STD'),
                         'color_name' => (string)($variantMatch['color_name'] ?? 'STD'),
                         'mrp' => $mrp,
                         'unit_price' => $sellingPrice,
                         'gst_percentage' => max(0, (float)($variantMatch['gst_rate'] ?? $variantMatch['prod_gst'] ?? 0)),
                         'hsn_code' => (string)($variantMatch['hsn_code'] ?? $variantMatch['prod_hsn'] ?? '6109'),
-                        'available_tags' => [$virtualTag],
+                        'available_tags' => $vTags,
                     ];
                     Response::jsonSuccess('Variant stock found.', ['items' => $variantItems]);
                     return;
@@ -1081,6 +1087,7 @@ class ProductionBillingController
                 continue;
             }
             $qcItemId = (int)($submitted['qc_item_id'] ?? 0);
+            $variantId = (int)($submitted['variant_id'] ?? 0);
             $tags = array_values(array_unique(array_filter(array_map(
                 static fn($tag): string => trim((string)$tag),
                 (array)($submitted['tags'] ?? [])
@@ -1088,20 +1095,59 @@ class ProductionBillingController
             if (!$tags) {
                 continue;
             }
-            if (!isset($inventory[$qcItemId])) {
-                Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'One or more selected items are no longer available.');
-                return;
+
+            if ($qcItemId === 0 && $variantId > 0) {
+                $varRow = Database::fetchOne(
+                    "SELECT pv.*, p.name as product_name, p.code as parent_sku, p.hsn_code as prod_hsn, p.gst_percentage as prod_gst,
+                            sz.name as size_name, col.name as color_name
+                     FROM product_variants pv
+                     JOIN products p ON p.id = pv.product_id
+                     LEFT JOIN sizes sz ON sz.id = pv.size_id
+                     LEFT JOIN colors col ON col.id = pv.color_id
+                     WHERE pv.id = ?",
+                    [$variantId]
+                );
+                $balRow = Database::fetchOne(
+                    "SELECT quantity FROM stock_balances WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT' AND stock_state = 'AVAILABLE'",
+                    [$variantId]
+                );
+                $availableVariantQty = (float)($balRow['quantity'] ?? 0);
+                if (!$varRow || $availableVariantQty < count($tags)) {
+                    Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'Insufficient available stock for variant ' . ($varRow['sku'] ?? "ID $variantId") . '. Available: ' . $availableVariantQty);
+                    return;
+                }
+                $stock = [
+                    'qc_item_id' => 0,
+                    'qc_batch_id' => 0,
+                    'variant_id' => $variantId,
+                    'product_name' => $varRow['product_name'],
+                    'program_number' => $varRow['parent_sku'],
+                    'sku' => $varRow['sku'],
+                    'size_name' => $varRow['size_name'] ?? 'STD',
+                    'color_name' => $varRow['color_name'] ?? 'STD',
+                    'mrp' => (float)$varRow['mrp'],
+                    'unit_price' => (float)$varRow['selling_price'],
+                    'gst_percentage' => (float)($varRow['gst_rate'] ?? $varRow['prod_gst'] ?? 0),
+                    'hsn_code' => (string)($varRow['hsn_code'] ?? $varRow['prod_hsn'] ?? '6109'),
+                    'available_tags' => $tags,
+                ];
+                $availableTagMap = array_fill_keys(array_map('strtoupper', $tags), true);
+            } else {
+                if (!isset($inventory[$qcItemId])) {
+                    Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'One or more selected items are no longer available.');
+                    return;
+                }
+                $stock = $inventory[$qcItemId];
+                $availableTagMap = array_fill_keys(array_map('strtoupper', $stock['available_tags']), true);
             }
 
-            $stock = $inventory[$qcItemId];
-            $availableTagMap = array_fill_keys(array_map('strtoupper', $stock['available_tags']), true);
-            
-            // Check against Damage Management records
+            // Check against Damage Management records (quarantined fabric rolls)
             $damagedCheckRows = Database::fetchAll(
                 "SELECT rd.damage_number, rd.damage_reason, rd.qr_code, sr.roll_number
                  FROM roll_damages rd
                  LEFT JOIN seller_rolls sr ON sr.id = rd.seller_roll_id
-                 WHERE rd.status NOT IN ('CANCELLED', 'REJECTED')"
+                 WHERE rd.status NOT IN ('CANCELLED', 'REJECTED')
+                   AND (rd.item_type IS NULL OR rd.item_type != 'PRODUCT' OR rd.variant_id IS NULL)"
             );
             $damagedLookup = [];
             foreach ($damagedCheckRows as $dCR) {

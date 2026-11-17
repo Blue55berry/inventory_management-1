@@ -314,6 +314,8 @@
                                     <th class="text-end">Qty (Pcs)</th>
                                     <th class="text-end">Buyed Price (₹)</th>
                                     <th class="text-end">Base Value</th>
+                                    <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Price (₹)</th>
+                                    <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Value</th>
                                     <th>HSN</th>
                                     <th>GST Type</th>
                                     <th class="text-end">Tax</th>
@@ -321,7 +323,7 @@
                                 </tr>
                             </thead>
                             <tbody id="tpDetailsTableBody">
-                                <tr><td colspan="12" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
+                                <tr><td colspan="14" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
                             </tbody>
                             <tfoot id="tpDetailsTableFoot" class="table-light fw-bold"></tfoot>
                         </table>
@@ -334,12 +336,18 @@
                         <strong class="text-info-emphasis"><i class="bi bi-calculator me-1"></i>Third-Party Inward Summary</strong>
                         <small class="d-block text-muted">Totals calculated from individual products and their specific GST rates.</small>
                     </div>
-                    <div class="d-flex flex-wrap gap-4">
+                    <div class="d-flex flex-wrap gap-4 align-items-center">
                         <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
-                        <div><small class="text-muted d-block">Total Units</small><strong id="summaryTpUnits">0 Pcs</strong></div>
-                        <div><small class="text-muted d-block">Base Total</small><strong id="summaryTpBase">₹0.00</strong></div>
-                        <div><small class="text-muted d-block">Total Tax</small><strong id="summaryTpTax">₹0.00</strong></div>
-                        <div><small class="text-muted d-block">Total Inward Value</small><strong id="summaryTpTotal" class="text-success">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Buyed Product Counts</small><strong id="summaryTpUnits">0 Pcs</strong></div>
+                        <div><small class="text-muted d-block">Total Buyed Cost</small><strong id="summaryTpTotal" class="text-secondary">₹0.00</strong></div>
+                        <div class="border-start border-primary ps-3">
+                            <small class="text-primary fw-bold d-block"><i class="bi bi-tag-fill me-1"></i>Selling Product Counts</small>
+                            <strong id="summaryTpSellingUnits" class="text-primary fs-6">0 Pcs</strong>
+                        </div>
+                        <div>
+                            <small class="text-primary fw-bold d-block"><i class="bi bi-currency-rupee"></i>Total Selling Value</small>
+                            <strong id="summaryTpSellingTotal" class="text-primary fs-5">₹0.00</strong>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -371,13 +379,14 @@
                                 <th class="text-end" style="width: 100px;">MRP (₹)</th>
                                 <th class="text-end" style="width: 100px;">Selling (₹)</th>
                                 <th style="min-width: 120px;">GST %</th>
+                                <th style="min-width: 130px;">GST Mode</th>
                                 <th class="text-end bg-success-subtle text-success" style="width: 120px;">Line Total (₹)</th>
                                 <th class="text-center" style="width: 45px;">Action</th>
                             </tr>
                         </thead>
                         <tbody id="ownProductRowsContainer">
                             <tr id="emptyOwnProductRow">
-                                <td colspan="10" class="text-center text-muted py-4">
+                                <td colspan="11" class="text-center text-muted py-4">
                                     <i class="bi bi-building-check fs-3 d-block mb-1 text-muted"></i>
                                     Click <strong>Add Inward Item</strong> above to select products from the Master Catalog.
                                 </td>
@@ -387,7 +396,7 @@
                             <tr>
                                 <td colspan="3" class="text-end">Total Items / Units:</td>
                                 <td class="text-end" id="opTotalQty">0</td>
-                                <td colspan="4" class="text-end">Items Total incl. Tax:</td>
+                                <td colspan="5" class="text-end">Items Total incl. Tax:</td>
                                 <td class="text-end text-success" id="opTotalValue">₹0.00</td>
                                 <td></td>
                             </tr>
@@ -653,6 +662,7 @@
                     </div>
                 </div>
                 <div class="col-lg-2 col-md-3"><label class="form-label">GST</label><select class="form-select item-gst-type"><option value="SGST">SGST</option><option value="IGST">IGST</option><option value="CGST">CGST</option><option value="BOTH">Both (CGST and SGST)</option><option value="EXEMPTED" selected>Exempted</option></select></div>
+                <div class="col-lg-2 col-md-3"><label class="form-label">GST Included / Excluded</label><select class="form-select item-tax-treatment"><option value="INCLUDED" selected>GST Included</option><option value="EXCLUDED">GST Excluded</option></select></div>
                 <div class="col-lg-2 col-md-3 tax-mode-field d-none"><label class="form-label">Tax Input Type</label><select class="form-select item-tax-mode"><option value="PERCENT">Percentage (%)</option><option value="AMOUNT">Amount (₹)</option></select></div>
                 <div class="col-lg-2 col-md-3 tax-value-field d-none"><label class="form-label item-tax-label">Tax</label><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control item-tax-value numeric-text-input" value="0"></div>
                 <div class="col-lg-2 col-md-3 tax-cgst-field d-none"><label class="form-label item-cgst-label">CGST</label><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control item-cgst-value numeric-text-input" value="0"></div>
@@ -753,6 +763,13 @@
                                 <option value="CGST">CGST</option>
                                 <option value="SGST">SGST</option>
                                 <option value="EXEMPTED">Exempted</option>
+                            </select>
+                        </div>
+                        <div style="min-width: 170px;">
+                            <label class="form-label mb-1 small fw-semibold">GST Included / Excluded</label>
+                            <select class="form-select form-select-sm item-tax-treatment">
+                                <option value="INCLUDED" selected>GST Included</option>
+                                <option value="EXCLUDED">GST Excluded</option>
                             </select>
                         </div>
                         <div class="tax-mode-field" style="min-width: 130px;">
@@ -1216,16 +1233,103 @@
             });
         }
     }
-    function calculateItemTax(item, base) {
-        const type = item.querySelector('.item-gst-type').value;
-        const mode = item.querySelector('.item-tax-mode').value;
-        const value = Number(item.querySelector('.item-tax-value').value) || 0;
-        const cgstValue = Number(item.querySelector('.item-cgst-value').value) || 0;
-        const toAmount = taxValue => mode === 'AMOUNT' ? taxValue : Math.round(base * taxValue) / 100;
+    function calculateItemTax(item, grossAmount) {
+        const taxTreatment = item.querySelector('.item-tax-treatment')?.value || 'INCLUDED';
+        const type = item.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+        const mode = item.querySelector('.item-tax-mode')?.value || 'PERCENT';
+        const value = Number(item.querySelector('.item-tax-value')?.value) || 0;
+        const cgstValue = Number(item.querySelector('.item-cgst-value')?.value) || 0;
+
+        if (type === 'EXEMPTED' || grossAmount <= 0) {
+            return {
+                treatment: taxTreatment,
+                type, mode, value,
+                base: grossAmount,
+                tax: 0,
+                sgstAmount: 0,
+                cgstAmount: 0,
+                igstAmount: 0,
+                amount: 0,
+                total: grossAmount
+            };
+        }
+
+        if (taxTreatment === 'INCLUDED') {
+            if (mode === 'PERCENT') {
+                const totalRate = (type === 'BOTH') ? (value + cgstValue) : value;
+                if (totalRate > 0) {
+                    const base = Math.round((grossAmount / (1 + (totalRate / 100))) * 100) / 100;
+                    const tax = Math.round((grossAmount - base) * 100) / 100;
+                    let sgst = 0, cgst = 0, igst = 0;
+                    if (type === 'BOTH') {
+                        sgst = Math.round((tax * (value / totalRate)) * 100) / 100;
+                        cgst = Math.round((tax - sgst) * 100) / 100;
+                    } else if (type === 'IGST') {
+                        igst = tax;
+                    } else if (type === 'SGST') {
+                        sgst = tax;
+                    } else if (type === 'CGST') {
+                        cgst = tax;
+                    }
+                    return {
+                        treatment: taxTreatment,
+                        type, mode, value,
+                        base,
+                        tax,
+                        sgstAmount: sgst,
+                        cgstAmount: cgst,
+                        igstAmount: igst,
+                        amount: tax,
+                        total: grossAmount
+                    };
+                }
+            } else {
+                // Fixed amount
+                const fixedTax = (type === 'BOTH') ? (value + cgstValue) : value;
+                const tax = Math.min(grossAmount, fixedTax);
+                const base = Math.round((grossAmount - tax) * 100) / 100;
+                let sgst = 0, cgst = 0, igst = 0;
+                if (type === 'BOTH' && fixedTax > 0) {
+                    sgst = Math.round((tax * (value / fixedTax)) * 100) / 100;
+                    cgst = Math.round((tax - sgst) * 100) / 100;
+                } else if (type === 'IGST') {
+                    igst = tax;
+                } else if (type === 'SGST') {
+                    sgst = tax;
+                } else if (type === 'CGST') {
+                    cgst = tax;
+                }
+                return {
+                    treatment: taxTreatment,
+                    type, mode, value,
+                    base,
+                    tax,
+                    sgstAmount: sgst,
+                    cgstAmount: cgst,
+                    igstAmount: igst,
+                    amount: tax,
+                    total: grossAmount
+                };
+            }
+        }
+
+        // EXCLUDED mode
+        const toAmount = taxVal => mode === 'AMOUNT' ? taxVal : Math.round((grossAmount * taxVal / 100) * 100) / 100;
         const sgstAmount = ['SGST', 'BOTH'].includes(type) ? toAmount(value) : 0;
         const cgstAmount = ['CGST', 'BOTH'].includes(type) ? toAmount(type === 'BOTH' ? cgstValue : value) : 0;
         const igstAmount = type === 'IGST' ? toAmount(value) : 0;
-        return {type, mode, value, sgstAmount, cgstAmount, igstAmount, amount: sgstAmount + cgstAmount + igstAmount};
+        const tax = Math.round((sgstAmount + cgstAmount + igstAmount) * 100) / 100;
+        return {
+            treatment: taxTreatment,
+            type, mode, value,
+            base: grossAmount,
+            tax,
+            sgstAmount,
+            cgstAmount,
+            igstAmount,
+            amount: tax,
+            total: Math.round((grossAmount + tax) * 100) / 100
+        };
     }
 
     function updateTaxInputs(item) {
@@ -1282,7 +1386,7 @@
         const totalPrice = cards.reduce((sum, card) => {
             const price = Number(card.querySelector('.roll-price').value) || 0;
             const tax = calculateItemTax(card, price);
-            return sum + price + tax.amount;
+            return sum + tax.total;
         }, 0);
         const totalRq = cards.reduce((sum, card) => sum + (Number(card.querySelector('.roll-quantity').value) || 0), 0);
         const colors = new Set(cards.map(card => card.querySelector('.roll-color').value.trim().toUpperCase()).filter(Boolean));
@@ -1317,7 +1421,7 @@
                     const weight = Number(card.querySelector('.roll-weight')?.value) || 0;
                     const price = Number(card.querySelector('.roll-price')?.value) || 0;
                     const tax = calculateItemTax(card, price);
-                    const totalValue = price + tax.amount;
+                    const totalValue = tax.total;
                     const start = Number(card.dataset.startSeq) || 0;
                     const end = start + Math.max(qty, 1) - 1;
                     const codeStart = start ? sequencePrefix + String(start).padStart(2, '0') : '—';
@@ -1326,6 +1430,7 @@
                     const previewImg = card.querySelector('.roll-preview img');
                     const photoHtml = photo && previewImg && previewImg.src ? `<img src="${previewImg.src}" alt="Roll" style="width:38px;height:38px;object-fit:cover;border-radius:4px;">` : '<span class="text-muted"><i class="bi bi-camera"></i></span>';
                     const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : tax.type;
+                    const treatmentBadge = tax.treatment === 'INCLUDED' ? '<small class="text-muted d-block" style="font-size:10px;">(Incl. Tax)</small>' : '<small class="text-muted d-block" style="font-size:10px;">(Excl. Tax)</small>';
                     return `<tr>
                         <td class="text-center fw-bold">${index + 1}</td>
                         <td class="text-center">${photoHtml}</td>
@@ -1336,7 +1441,7 @@
                         <td class="text-center">${designCount}</td>
                         <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')} RQ</td>
                         <td class="text-end fw-bold" style="color:#0284c7">${weight.toFixed(2)} kg</td>
-                        <td class="text-end">${money(price)}</td>
+                        <td class="text-end">${money(price)} ${treatmentBadge}</td>
                         <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
                         <td class="text-end">${money(tax.amount)}</td>
                         <td class="text-end fw-bold text-success">${money(totalValue)}</td>
@@ -1370,28 +1475,36 @@
         const isTp = (type === 'THIRD_PARTY');
         const isOp = (type === 'OWN_PRODUCT');
 
-        if (sRoll) {
-            sRoll.classList.toggle('d-none', !isRoll);
-            sRoll.querySelectorAll('input, select, textarea').forEach(el => {
-                el.disabled = !isRoll;
+        const toggleSection = (sectionEl, isActive) => {
+            if (!sectionEl) return;
+            sectionEl.classList.toggle('d-none', !isActive);
+            sectionEl.querySelectorAll('input, select, textarea').forEach(el => {
+                el.disabled = !isActive;
+                if (!isActive) {
+                    if (el.hasAttribute('required')) {
+                        el.dataset.wasRequired = 'true';
+                        el.removeAttribute('required');
+                    }
+                } else {
+                    if (el.dataset.wasRequired === 'true') {
+                        el.setAttribute('required', '');
+                    }
+                }
             });
-            const fabDesc = document.getElementById('fabricDescription');
-            if (fabDesc) {
-                fabDesc.required = isRoll;
-                fabDesc.disabled = !isRoll;
+        };
+
+        toggleSection(sRoll, isRoll);
+        toggleSection(sTp, isTp);
+        toggleSection(sOp, isOp);
+
+        const fabDesc = document.getElementById('fabricDescription');
+        if (fabDesc) {
+            fabDesc.disabled = !isRoll;
+            if (isRoll) {
+                fabDesc.setAttribute('required', '');
+            } else {
+                fabDesc.removeAttribute('required');
             }
-        }
-        if (sTp) {
-            sTp.classList.toggle('d-none', !isTp);
-            sTp.querySelectorAll('input, select, textarea').forEach(el => {
-                el.disabled = !isTp;
-            });
-        }
-        if (sOp) {
-            sOp.classList.toggle('d-none', !isOp);
-            sOp.querySelectorAll('input, select, textarea').forEach(el => {
-                el.disabled = !isOp;
-            });
         }
 
         if (type === 'THIRD_PARTY') {
@@ -1524,12 +1637,13 @@
         let subtotal = 0;
         let totalTax = 0;
         let totalQty = 0;
+        let totalSellingValue = 0;
 
         const tableBody = document.getElementById('tpDetailsTableBody');
         const tableFoot = document.getElementById('tpDetailsTableFoot');
 
         if (!cards.length) {
-            if (tableBody) tableBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
             if (tableFoot) tableFoot.innerHTML = '';
         } else {
             let rowsHtml = '';
@@ -1566,25 +1680,29 @@
                     mrpInput?.removeAttribute('title');
                 }
 
-                const base = qty * cost;
+                const gross = qty * cost;
+                const lineSellingTotal = qty * selling;
                 const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '—';
-                const tax = calculateItemTax(card, base);
-                const lineTotal = base + tax.amount;
+                const tax = calculateItemTax(card, gross);
+                const base = tax.base;
+                const lineTotal = tax.total;
 
                 subtotal += base;
-                totalTax += tax.amount;
+                totalTax += tax.tax;
                 totalQty += qty;
+                totalSellingValue += lineSellingTotal;
 
                 const baseSpan = card.querySelector('.tp-badge-base');
                 if (baseSpan) baseSpan.textContent = money(base);
                 const taxSpan = card.querySelector('.tp-badge-tax');
-                if (taxSpan) taxSpan.textContent = money(tax.amount);
+                if (taxSpan) taxSpan.textContent = money(tax.tax);
                 const totalSpan = card.querySelector('.tp-badge-total');
                 if (totalSpan) totalSpan.textContent = money(lineTotal);
                 const lineTotalEl = card.querySelector('.tp-line-total');
                 if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
 
                 const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : (tax.type === 'EXEMPTED' ? 'Exempt' : tax.type);
+                const treatmentLabel = tax.treatment === 'INCLUDED' ? '<small class="text-muted d-block" style="font-size:10px;">(Incl.)</small>' : '<small class="text-muted d-block" style="font-size:10px;">(Excl.)</small>';
 
                 rowsHtml += `<tr>
                     <td class="text-center fw-bold">${index + 1}</td>
@@ -1593,11 +1711,13 @@
                     <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
                     <td><span class="badge bg-light text-dark border">${safe(size)}</span></td>
                     <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')}</td>
-                    <td class="text-end">${money(cost)}</td>
+                    <td class="text-end">${money(cost)} ${treatmentLabel}</td>
                     <td class="text-end">${money(base)}</td>
+                    <td class="text-end fw-bold text-primary">${money(selling)}</td>
+                    <td class="text-end fw-bold text-primary">${money(lineSellingTotal)}</td>
                     <td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td>
                     <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
-                    <td class="text-end">${money(tax.amount)}</td>
+                    <td class="text-end">${money(tax.tax)}</td>
                     <td class="text-end fw-bold text-success">${money(lineTotal)}</td>
                 </tr>`;
             });
@@ -1609,6 +1729,8 @@
                     <td class="text-end">${totalQty.toLocaleString('en-IN')}</td>
                     <td class="text-end"></td>
                     <td class="text-end">${money(subtotal)}</td>
+                    <td class="text-end"></td>
+                    <td class="text-end text-primary fw-bold">${money(totalSellingValue)}</td>
                     <td colspan="2"></td>
                     <td class="text-end">${money(totalTax)}</td>
                     <td class="text-end text-success">${money(subtotal + totalTax)}</td>
@@ -1626,6 +1748,11 @@
         if (sTax) sTax.textContent = money(totalTax);
         const sTotal = document.getElementById('summaryTpTotal');
         if (sTotal) sTotal.textContent = money(subtotal + totalTax);
+
+        const sSellingUnits = document.getElementById('summaryTpSellingUnits');
+        if (sSellingUnits) sSellingUnits.textContent = totalQty.toLocaleString('en-IN') + ' Pcs';
+        const sSellingTotal = document.getElementById('summaryTpSellingTotal');
+        if (sSellingTotal) sSellingTotal.textContent = money(totalSellingValue);
 
         document.getElementById('purchaseSubtotal').textContent = money(subtotal);
         document.getElementById('purchaseTaxes').textContent = money(totalTax);
@@ -1681,6 +1808,12 @@
                     <option value="5" selected>5% GST</option>
                     <option value="12">12% GST</option>
                     <option value="18">18% GST</option>
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm op-gst-treatment">
+                    <option value="INCLUDED" selected>GST Included</option>
+                    <option value="EXCLUDED">GST Excluded</option>
                 </select>
             </td>
             <td class="text-end fw-bold text-success op-line-total">₹0.00</td>
@@ -1798,10 +1931,22 @@
             opRows.forEach(row => {
                 const qty = Number(row.querySelector('.op-qty')?.value) || 0;
                 const cost = Number(row.querySelector('.op-cost')?.value) || 0;
-                const base = qty * cost;
+                const gross = qty * cost;
                 const gstRate = Number(row.querySelector('.op-gst')?.value) || 0;
-                const tax = Math.round(base * gstRate) / 100;
-                const lineTotal = base + tax;
+                const treatment = row.querySelector('.op-gst-treatment')?.value || 'INCLUDED';
+
+                let base = gross, tax = 0, lineTotal = gross;
+                if (gstRate > 0) {
+                    if (treatment === 'INCLUDED') {
+                        base = Math.round((gross / (1 + (gstRate / 100))) * 100) / 100;
+                        tax = Math.round((gross - base) * 100) / 100;
+                        lineTotal = gross;
+                    } else {
+                        base = gross;
+                        tax = Math.round((gross * gstRate / 100) * 100) / 100;
+                        lineTotal = Math.round((gross + tax) * 100) / 100;
+                    }
+                }
 
                 const lineTotalEl = row.querySelector('.op-line-total');
                 if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
@@ -1825,11 +1970,11 @@
         }
 
         const rollTotals = Array.from(rollsContainer.querySelectorAll('.roll-card')).reduce((totals, card) => {
-            const base = Number(card.querySelector('.roll-price').value) || 0;
-            const tax = calculateItemTax(card, base).amount;
-            totals.base += base;
-            totals.tax += tax;
-            totals.total += base + tax;
+            const price = Number(card.querySelector('.roll-price')?.value) || 0;
+            const tax = calculateItemTax(card, price);
+            totals.base += tax.base;
+            totals.tax += tax.tax;
+            totals.total += tax.total;
             return totals;
         }, {base: 0, tax: 0, total: 0});
         document.getElementById('purchaseSubtotal').textContent = money(rollTotals.base);
@@ -1860,7 +2005,7 @@
         const names = {
             '.roll-number': 'roll_number', '.roll-color': 'color', '.roll-design': 'design_name',
             '.roll-design-count': 'design_count', '.roll-quantity': 'quantity', '.roll-weight': 'weight_kg',
-            '.roll-price': 'unit_price', '.roll-hsn': 'hsn_code', '.item-gst-type': 'gst_type', '.item-tax-mode': 'tax_mode',
+            '.roll-price': 'unit_price', '.roll-hsn': 'hsn_code', '.item-gst-type': 'gst_type', '.item-tax-treatment': 'tax_treatment', '.item-tax-mode': 'tax_mode',
             '.item-tax-value': 'tax_value', '.item-cgst-value': 'cgst_tax_value'
         };
         Object.entries(names).forEach(([selector, field]) => {
@@ -2169,6 +2314,7 @@
                     mrp: mrp,
                     selling_price: selling,
                     hsn_code: hsn,
+                    tax_treatment: card.querySelector('.item-tax-treatment')?.value || 'INCLUDED',
                     gst_type: gstType,
                     tax_mode: taxMode,
                     tax_value: taxVal,
@@ -2269,6 +2415,7 @@
                     mrp: mrp,
                     selling_price: selling,
                     hsn_code: '',
+                    tax_treatment: r.querySelector('.op-gst-treatment')?.value || 'INCLUDED',
                     gst_type: gstRate > 0 ? 'BOTH' : 'EXEMPTED',
                     tax_mode: 'PERCENT',
                     tax_value: gstRate > 0 ? (gstRate / 2) : 0,

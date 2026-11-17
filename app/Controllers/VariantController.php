@@ -325,7 +325,7 @@ class VariantController {
             Response::jsonSuccess('Preview generated.', [
                 'sku'          => $sku,
                 'variant_code' => $variantCode,
-                'qr_code'      => $sku,
+                'qr_code'      => $variantCode,
                 'is_duplicate' => $isDuplicate,
             ]);
         } catch (Throwable $e) {
@@ -577,7 +577,7 @@ class VariantController {
                    COALESCE(SUM(pbi.quantity), 0) as batch_quantity
             FROM production_batches pb
             JOIN production_programs pp ON pp.id = pb.program_id
-            LEFT JOIN production_units pu ON pu.id = pb.production_unit_id
+            LEFT JOIN production_units pu ON pu.id = pp.production_unit_id
             LEFT JOIN production_batch_items pbi ON pbi.production_batch_id = pb.id
             GROUP BY pb.id, pb.batch_number, pb.status, pb.created_at, pp.program_number, pp.name, pu.name
             ORDER BY pb.id DESC

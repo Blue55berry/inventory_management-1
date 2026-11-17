@@ -226,18 +226,25 @@ $existingItems = array_map(static function (array $item): array {
         updateTotals();
     }
 
-    initialItems.forEach(item => cart.set(Number(item.qc_item_id), {
-        ...item,
-        tags: Array.isArray(item.tags) ? item.tags : [],
-        unit_price: Number(item.unit_price),
-        mrp: Number(item.mrp),
-        gst_percentage: Number(item.gst_percentage),
-        gst_type: item.gst_type || (Number(item.gst_percentage) > 0 ? 'BOTH' : 'EXEMPTED'),
-        tax_input_type: item.tax_input_type || 'PERCENT',
-        sgst_rate: Number(item.sgst_rate ?? Number(item.gst_percentage || 0) / 2),
-        cgst_rate: Number(item.cgst_rate ?? Number(item.gst_percentage || 0) / 2),
-        igst_rate: Number(item.igst_rate || 0)
-    }));
+    const getItemKey = (item) => item.variant_id ? ('var_' + item.variant_id) : ('qc_' + (item.qc_item_id || 0));
+
+    initialItems.forEach(item => {
+        const key = getItemKey(item);
+        cart.set(key, {
+            ...item,
+            variant_id: Number(item.variant_id || 0),
+            qc_item_id: Number(item.qc_item_id || 0),
+            tags: Array.isArray(item.tags) ? item.tags : [],
+            unit_price: Number(item.unit_price),
+            mrp: Number(item.mrp),
+            gst_percentage: Number(item.gst_percentage),
+            gst_type: item.gst_type || (Number(item.gst_percentage) > 0 ? 'BOTH' : 'EXEMPTED'),
+            tax_input_type: item.tax_input_type || 'PERCENT',
+            sgst_rate: Number(item.sgst_rate ?? Number(item.gst_percentage || 0) / 2),
+            cgst_rate: Number(item.cgst_rate ?? Number(item.gst_percentage || 0) / 2),
+            igst_rate: Number(item.igst_rate || 0)
+        });
+    });
 
     const assignedTags = () => new Set([...cart.values()].flatMap(item => item.tags.map(tag => tag.toUpperCase())));
 
@@ -289,7 +296,7 @@ $existingItems = array_map(static function (array $item): array {
                 badge.textContent = `${tag} ×`;
                 badge.addEventListener('click', () => {
                     item.tags = item.tags.filter(existing => existing !== tag);
-                    if (!item.tags.length) cart.delete(Number(item.qc_item_id));
+                    if (!item.tags.length) cart.delete(getItemKey(item));
                     renderCart();
                 });
                 tagsWrap.append(badge);
@@ -415,13 +422,14 @@ $existingItems = array_map(static function (array $item): array {
             updateGstControls();
             gstCell.append(gstControls);
 
+            const itemKey = getItemKey(item);
             const taxCell = row.insertCell();
             taxCell.className = 'text-end text-nowrap';
-            taxCell.dataset.taxFor = item.qc_item_id;
+            taxCell.dataset.taxFor = itemKey;
 
             const lineTotalCell = row.insertCell();
             lineTotalCell.className = 'text-end text-nowrap fw-semibold';
-            lineTotalCell.dataset.totalFor = item.qc_item_id;
+            lineTotalCell.dataset.totalFor = itemKey;
 
             const removeCell = row.insertCell();
             const removeButton = document.createElement('button');
@@ -430,12 +438,12 @@ $existingItems = array_map(static function (array $item): array {
             removeButton.innerHTML = '<i class="bi bi-trash"></i>';
             removeButton.title = 'Remove product';
             removeButton.addEventListener('click', () => {
-                cart.delete(Number(item.qc_item_id));
+                cart.delete(itemKey);
                 renderCart();
             });
             removeCell.append(removeButton);
 
-            [['qc_item_id', item.qc_item_id]].forEach(([key, value]) => {
+            [['qc_item_id', item.qc_item_id || 0], ['variant_id', item.variant_id || 0]].forEach(([key, value]) => {
                 const input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = `items[${index}][${key}]`;
@@ -496,8 +504,9 @@ $existingItems = array_map(static function (array $item): array {
             subtotal += taxable;
             taxes += lineTax;
             grandTotal += lineTotal;
-            const lineTotalCell = cartBody.querySelector(`[data-total-for="${item.qc_item_id}"]`);
-            const taxCell = cartBody.querySelector(`[data-tax-for="${item.qc_item_id}"]`);
+            const itemKey = getItemKey(item);
+            const lineTotalCell = cartBody.querySelector(`[data-total-for="${itemKey}"]`);
+            const taxCell = cartBody.querySelector(`[data-tax-for="${itemKey}"]`);
             if (lineTotalCell) lineTotalCell.textContent = money(lineTotal);
             if (taxCell) taxCell.textContent = money(lineTax);
         });
@@ -520,10 +529,11 @@ $existingItems = array_map(static function (array $item): array {
             document.getElementById('cartMessage').textContent = 'No unbilled QR piece is available for this item.';
             return;
         }
-        const key = Number(item.qc_item_id);
+        const key = getItemKey(item);
         if (!cart.has(key)) {
             cart.set(key, {
-                qc_item_id: key,
+                qc_item_id: Number(item.qc_item_id || 0),
+                variant_id: Number(item.variant_id || 0),
                 product_name: item.product_name,
                 sku: item.sku || '',
                 hsn_code: item.hsn_code || '6109',

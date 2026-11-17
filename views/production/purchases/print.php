@@ -62,6 +62,53 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
         <p><strong>Invoice / Bill No.:</strong> <?= e($purchase['invoice_number'] ?: '—') ?></p>
     </div>
 
+    <?php
+    $hasSgst = false;
+    $hasCgst = false;
+    $hasIgst = false;
+    $sgstRates = [];
+    $cgstRates = [];
+    $igstRates = [];
+
+    foreach ($items as $it) {
+        $taxType = $it['gst_type'] ?? 'EXEMPTED';
+        $sgAmt = (float)($it['sgst_amount'] ?? 0);
+        $cgAmt = (float)($it['cgst_amount'] ?? 0);
+        $igAmt = (float)($it['igst_amount'] ?? 0);
+        $isPct = (($it['tax_input_type'] ?? 'PERCENT') === 'PERCENT');
+
+        if (in_array($taxType, ['SGST', 'BOTH'], true) || $sgAmt > 0) {
+            $hasSgst = true;
+            if ($isPct && (float)($it['sgst_value'] ?? 0) > 0) {
+                $sgstRates[(string)((float)$it['sgst_value'] + 0)] = true;
+            }
+        }
+        if (in_array($taxType, ['CGST', 'BOTH'], true) || $cgAmt > 0) {
+            $hasCgst = true;
+            if ($isPct && (float)($it['cgst_value'] ?? 0) > 0) {
+                $cgstRates[(string)((float)$it['cgst_value'] + 0)] = true;
+            }
+        }
+        if ($taxType === 'IGST' || $igAmt > 0) {
+            $hasIgst = true;
+            if ($isPct && (float)($it['igst_value'] ?? 0) > 0) {
+                $igstRates[(string)((float)$it['igst_value'] + 0)] = true;
+            }
+        }
+    }
+
+    if (!empty($taxSummary)) {
+        if (isset($taxSummary['SGST'])) $hasSgst = true;
+        if (isset($taxSummary['CGST'])) $hasCgst = true;
+        if (isset($taxSummary['IGST'])) $hasIgst = true;
+    }
+
+    $sgstTitle = count($sgstRates) === 1 ? 'SGST (' . array_key_first($sgstRates) . '%)' : 'SGST';
+    $cgstTitle = count($cgstRates) === 1 ? 'CGST (' . array_key_first($cgstRates) . '%)' : 'CGST';
+    $igstTitle = count($igstRates) === 1 ? 'IGST (' . array_key_first($igstRates) . '%)' : 'IGST';
+    $hasAnyTax = $hasSgst || $hasCgst || $hasIgst;
+    ?>
+
     <table class="items">
         <thead>
             <tr>
@@ -71,43 +118,38 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                 <th>Quantity</th>
                 <th class="num">Unit Price</th>
                 <th class="num">Subtotal</th>
-                <th>GST Type</th>
-                <th class="num">Rate (%)</th>
-                <th class="num">Tax Amount</th>
+                <?php if ($hasSgst): ?>
+                    <th class="num"><?= e($sgstTitle) ?></th>
+                <?php endif; ?>
+                <?php if ($hasCgst): ?>
+                    <th class="num"><?= e($cgstTitle) ?></th>
+                <?php endif; ?>
+                <?php if ($hasIgst): ?>
+                    <th class="num"><?= e($igstTitle) ?></th>
+                <?php endif; ?>
+                <?php if (!$hasAnyTax): ?>
+                    <th class="num">Tax</th>
+                <?php endif; ?>
                 <th class="num">Total</th>
             </tr>
         </thead>
         <tbody>
         <?php foreach ($items as $index => $item): ?>
             <?php
-                $taxType = $item['gst_type'] ?? 'LEGACY';
                 $itemTax = (float)($item['sgst_amount'] ?? 0) + (float)($item['cgst_amount'] ?? 0) + (float)($item['igst_amount'] ?? 0);
                 $description = $item['item_type'] === 'FABRIC_ROLL'
                     ? trim(($item['item_name'] ?? '') . ' — ' . ($item['roll_number'] ?? '') . ' — ' . ($item['color'] ?? '') . ' / ' . ($item['design_name'] ?? ''), ' —/')
                     : ($item['item_name'] ?? '');
-                if ($taxType === 'LEGACY') $taxType = $itemTax > 0 ? 'SGST / CGST' : 'Exempted';
-                if ($taxType === 'BOTH') $taxType = 'SGST + CGST';
 
-                // Percentage Rate Calculation
                 $isPercent = (($item['tax_input_type'] ?? 'PERCENT') === 'PERCENT');
                 $sgstVal = (float)($item['sgst_value'] ?? 0);
                 $cgstVal = (float)($item['cgst_value'] ?? 0);
                 $igstVal = (float)($item['igst_value'] ?? 0);
-                $totalRate = $sgstVal + $cgstVal + $igstVal;
 
-                if ($isPercent && $totalRate > 0) {
-                    if ($igstVal > 0) {
-                        $taxRateText = ($igstVal + 0) . '%';
-                    } elseif ($sgstVal > 0 && $cgstVal > 0) {
-                        $taxRateText = ($totalRate + 0) . '% (' . ($sgstVal + 0) . '% + ' . ($cgstVal + 0) . '%)';
-                    } else {
-                        $taxRateText = ($totalRate + 0) . '%';
-                    }
-                } elseif ($itemTax > 0) {
-                    $taxRateText = 'Fixed';
-                } else {
-                    $taxRateText = '0%';
-                }
+                $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
+                $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
+                $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+                $itemBase = isset($item['base_amount']) ? (float)$item['base_amount'] : ($taxTreatment === 'INCLUDED' ? max(0, (float)$item['total_price'] - $itemTax) : $gross);
             ?>
             <tr>
                 <td><?= $index + 1 ?></td>
@@ -117,11 +159,38 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                 </td>
                 <td><small style="font-family:monospace;"><?= e($item['hsn_code'] ?: '—') ?></small></td>
                 <td><?= number_format((float)$item['quantity'], 3) ?> <?= e($item['unit']) ?><?= !empty($item['weight_kg']) ? ' · ' . number_format((float)$item['weight_kg'], 2) . ' kg' : '' ?></td>
-                <td class="num"><?= e($currency) ?><?= number_format((float)$item['unit_price'], 2) ?></td>
-                <td class="num"><?= e($currency) ?><?= number_format((float)$item['base_amount'], 2) ?></td>
-                <td><?= e($taxLabels[$taxType] ?? $taxType) ?></td>
-                <td class="num font-monospace"><?= e($taxRateText) ?></td>
-                <td class="num"><?= e($currency) ?><?= number_format($itemTax, 2) ?></td>
+                <td class="num">
+                    <?= e($currency) ?><?= number_format((float)$item['unit_price'], 2) ?>
+                    <small style="color:#6b7280; display:block; font-size:10px;"><?= $taxTreatment === 'EXCLUDED' ? 'GST Excl.' : 'GST Incl.' ?></small>
+                </td>
+                <td class="num"><?= e($currency) ?><?= number_format($itemBase, 2) ?></td>
+                <?php if ($hasSgst): ?>
+                    <td class="num">
+                        <?= e($currency) ?><?= number_format((float)($item['sgst_amount'] ?? 0), 2) ?>
+                        <?php if (count($sgstRates) > 1 && $isPercent && $sgstVal > 0): ?>
+                            <small style="color:#6b7280; font-family:monospace; display:block; font-size:10px;">(<?= ($sgstVal + 0) ?>%)</small>
+                        <?php endif; ?>
+                    </td>
+                <?php endif; ?>
+                <?php if ($hasCgst): ?>
+                    <td class="num">
+                        <?= e($currency) ?><?= number_format((float)($item['cgst_amount'] ?? 0), 2) ?>
+                        <?php if (count($cgstRates) > 1 && $isPercent && $cgstVal > 0): ?>
+                            <small style="color:#6b7280; font-family:monospace; display:block; font-size:10px;">(<?= ($cgstVal + 0) ?>%)</small>
+                        <?php endif; ?>
+                    </td>
+                <?php endif; ?>
+                <?php if ($hasIgst): ?>
+                    <td class="num">
+                        <?= e($currency) ?><?= number_format((float)($item['igst_amount'] ?? 0), 2) ?>
+                        <?php if (count($igstRates) > 1 && $isPercent && $igstVal > 0): ?>
+                            <small style="color:#6b7280; font-family:monospace; display:block; font-size:10px;">(<?= ($igstVal + 0) ?>%)</small>
+                        <?php endif; ?>
+                    </td>
+                <?php endif; ?>
+                <?php if (!$hasAnyTax): ?>
+                    <td class="num" style="color:#6b7280;">—</td>
+                <?php endif; ?>
                 <td class="num"><?= e($currency) ?><?= number_format((float)$item['total_price'], 2) ?></td>
             </tr>
         <?php endforeach; ?>
@@ -147,8 +216,8 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                 <tr><td><?= e($type) ?></td><td class="num"><?= e($currency) ?><?= number_format((float)$amount, 2) ?></td></tr>
             <?php endif; endforeach; ?>
         <?php endif; ?>
-        <tr><td>Total Taxes</td><td class="num"><?= e($currency) ?><?= number_format((float)$totalTax, 2) ?></td></tr>
-        <tr class="grand-total"><td>Overall Total</td><td class="num"><?= e($currency) ?><?= number_format((float)$overallTotal, 2) ?></td></tr>
+        <tr><td>Total Taxes</td><td class="num"><?= e($currency) ?><?= number_format((float)($totalTax ?? 0), 2) ?></td></tr>
+        <tr class="grand-total"><td>Overall Total</td><td class="num"><?= e($currency) ?><?= number_format((float)($overallTotal ?? $purchase['total_amount'] ?? 0), 2) ?></td></tr>
     </table>
     <?php if (!empty($purchase['notes'])): ?><div class="notes"><strong>Notes:</strong> <?= e($purchase['notes']) ?></div><?php endif; ?>
     <div class="footer"><?= e($company['invoice_footer'] ?? '') ?></div>

@@ -1,13 +1,11 @@
-<div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
-    <div>
-        <h2 class="mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Edit <?= e($purchase['purchase_number']) ?></h2>
-    </div>
-</div>
-
 <?php
+$purchaseType = $purchase['purchase_type'] ?? 'FABRIC_ROLL';
 $fabricItems = array_values(array_filter($items, static fn(array $item): bool => $item['item_type'] === 'FABRIC_ROLL'));
+$thirdPartyItems = array_values(array_filter($items, static fn(array $item): bool => $item['item_type'] === 'THIRD_PARTY'));
+$ownProductItems = array_values(array_filter($items, static fn(array $item): bool => $item['item_type'] === 'OWN_PRODUCT'));
 $fabricDescription = $fabricItems[0]['item_name'] ?? '';
 $knownUnits = ['PCS', 'KG', 'METRE', 'LITRE', 'BOX', 'PACK', 'PAIR', 'SET', 'BUNDLE'];
+
 $taxTypeForItem = static function (array $item): string {
     $type = $item['gst_type'] ?? '';
     if (in_array($type, ['SGST', 'CGST', 'IGST', 'BOTH', 'EXEMPTED'], true)) return $type;
@@ -17,6 +15,7 @@ $taxTypeForItem = static function (array $item): string {
     if ((float)($item['cgst_amount'] ?? 0) > 0) return 'CGST';
     return 'EXEMPTED';
 };
+
 $taxValueForItem = static function (array $item, string $type): float {
     if ($type === 'IGST') return (float)($item['igst_value'] ?? 0);
     if ($type === 'CGST') return (float)($item['cgst_value'] ?? 0);
@@ -24,8 +23,32 @@ $taxValueForItem = static function (array $item, string $type): float {
 };
 ?>
 
+<div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h2 class="mb-0"><i class="bi bi-pencil-square me-2 text-primary"></i>Edit <?= e($purchase['purchase_number']) ?></h2>
+            <?php if ($purchaseType === 'THIRD_PARTY'): ?>
+                <span class="badge bg-info-subtle text-info border fs-6"><i class="bi bi-box-seam me-1"></i>Third-Party Products</span>
+            <?php elseif ($purchaseType === 'OWN_PRODUCT'): ?>
+                <span class="badge bg-success-subtle text-success border fs-6"><i class="bi bi-building-check me-1"></i>Own Production</span>
+            <?php else: ?>
+                <span class="badge bg-primary-subtle text-primary border fs-6"><i class="bi bi-layers-half me-1"></i>Fabric Roll</span>
+            <?php endif; ?>
+        </div>
+        <div class="text-muted small">Update invoice lines, pricing, HSN codes, and vendor GST details.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
+        <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark btn-sm"><i class="bi bi-qr-code text-warning me-1"></i>Thermal QR Labels</a>
+        <a href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="bi bi-printer me-1"></i>Print Invoice</a>
+    </div>
+</div>
+
 <form method="POST" action="<?= url('production/purchases/update/' . $purchase['id']) ?>" enctype="multipart/form-data" id="editProductionPurchaseForm">
     <?= CSRF::field() ?>
+    <input type="hidden" name="purchase_type" id="purchaseTypeInput" value="<?= e($purchaseType) ?>">
+
+    <!-- 1. PURCHASE & SUPPLIER DETAILS -->
     <div class="card shadow-sm border mb-4">
         <div class="card-header bg-white py-3"><h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Purchase &amp; Supplier Details</h5></div>
         <div class="card-body">
@@ -86,7 +109,221 @@ $taxValueForItem = static function (array $item, string $type): float {
         </div>
     </div>
 
-    <div class="card shadow-sm border mb-4">
+    <!-- 2. THIRD-PARTY PRODUCTS SECTION -->
+    <?php if ($purchaseType === 'THIRD_PARTY'): ?>
+    <div class="card shadow-sm border mb-4" id="sectionThirdParty">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-info"></i>Third-Party Finished Products Inward</h5>
+                <small class="text-muted">Enter items received from external brands/vendors with individual item GST and pricing.</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-info text-white fw-semibold" id="btnAddThirdPartyItem">
+                <i class="bi bi-plus-circle me-1"></i> Add Third-Party Product
+            </button>
+        </div>
+        <div class="card-body">
+            <!-- Individual Cards Header -->
+            <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge"><?= count($thirdPartyItems) ?></span>)</h6>
+                <span class="text-muted small">Configure individual products with separate GST rates and vendor pricing.</span>
+            </div>
+
+            <!-- Pre-rendered Third-Party Cards -->
+            <div id="thirdPartyContainer" class="d-flex flex-column gap-3 mb-4">
+                <?php foreach ($thirdPartyItems as $tpIdx => $item): ?>
+                    <?php
+                        $tpId = (int)$item['id'];
+                        $gstType = $item['gst_type'] ?? 'EXEMPTED';
+                        $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
+                        $taxMode = $item['tax_input_type'] ?? 'PERCENT';
+                        $sgstVal = (float)($item['sgst_value'] ?? 0);
+                        $cgstVal = (float)($item['cgst_value'] ?? 0);
+                        $igstVal = (float)($item['igst_value'] ?? 0);
+                        $taxVal = ($gstType === 'IGST') ? $igstVal : ($gstType === 'CGST' ? $cgstVal : $sgstVal);
+                        $autoSku = $item['vendor_sku'] ?: ($item['product_code'] ?: ('TP-PROD' . sprintf('%02d', $tpIdx + 1)));
+                    ?>
+                    <div class="tp-card card border shadow-sm mb-3 tp-row" data-index="<?= $tpIdx ?>" data-item-id="<?= $tpId ?>">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <strong><i class="bi bi-box-seam text-info me-1"></i><span class="tp-title">PRODUCT #<?= $tpIdx + 1 ?></span></strong>
+                                <span class="badge bg-secondary-subtle text-secondary border tp-name-badge <?= empty($item['item_name']) ? 'd-none' : '' ?>"><?= e(strtoupper($item['item_name'])) ?></span>
+                                <span class="badge bg-primary-subtle text-primary border font-monospace tp-sku-badge fw-bold">
+                                    <i class="bi bi-upc-scan me-1"></i>SKU: <span class="tp-sku-text"><?= e($autoSku) ?></span>
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 tp-card-calc" style="font-size: 12px;">
+                                    Base: <span class="tp-badge-base">₹0.00</span> | Tax: <span class="tp-badge-tax">₹0.00</span> | Total: <strong class="tp-badge-total">₹0.00</strong>
+                                </span>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-tp"><i class="bi bi-trash me-1"></i>Delete</button>
+                            </div>
+                        </div>
+                        <div class="card-body p-3">
+                            <input type="hidden" class="tp-id" name="items[<?= $tpId ?>][id]" value="<?= $tpId ?>">
+                            <input type="hidden" class="tp-sku" name="items[<?= $tpId ?>][vendor_sku]" value="<?= e($autoSku) ?>">
+                            <input type="hidden" class="tp-item-type" name="items[<?= $tpId ?>][item_type]" value="THIRD_PARTY">
+                            <div class="row g-3">
+                                <div class="col-lg-3 col-md-6">
+                                    <label class="form-label required">Product / Item Name *</label>
+                                    <input class="form-control tp-name text-uppercase" name="items[<?= $tpId ?>][item_name]" maxlength="255" value="<?= e($item['item_name']) ?>" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">Color / Shade</label>
+                                    <input class="form-control tp-color text-uppercase" name="items[<?= $tpId ?>][color]" maxlength="100" value="<?= e($item['color']) ?>" placeholder="E.G. NAVY BLUE" list="colorDataList">
+                                </div>
+                                <div class="col-lg-1 col-md-3">
+                                    <label class="form-label">Size</label>
+                                    <input class="form-control tp-size text-uppercase" name="items[<?= $tpId ?>][size]" maxlength="30" value="<?= e($item['size']) ?>" placeholder="E.G. M / 38" list="sizeDataList">
+                                </div>
+                                <div class="col-lg-1 col-md-3">
+                                    <label class="form-label required">Qty (Pcs) *</label>
+                                    <input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" name="items[<?= $tpId ?>][quantity]" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="<?= (float)$item['quantity'] ?>" required>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label required">Buyed (₹) *</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text p-1">₹</span>
+                                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $tpId ?>][unit_price]" class="form-control tp-cost numeric-text-input fw-semibold text-end" value="<?= number_format((float)$item['unit_price'], 2, '.', '') ?>" required>
+                                    </div>
+                                </div>
+                                <div class="col-lg-1 col-md-3">
+                                    <label class="form-label">MRP (₹)</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text p-1">₹</span>
+                                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $tpId ?>][mrp]" class="form-control tp-mrp numeric-text-input text-end" value="<?= number_format((float)$item['mrp'], 2, '.', '') ?>" placeholder="0.00">
+                                    </div>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label required">Selling (₹) *</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text p-1">₹</span>
+                                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $tpId ?>][selling_price]" class="form-control tp-selling numeric-text-input fw-bold text-end text-success" value="<?= number_format((float)$item['selling_price'], 2, '.', '') ?>" placeholder="0.00" required>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-2 col-md-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label mb-0 required">HSN Code *</label>
+                                        <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none" onclick="openQuickAddHsnModal(this)">
+                                            <i class="bi bi-plus-circle"></i> Add HSN
+                                        </button>
+                                    </div>
+                                    <div class="position-relative hsn-dropdown-wrapper">
+                                        <input type="hidden" name="items[<?= $tpId ?>][hsn_code]" class="tp-hsn" value="<?= e($item['hsn_code']) ?>">
+                                        <button type="button" class="form-select text-start d-flex justify-content-between align-items-center hsn-dropdown-btn">
+                                            <span class="hsn-btn-text font-monospace"><?= !empty($item['hsn_code']) ? e($item['hsn_code']) : '-- Select HSN --' ?></span>
+                                        </button>
+                                        <div class="hsn-dropdown border rounded bg-white shadow-lg p-2 d-none position-absolute" style="z-index: 1060; width: 100%; min-width: 250px;">
+                                            <input type="text" class="form-control form-control-sm mb-2 hsn-search-input" placeholder="Search HSN code...">
+                                            <div class="hsn-list overflow-auto" style="max-height: 180px;">
+                                                <div class="p-1 hsn-opt-item rounded cursor-pointer small" data-hsn="" data-gst="0">-- None --</div>
+                                                <?php foreach ($hsnCodes as $h): ?>
+                                                    <div class="p-1 hsn-opt-item rounded cursor-pointer small <?= ($item['hsn_code'] === $h['hsn_code']) ? 'active bg-primary text-white' : '' ?>" data-hsn="<?= e($h['hsn_code']) ?>" data-gst="<?= (float)$h['gst_rate'] ?>">
+                                                        <strong class="font-monospace"><?= e($h['hsn_code']) ?></strong> - <?= (float)$h['gst_rate'] ?>% GST <span class="text-muted d-block" style="font-size:10px"><?= e($h['description'] ?? '') ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">GST Type</label>
+                                    <select name="items[<?= $tpId ?>][gst_type]" class="form-select item-gst-type">
+                                        <option value="EXEMPTED" <?= $gstType === 'EXEMPTED' ? 'selected' : '' ?>>Exempted (0%)</option>
+                                        <option value="BOTH" <?= $gstType === 'BOTH' ? 'selected' : '' ?>>Both (CGST and SGST)</option>
+                                        <option value="SGST" <?= $gstType === 'SGST' ? 'selected' : '' ?>>SGST Only</option>
+                                        <option value="CGST" <?= $gstType === 'CGST' ? 'selected' : '' ?>>CGST Only</option>
+                                        <option value="IGST" <?= $gstType === 'IGST' ? 'selected' : '' ?>>IGST (Inter-state)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">Tax Input Type</label>
+                                    <select name="items[<?= $tpId ?>][tax_mode]" class="form-select item-tax-mode">
+                                        <option value="PERCENT" <?= $taxMode === 'PERCENT' ? 'selected' : '' ?>>Percentage (%)</option>
+                                        <option value="AMOUNT" <?= $taxMode === 'AMOUNT' ? 'selected' : '' ?>>Fixed Amount (₹)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">Tax Treatment</label>
+                                    <select name="items[<?= $tpId ?>][tax_treatment]" class="form-select tp-tax-treatment">
+                                        <option value="INCLUDED" <?= $taxTreatment === 'INCLUDED' ? 'selected' : '' ?>>Included in Price</option>
+                                        <option value="EXCLUDED" <?= $taxTreatment === 'EXCLUDED' ? 'selected' : '' ?>>Excluded (+ GST)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3 tax-rate-col <?= $gstType === 'EXEMPTED' ? 'd-none' : '' ?>">
+                                    <label class="form-label"><span class="tax-rate-label"><?= $gstType === 'IGST' ? 'IGST Rate' : 'SGST Rate' ?></span></label>
+                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $tpId ?>][tax_value]" class="form-control item-tax-value numeric-text-input" value="<?= $taxVal ?>">
+                                </div>
+                                <div class="col-lg-2 col-md-3 cgst-rate-col <?= $gstType === 'BOTH' ? '' : 'd-none' ?>">
+                                    <label class="form-label">CGST Rate</label>
+                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $tpId ?>][cgst_tax_value]" class="form-control item-cgst-value numeric-text-input" value="<?= $cgstVal ?>">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Live Details Table -->
+            <div class="card border shadow-sm mb-4" id="tpDetailsTableContainer">
+                <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
+                    <span class="fw-bold small"><i class="bi bi-table me-1 text-info"></i>Third-Party Products Inward &amp; Details Table</span>
+                    <span class="badge bg-secondary-subtle text-secondary border" id="tpTableCountBadge"><?= count($thirdPartyItems) ?> Products</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="text-center" style="width: 35px;">#</th>
+                                <th>Product / Item Name</th>
+                                <th>Auto SKU</th>
+                                <th>Color</th>
+                                <th>Size</th>
+                                <th class="text-end">Qty (Pcs)</th>
+                                <th class="text-end">Buyed Price (₹)</th>
+                                <th class="text-end">Base Value</th>
+                                <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Price (₹)</th>
+                                <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Value</th>
+                                <th>HSN</th>
+                                <th>GST Type</th>
+                                <th class="text-end">Tax</th>
+                                <th class="text-end bg-success-subtle text-success">Total Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tpDetailsTableBody"></tbody>
+                        <tfoot id="tpDetailsTableFoot" class="table-light fw-bold"></tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Batch Metrics Summary -->
+            <div class="p-3 bg-info-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div>
+                    <strong class="text-info-emphasis"><i class="bi bi-calculator me-1"></i>Third-Party Inward Summary</strong>
+                    <small class="d-block text-muted">Totals calculated from individual products and their specific GST rates.</small>
+                </div>
+                <div class="d-flex flex-wrap gap-4 align-items-center">
+                    <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
+                    <div><small class="text-muted d-block">Buyed Product Counts</small><strong id="summaryTpUnits">0 Pcs</strong></div>
+                    <div><small class="text-muted d-block">Total Buyed Cost</small><strong id="summaryTpTotal" class="text-secondary">₹0.00</strong></div>
+                    <div class="border-start border-primary ps-3">
+                        <small class="text-primary fw-bold d-block"><i class="bi bi-tag-fill me-1"></i>Selling Product Counts</small>
+                        <strong id="summaryTpSellingUnits" class="text-primary fs-6">0 Pcs</strong>
+                    </div>
+                    <div>
+                        <small class="text-primary fw-bold d-block"><i class="bi bi-currency-rupee"></i>Total Selling Value</small>
+                        <strong id="summaryTpSellingTotal" class="text-primary fs-5">₹0.00</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- 3. FABRIC ROLL SECTION -->
+    <?php if ($purchaseType === 'FABRIC_ROLL'): ?>
+    <div class="card shadow-sm border mb-4" id="sectionFabricRoll">
         <div class="card-header bg-white py-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-layers-half me-2 text-primary"></i>Fabric Roll &amp; Material Supply Details</h5>
             <small class="text-muted">Sticker ranges for existing rolls stay unchanged.</small>
@@ -148,31 +385,61 @@ $taxValueForItem = static function (array $item, string $type): float {
                                 <div class="col-lg-2 col-md-3">
                                     <div class="d-flex justify-content-between align-items-center mb-1">
                                         <label class="form-label mb-0">HSN Code</label>
-                                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
-                                            <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
+                                        <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none" onclick="openQuickAddHsnModal(this)">
+                                            <i class="bi bi-plus-circle"></i> Add HSN
                                         </button>
                                     </div>
-                                    <div class="dropdown hsn-dropdown w-100 position-relative">
+                                    <div class="position-relative hsn-dropdown-wrapper">
                                         <input type="hidden" name="items[<?= $key ?>][hsn_code]" class="roll-hsn" value="<?= e($item['hsn_code'] ?? '') ?>">
-                                        <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 38px;">
-                                            <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
+                                        <button type="button" class="form-select text-start d-flex justify-content-between align-items-center hsn-dropdown-btn">
+                                            <span class="hsn-btn-text font-monospace"><?= !empty($item['hsn_code']) ? e($item['hsn_code']) : '-- Select HSN --' ?></span>
                                         </button>
-                                        <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
-                                            <div class="input-group input-group-sm mb-2">
-                                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
-                                                <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
+                                        <div class="hsn-dropdown border rounded bg-white shadow-lg p-2 d-none position-absolute" style="z-index: 1060; width: 100%; min-width: 250px;">
+                                            <input type="text" class="form-control form-control-sm mb-2 hsn-search-input" placeholder="Search HSN code...">
+                                            <div class="hsn-list overflow-auto" style="max-height: 180px;">
+                                                <div class="p-1 hsn-opt-item rounded cursor-pointer small" data-hsn="" data-gst="0">-- None --</div>
+                                                <?php foreach ($hsnCodes as $h): ?>
+                                                    <div class="p-1 hsn-opt-item rounded cursor-pointer small <?= (($item['hsn_code'] ?? '') === $h['hsn_code']) ? 'active bg-primary text-white' : '' ?>" data-hsn="<?= e($h['hsn_code']) ?>" data-gst="<?= (float)$h['gst_rate'] ?>">
+                                                        <strong class="font-monospace"><?= e($h['hsn_code']) ?></strong> - <?= (float)$h['gst_rate'] ?>% GST <span class="text-muted d-block" style="font-size:10px"><?= e($h['description'] ?? '') ?></span>
+                                                    </div>
+                                                <?php endforeach; ?>
                                             </div>
-                                            <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="col-lg-2 col-md-3"><label class="form-label">GST</label><select name="items[<?= $key ?>][gst_type]" class="form-select item-gst-type">
-                                    <?php foreach (['SGST'=>'SGST','IGST'=>'IGST','CGST'=>'CGST','BOTH'=>'Both (CGST and SGST)','EXEMPTED'=>'Exempted'] as $type => $label): ?><option value="<?= e($type) ?>" <?= $gstType === $type ? 'selected' : '' ?>><?= e($label) ?></option><?php endforeach; ?>
-                                </select></div>
-                                <div class="col-lg-3 col-md-4 tax-mode-field <?= ($item['tax_input_type'] ?? 'PERCENT') === '' || $gstType === 'EXEMPTED' ? 'd-none' : '' ?>"><label class="form-label">Tax Input Type</label><select name="items[<?= $key ?>][tax_mode]" class="form-select item-tax-mode"><option value="PERCENT" <?= ($item['tax_input_type'] ?? '') !== 'AMOUNT' ? 'selected' : '' ?>>Percentage (%)</option><option value="AMOUNT" <?= ($item['tax_input_type'] ?? '') === 'AMOUNT' ? 'selected' : '' ?>>Amount (₹)</option></select></div>
-                                <div class="col-lg-3 col-md-4 tax-value-field <?= $gstType === 'EXEMPTED' ? 'd-none' : '' ?>"><label class="form-label item-tax-label"><?= $gstType === 'BOTH' ? 'SGST' : e($gstType) ?></label><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" name="items[<?= $key ?>][tax_value]" class="form-control item-tax-value numeric-text-input" value="<?= e($taxValue) ?>"></div>
-                                <div class="col-lg-3 col-md-4 tax-cgst-field <?= $gstType !== 'BOTH' ? 'd-none' : '' ?>"><label class="form-label item-cgst-label">CGST</label><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" name="items[<?= $key ?>][cgst_tax_value]" class="form-control item-cgst-value numeric-text-input" value="<?= e($cgstValue) ?>"></div>
-                                <div class="col-md-6">
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">Tax Treatment</label>
+                                    <select name="items[<?= $key ?>][tax_treatment]" class="form-select item-tax-treatment">
+                                        <option value="INCLUDED" <?= ($item['tax_treatment'] ?? 'INCLUDED') === 'INCLUDED' ? 'selected' : '' ?>>Included in Price</option>
+                                        <option value="EXCLUDED" <?= ($item['tax_treatment'] ?? '') === 'EXCLUDED' ? 'selected' : '' ?>>Excluded (+ GST)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3">
+                                    <label class="form-label">GST</label>
+                                    <select name="items[<?= $key ?>][gst_type]" class="form-select item-gst-type">
+                                        <option value="EXEMPTED" <?= $gstType === 'EXEMPTED' ? 'selected' : '' ?>>Exempted</option>
+                                        <option value="BOTH" <?= $gstType === 'BOTH' ? 'selected' : '' ?>>Both (CGST and SGST)</option>
+                                        <option value="SGST" <?= $gstType === 'SGST' ? 'selected' : '' ?>>SGST</option>
+                                        <option value="CGST" <?= $gstType === 'CGST' ? 'selected' : '' ?>>CGST</option>
+                                        <option value="IGST" <?= $gstType === 'IGST' ? 'selected' : '' ?>>IGST</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3 tax-mode-field">
+                                    <label class="form-label">Tax Input Type</label>
+                                    <select name="items[<?= $key ?>][tax_mode]" class="form-select item-tax-mode">
+                                        <option value="PERCENT" <?= ($item['tax_input_type'] ?? 'PERCENT') === 'PERCENT' ? 'selected' : '' ?>>Percentage (%)</option>
+                                        <option value="AMOUNT" <?= ($item['tax_input_type'] ?? '') === 'AMOUNT' ? 'selected' : '' ?>>Amount (₹)</option>
+                                    </select>
+                                </div>
+                                <div class="col-lg-2 col-md-3 tax-value-field">
+                                    <label class="form-label item-tax-label">Tax</label>
+                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $key ?>][tax_value]" class="form-control item-tax-value numeric-text-input" value="<?= $taxValue ?>">
+                                </div>
+                                <div class="col-lg-2 col-md-3 tax-cgst-field <?= $gstType === 'BOTH' ? '' : 'd-none' ?>">
+                                    <label class="form-label item-cgst-label">CGST</label>
+                                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" name="items[<?= $key ?>][cgst_tax_value]" class="form-control item-cgst-value numeric-text-input" value="<?= $cgstValue ?>">
+                                </div>
+                                <div class="col-lg-3 col-md-6">
                                     <label class="form-label">Roll Sample Photo <small class="text-muted">(Optional — JPG, PNG, WEBP)</small></label>
                                     <input type="file" name="roll_photo_<?= $key ?>" class="form-control roll-photo" accept=".jpg,.jpeg,.png,.webp">
                                     <?php if (!empty($item['photo_url'])): ?><small class="d-block mt-1"><a href="<?= uploadUrl($item['photo_url']) ?>" target="_blank" rel="noopener">View current roll photo</a></small><?php endif; ?>
@@ -208,29 +475,169 @@ $taxValueForItem = static function (array $item, string $type): float {
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
-    <div class="card border shadow-sm mb-4"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-2"><span>Subtotal</span><strong id="purchaseSubtotal">₹0.00</strong></div>
-        <div class="d-flex justify-content-between align-items-center mb-2"><span>Taxes</span><strong id="purchaseTaxes">₹0.00</strong></div>
-        <hr class="my-2">
-        <div class="d-flex justify-content-between align-items-center"><strong>Total Price</strong><strong class="fs-5 text-success" id="purchaseTotal">₹0.00</strong></div>
-    </div></div>
+    <!-- 4. TOTAL SUMMARY & ACTIONS -->
+    <div class="card border shadow-sm mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2"><span>Subtotal</span><strong id="purchaseSubtotal">₹0.00</strong></div>
+            <div class="d-flex justify-content-between align-items-center mb-2"><span>Taxes</span><strong id="purchaseTaxes">₹0.00</strong></div>
+            <hr class="my-2">
+            <div class="d-flex justify-content-between align-items-center"><strong>Total Price</strong><strong class="fs-5 text-success" id="purchaseTotal">₹0.00</strong></div>
+        </div>
+    </div>
     <div class="d-flex justify-content-end gap-2 mb-4">
         <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary">Cancel</a>
         <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase Changes</button>
     </div>
 </form>
 
+<!-- THIRD-PARTY PRODUCT TEMPLATE (For adding new products in edit mode) -->
+<template id="thirdPartyTemplate">
+    <div class="tp-card card border shadow-sm mb-3 tp-row" data-index="" data-item-id="0">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <strong><i class="bi bi-box-seam text-info me-1"></i><span class="tp-title">PRODUCT #1</span></strong>
+                <span class="badge bg-secondary-subtle text-secondary border tp-name-badge d-none"></span>
+                <span class="badge bg-primary-subtle text-primary border font-monospace tp-sku-badge fw-bold">
+                    <i class="bi bi-upc-scan me-1"></i>SKU: <span class="tp-sku-text">AUTO-GENERATING</span>
+                </span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 tp-card-calc" style="font-size: 12px;">
+                    Base: <span class="tp-badge-base">₹0.00</span> | Tax: <span class="tp-badge-tax">₹0.00</span> | Total: <strong class="tp-badge-total">₹0.00</strong>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-tp"><i class="bi bi-trash me-1"></i>Delete</button>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <input type="hidden" class="tp-id" value="0">
+            <input type="hidden" class="tp-sku">
+            <input type="hidden" class="tp-item-type" value="THIRD_PARTY">
+            <div class="row g-3">
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label required">Product / Item Name *</label>
+                    <input class="form-control tp-name text-uppercase" maxlength="255" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Color / Shade</label>
+                    <input class="form-control tp-color text-uppercase" maxlength="100" placeholder="E.G. NAVY BLUE" list="colorDataList">
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label">Size</label>
+                    <input class="form-control tp-size text-uppercase" maxlength="30" placeholder="E.G. M / 38" list="sizeDataList">
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label required">Qty (Pcs) *</label>
+                    <input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Buyed (₹) *</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-cost numeric-text-input fw-semibold text-end" value="0.00" required>
+                    </div>
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label">MRP (₹)</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-mrp numeric-text-input text-end" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Selling (₹) *</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-selling numeric-text-input fw-bold text-end text-success" placeholder="0.00" required>
+                    </div>
+                </div>
+
+                <div class="col-lg-2 col-md-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0 required">HSN Code *</label>
+                        <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none" onclick="openQuickAddHsnModal(this)">
+                            <i class="bi bi-plus-circle"></i> Add HSN
+                        </button>
+                    </div>
+                    <div class="position-relative hsn-dropdown-wrapper">
+                        <input type="hidden" class="tp-hsn">
+                        <button type="button" class="form-select text-start d-flex justify-content-between align-items-center hsn-dropdown-btn">
+                            <span class="hsn-btn-text font-monospace">-- Select HSN --</span>
+                        </button>
+                        <div class="hsn-dropdown border rounded bg-white shadow-lg p-2 d-none position-absolute" style="z-index: 1060; width: 100%; min-width: 250px;">
+                            <input type="text" class="form-control form-control-sm mb-2 hsn-search-input" placeholder="Search HSN code...">
+                            <div class="hsn-list overflow-auto" style="max-height: 180px;">
+                                <div class="p-1 hsn-opt-item rounded cursor-pointer small" data-hsn="" data-gst="0">-- None --</div>
+                                <?php foreach ($hsnCodes as $h): ?>
+                                    <div class="p-1 hsn-opt-item rounded cursor-pointer small" data-hsn="<?= e($h['hsn_code']) ?>" data-gst="<?= (float)$h['gst_rate'] ?>">
+                                        <strong class="font-monospace"><?= e($h['hsn_code']) ?></strong> - <?= (float)$h['gst_rate'] ?>% GST <span class="text-muted d-block" style="font-size:10px"><?= e($h['description'] ?? '') ?></span>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">GST Type</label>
+                    <select class="form-select item-gst-type">
+                        <option value="EXEMPTED">Exempted (0%)</option>
+                        <option value="BOTH" selected>Both (CGST and SGST)</option>
+                        <option value="SGST">SGST Only</option>
+                        <option value="CGST">CGST Only</option>
+                        <option value="IGST">IGST (Inter-state)</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Tax Input Type</label>
+                    <select class="form-select item-tax-mode">
+                        <option value="PERCENT" selected>Percentage (%)</option>
+                        <option value="AMOUNT">Fixed Amount (₹)</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Tax Treatment</label>
+                    <select class="form-select tp-tax-treatment">
+                        <option value="INCLUDED" selected>Included in Price</option>
+                        <option value="EXCLUDED">Excluded (+ GST)</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-3 tax-rate-col">
+                    <label class="form-label"><span class="tax-rate-label">SGST Rate (%)</span></label>
+                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control item-tax-value numeric-text-input" value="2.50">
+                </div>
+                <div class="col-lg-2 col-md-3 cgst-rate-col">
+                    <label class="form-label">CGST Rate (%)</label>
+                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control item-cgst-value numeric-text-input" value="2.50">
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Datalists for autocompletion -->
+<datalist id="colorDataList">
+    <option value="BLACK"><option value="WHITE"><option value="NAVY BLUE"><option value="RED"><option value="ROYAL BLUE">
+    <option value="MAROON"><option value="BOTTLE GREEN"><option value="GREY MELANGE"><option value="CHARCOAL"><option value="YELLOW">
+    <option value="SKY BLUE"><option value="ORANGE"><option value="BEIGE"><option value="OLIVE GREEN"><option value="LAVENDER">
+</datalist>
+<datalist id="sizeDataList">
+    <option value="XS"><option value="S"><option value="M"><option value="L"><option value="XL"><option value="2XL"><option value="3XL"><option value="FREE">
+</datalist>
+
+<!-- Labels Preview Modal -->
 <div class="modal fade" id="editPurchaseLabelsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header bg-dark text-white"><h5 class="modal-title"><i class="bi bi-qr-code me-2 text-warning"></i>Fabric Roll Labels Preview</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-header bg-dark text-white"><h5 class="modal-title"><i class="bi bi-qr-code me-2 text-warning"></i>Labels Preview</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
             <div class="modal-body bg-light"><div id="editPurchaseLabelCards" class="d-flex flex-wrap justify-content-center gap-3"></div></div>
             <div class="modal-footer"><span class="small text-muted me-auto" id="editPurchaseLabelCount"></span><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
         </div>
     </div>
 </div>
 
+<!-- Modal Quick Add HSN -->
 <div class="modal fade" id="modalQuickAddHsn" tabindex="-1" aria-labelledby="modalQuickAddHsnLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
@@ -269,6 +676,7 @@ $taxValueForItem = static function (array $item, string $type): float {
         </div>
     </div>
 </div>
+
 <style>
 .roll-label-card {
     width: 275px;
@@ -398,405 +806,90 @@ $taxValueForItem = static function (array $item, string $type): float {
 <script>
 (() => {
     const form = document.getElementById('editProductionPurchaseForm');
-    const rollsContainer = document.getElementById('rollsContainer');
+    const currentPurchaseType = <?= json_encode($purchaseType) ?>;
     window.hsnCodesList = <?= json_encode($hsnCodes ?? []) ?>;
     const money = value => '₹' + (Number(value) || 0).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     const safe = value => String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-    const numericTextPattern = /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/;
     let activeHsnTarget = null;
 
-    function sanitizeNumericInput(input) {
-        if (!input || !input.matches('.numeric-text-input')) return;
-        const isIntegerOnly = input.matches('.roll-design-count, .roll-quantity') || input.dataset.step === '1' || input.getAttribute('step') === '1' || input.getAttribute('inputmode') === 'numeric';
-        const raw = input.value;
-        let clean = '';
-        if (isIntegerOnly) {
-            clean = raw.replace(/\D/g, '');
-        } else {
-            clean = raw.replace(/[^0-9.]/g, '');
-            const parts = clean.split('.');
-            if (parts.length > 2) {
-                clean = parts[0] + '.' + parts.slice(1).join('');
-            }
-        }
-        if (raw !== clean) {
-            let start = null;
-            try { start = input.selectionStart; } catch (_) {}
-            input.value = clean;
-            if (start !== null) {
-                try {
-                    const newPos = Math.min(start - (raw.length - clean.length), clean.length);
-                    input.setSelectionRange(Math.max(0, newPos), Math.max(0, newPos));
-                } catch (_) {}
-            }
-        }
-    }
+    // --- SHARED HSN DROPDOWN LOGIC ---
+    function initHsnDropdown(container, inputSelector) {
+        const wrapper = container.querySelector('.hsn-dropdown-wrapper');
+        if (!wrapper) return;
+        const btn = wrapper.querySelector('.hsn-dropdown-btn');
+        const dropdown = wrapper.querySelector('.hsn-dropdown');
+        const searchInput = wrapper.querySelector('.hsn-search-input');
+        const listContainer = wrapper.querySelector('.hsn-list');
+        const hiddenInput = container.querySelector(inputSelector);
+        const btnText = wrapper.querySelector('.hsn-btn-text');
 
-    function handleNumericKeyDown(event) {
-        const input = event.target;
-        if (!input || !input.matches('.numeric-text-input, input[type="number"]')) return;
+        function renderOptions(query = '') {
+            listContainer.innerHTML = '';
+            const emptyOpt = document.createElement('div');
+            emptyOpt.className = 'p-1 hsn-opt-item rounded cursor-pointer small';
+            emptyOpt.dataset.hsn = '';
+            emptyOpt.dataset.gst = '0';
+            emptyOpt.textContent = '-- None --';
+            listContainer.appendChild(emptyOpt);
 
-        if (
-            event.ctrlKey || event.metaKey || event.altKey ||
-            ['Backspace', 'Delete', 'Tab', 'Enter', 'Escape', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)
-        ) {
-            return;
-        }
+            const q = query.toLowerCase().trim();
+            const filtered = (window.hsnCodesList || []).filter(h => {
+                if (!q) return true;
+                const hCode = String(h.hsn_code || '').toLowerCase();
+                const desc = String(h.description || '').toLowerCase();
+                return hCode.includes(q) || desc.includes(q);
+            });
 
-        // Strictly block exponential notation 'e', 'E' and sign keys '+', '-'
-        if (['e', 'E', '+', '-'].includes(event.key)) {
-            event.preventDefault();
-            return;
-        }
-
-        const isIntegerOnly = input.matches('.roll-design-count, .roll-quantity') || input.dataset.step === '1' || input.getAttribute('step') === '1' || input.getAttribute('inputmode') === 'numeric';
-
-        if (isIntegerOnly) {
-            if (!/^[0-9]$/.test(event.key)) {
-                event.preventDefault();
-            }
-        } else {
-            if (event.key === '.') {
-                if (input.value && input.value.includes('.')) {
-                    let selectedText = '';
-                    try {
-                        const selStart = input.selectionStart;
-                        const selEnd = input.selectionEnd;
-                        selectedText = (selStart !== null && selEnd !== null) ? input.value.substring(selStart, selEnd) : '';
-                    } catch (_) {}
-                    if (!selectedText.includes('.')) {
-                        event.preventDefault();
-                    }
-                }
-            } else if (!/^[0-9]$/.test(event.key)) {
-                event.preventDefault();
-            }
-        }
-    }
-
-    function handleNumericBeforeInput(event) {
-        const input = event.target;
-        if (!input || !input.matches('.numeric-text-input, input[type="number"]')) return;
-        if (!event.data) return;
-
-        if (['e', 'E', '+', '-'].some(ch => event.data.includes(ch))) {
-            event.preventDefault();
-            return;
-        }
-
-        const isIntegerOnly = input.matches('.roll-design-count, .roll-quantity') || input.dataset.step === '1' || input.getAttribute('step') === '1' || input.getAttribute('inputmode') === 'numeric';
-
-        if (isIntegerOnly) {
-            if (/[^0-9]/.test(event.data)) {
-                event.preventDefault();
-            }
-        } else {
-            if (/[^0-9.]/.test(event.data)) {
-                event.preventDefault();
-            } else if (event.data.includes('.') && input.value && input.value.includes('.')) {
-                let selectedText = '';
-                try {
-                    const selStart = input.selectionStart;
-                    const selEnd = input.selectionEnd;
-                    selectedText = (selStart !== null && selEnd !== null) ? input.value.substring(selStart, selEnd) : '';
-                } catch (_) {}
-                if (!selectedText.includes('.')) {
-                    event.preventDefault();
-                }
-            }
-        }
-    }
-
-    function handleNumericPaste(event) {
-        const input = event.target;
-        if (!input || !input.matches('.numeric-text-input')) return;
-        setTimeout(() => {
-            sanitizeNumericInput(input);
-            validateNumericTextInput(input);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-        }, 0);
-    }
-
-    document.addEventListener('keydown', handleNumericKeyDown);
-    document.addEventListener('beforeinput', handleNumericBeforeInput);
-    document.addEventListener('paste', handleNumericPaste);
-
-    function validateNumericTextInput(input) {
-        const value = input.value.trim();
-        let message = '';
-        if (value === '') {
-            message = input.required ? 'Enter a value.' : '';
-        } else if (!numericTextPattern.test(value) || !Number.isFinite(Number(value))) {
-            message = 'Enter a valid number.';
-        } else {
-            const number = Number(value);
-            const minAttribute = input.dataset.min;
-            const maxAttribute = input.dataset.max;
-            const stepAttribute = input.dataset.step;
-            if (minAttribute !== undefined && number < Number(minAttribute)) {
-                message = `Value must be at least ${minAttribute}.`;
-            } else if (maxAttribute !== undefined && number > Number(maxAttribute)) {
-                message = `Value must be no more than ${maxAttribute}.`;
-            } else if (stepAttribute && stepAttribute !== 'any') {
-                const step = Number(stepAttribute);
-                const base = minAttribute !== undefined ? Number(minAttribute) : 0;
-                const stepCount = (number - base) / step;
-                if (step > 0 && Math.abs(stepCount - Math.round(stepCount)) > 1e-8) {
-                    message = `Value must use increments of ${stepAttribute}.`;
-                }
-            }
-        }
-        input.setCustomValidity(message);
-        return message === '';
-    }
-
-    form.addEventListener('input', event => {
-        if (event.target.matches('.numeric-text-input')) {
-            sanitizeNumericInput(event.target);
-            validateNumericTextInput(event.target);
-        }
-    });
-    form.addEventListener('submit', event => {
-        const invalidInput = Array.from(form.querySelectorAll('.numeric-text-input'))
-            .find(input => !validateNumericTextInput(input));
-        if (invalidInput) {
-            event.preventDefault();
-            invalidInput.reportValidity();
-        }
-    }, true);
-
-    function openQuickAddHsnModal(dropdownEl, hiddenInput, presetCode = '') {
-        activeHsnTarget = {
-            dropdownEl,
-            hiddenInput,
-            btn: dropdownEl.querySelector('.hsn-dropdown-btn'),
-            btnText: dropdownEl.querySelector('.hsn-btn-text')
-        };
-        const codeInp = document.getElementById('quickHsnCodeInput');
-        const descInp = document.getElementById('quickHsnDescInput');
-        const gstInp = document.getElementById('quickHsnGstInput');
-        const alertBox = document.getElementById('quickHsnAlert');
-        if (codeInp) codeInp.value = presetCode || '';
-        if (descInp) descInp.value = '';
-        if (gstInp) gstInp.value = '5.00';
-        if (alertBox) alertBox.classList.add('d-none');
-        const modalEl = document.getElementById('modalQuickAddHsn');
-        if (modalEl) {
-            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.show();
-            setTimeout(() => {
-                if (presetCode && descInp) descInp.focus();
-                else if (codeInp) codeInp.focus();
-            }, 300);
-        }
-    }
-
-    function initQuickAddHsnModalHandler() {
-        const btnSave = document.getElementById('btnSaveQuickHsn');
-        if (!btnSave) return;
-        btnSave.addEventListener('click', () => {
-            const code = (document.getElementById('quickHsnCodeInput')?.value || '').trim().toUpperCase();
-            const desc = (document.getElementById('quickHsnDescInput')?.value || '').trim();
-            const gstInput = document.getElementById('quickHsnGstInput');
-            if (gstInput && !validateNumericTextInput(gstInput)) {
-                gstInput.reportValidity();
-                return;
-            }
-            const gst = Number(gstInput?.value) || 0;
-            const alertBox = document.getElementById('quickHsnAlert');
-
-            if (!code || code.length < 2) {
-                if (alertBox) { alertBox.textContent = 'Please enter a valid HSN code (at least 2 characters).'; alertBox.classList.remove('d-none'); }
-                return;
-            }
-            if (!desc) {
-                if (alertBox) { alertBox.textContent = 'Please enter a commodity / item description.'; alertBox.classList.remove('d-none'); }
+            if (filtered.length === 0) {
+                const noRes = document.createElement('div');
+                noRes.className = 'p-2 text-muted small text-center';
+                noRes.textContent = 'No matching HSN codes found';
+                listContainer.appendChild(noRes);
                 return;
             }
 
-            btnSave.disabled = true;
-            btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
-
-            const fd = new FormData();
-            fd.append('hsn_code', code);
-            fd.append('description', desc);
-            fd.append('gst_rate', gst.toFixed(2));
-            const csrf = document.querySelector('input[name="csrf_token"]');
-            if (csrf) fd.append('csrf_token', csrf.value);
-
-            fetch('<?= url("api/hsn-codes/store") ?>', {
-                method: 'POST',
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                body: fd
-            })
-            .then(r => r.json())
-            .then(res => {
-                btnSave.disabled = false;
-                btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Save &amp; Select HSN';
-
-                if (res.success && res.data) {
-                    const newHsn = res.data;
-                    const existingIdx = (window.hsnCodesList || []).findIndex(h => String(h.hsn_code).toUpperCase() === String(newHsn.hsn_code).toUpperCase());
-                    if (existingIdx >= 0) {
-                        window.hsnCodesList[existingIdx] = newHsn;
-                    } else {
-                        if (!window.hsnCodesList) window.hsnCodesList = [];
-                        window.hsnCodesList.push(newHsn);
-                    }
-
-                    if (activeHsnTarget && activeHsnTarget.hiddenInput) {
-                        activeHsnTarget.hiddenInput.value = newHsn.hsn_code;
-                        if (activeHsnTarget.btnText) {
-                            activeHsnTarget.btnText.innerHTML = `<span class="fw-bold text-primary">${safe(newHsn.hsn_code)}</span> <span class="text-muted small">(${safe(newHsn.description).slice(0, 16)}${newHsn.description.length > 16 ? '...' : ''})</span>`;
-                        }
-                        const bsDropdown = bootstrap.Dropdown.getInstance(activeHsnTarget.btn);
-                        if (bsDropdown) bsDropdown.hide();
-                        activeHsnTarget.hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        activeHsnTarget.hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-
-                    const modalEl = document.getElementById('modalQuickAddHsn');
-                    if (modalEl) {
-                        const modal = bootstrap.Modal.getInstance(modalEl);
-                        if (modal) modal.hide();
-                    }
-                } else {
-                    if (alertBox) {
-                        alertBox.textContent = res.message || 'Failed to save HSN Code.';
-                        alertBox.classList.remove('d-none');
-                    }
+            filtered.forEach(h => {
+                const item = document.createElement('div');
+                item.className = 'p-1 hsn-opt-item rounded cursor-pointer small';
+                if (hiddenInput && hiddenInput.value && String(hiddenInput.value).toUpperCase() === String(h.hsn_code).toUpperCase()) {
+                    item.classList.add('active', 'bg-primary', 'text-white');
                 }
-            })
-            .catch(err => {
-                btnSave.disabled = false;
-                btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Save &amp; Select HSN';
-                if (alertBox) {
-                    alertBox.textContent = 'Server error occurred while saving HSN Code.';
-                    alertBox.classList.remove('d-none');
-                }
-            });
-        });
-    }
-    initQuickAddHsnModalHandler();
-
-    function initHsnDropdown(container, hiddenSelector) {
-        const dropdownEl = container.querySelector('.hsn-dropdown');
-        if (!dropdownEl) return;
-        const hiddenInput = dropdownEl.querySelector(hiddenSelector);
-        const btn = dropdownEl.querySelector('.hsn-dropdown-btn');
-        const btnText = dropdownEl.querySelector('.hsn-btn-text');
-        const searchInput = dropdownEl.querySelector('.hsn-search-input');
-        const listContainer = dropdownEl.querySelector('.hsn-options-list');
-
-        const triggerBtn = container.querySelector('.btn-add-hsn-trigger');
-        if (triggerBtn) {
-            triggerBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openQuickAddHsnModal(dropdownEl, hiddenInput);
+                item.dataset.hsn = h.hsn_code;
+                item.dataset.gst = h.gst_rate || '0';
+                item.innerHTML = `<strong class="font-monospace">${safe(h.hsn_code)}</strong> - ${safe(h.gst_rate)}% GST <span class="text-muted d-block" style="font-size:10px">${safe(h.description || '')}</span>`;
+                listContainer.appendChild(item);
             });
         }
 
-        function updateBtnDisplay(code, desc) {
-            if (code) {
-                btnText.innerHTML = `<span class="fw-bold text-primary">${safe(code)}</span> ${desc ? `<span class="text-muted small">(${safe(desc).slice(0, 16)}${desc.length > 16 ? '...' : ''})</span>` : ''}`;
-            } else {
-                btnText.textContent = '-- Select HSN --';
-            }
-        }
-
-        if (hiddenInput && hiddenInput.value) {
-            const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hiddenInput.value.toUpperCase());
-            updateBtnDisplay(hiddenInput.value, found ? found.description : '');
-        }
-
-        function renderOptions(filter = '') {
-            const q = filter.trim().toLowerCase();
-            let html = `
-                <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item text-muted" data-code="" data-desc="">
-                    <em>-- Clear / No HSN --</em>
-                </button>
-            `;
-            let matchCount = 0;
-            const currentVal = (hiddenInput ? hiddenInput.value : '').trim();
-
-            (window.hsnCodesList || []).forEach(h => {
-                const code = String(h.hsn_code || '').trim();
-                const desc = String(h.description || '').trim();
-                const gst = h.gst_rate ? Number(h.gst_rate) : null;
-                const searchStr = (code + ' ' + desc).toLowerCase();
-                if (q === '' || searchStr.includes(q)) {
-                    matchCount++;
-                    const isSelected = currentVal && currentVal.toUpperCase() === code.toUpperCase();
-                    html += `
-                        <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item ${isSelected ? 'active' : ''}" 
-                                data-code="${safe(code)}" data-desc="${safe(desc)}" data-gst="${gst || 0}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="font-monospace fw-bold text-primary">${safe(code)}</span>
-                                ${gst !== null ? `<span class="badge bg-light text-secondary border fs-8">${gst}% GST</span>` : ''}
-                            </div>
-                            <div class="text-truncate small text-muted" style="max-width: 250px;">${safe(desc)}</div>
-                        </button>
-                    `;
-                }
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.hsn-dropdown').forEach(d => {
+                if (d !== dropdown) d.classList.add('d-none');
             });
-
-            if (q !== '' && !matchCount) {
-                html += `
-                    <div class="text-muted p-2 text-center small">No matching standard HSN found.</div>
-                    <button type="button" class="dropdown-item py-1.5 px-2 small text-primary fw-semibold hsn-quick-add-btn border-top" data-preset="${safe(q.toUpperCase())}">
-                        <i class="bi bi-plus-circle me-1"></i>+ Add "${safe(q.toUpperCase())}" to Database
-                    </button>
-                `;
-            }
-
-            html += `
-                <div class="border-top pt-1 mt-1 text-center bg-light rounded-bottom">
-                    <button type="button" class="dropdown-item py-1.5 px-2 small text-primary fw-semibold text-center hsn-quick-add-btn" data-preset="${safe(q.toUpperCase())}">
-                        <i class="bi bi-plus-circle me-1"></i>+ Add New HSN Code
-                    </button>
-                </div>
-            `;
-
-            listContainer.innerHTML = html;
-
-            listContainer.querySelectorAll('.hsn-quick-add-btn').forEach(btnEl => {
-                btnEl.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const bsDropdown = bootstrap.Dropdown.getInstance(btn);
-                    if (bsDropdown) bsDropdown.hide();
-                    openQuickAddHsnModal(dropdownEl, hiddenInput, btnEl.dataset.preset || '');
-                });
-            });
-
-            listContainer.querySelectorAll('.hsn-opt-item').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const code = item.dataset.code || '';
-                    const desc = item.dataset.desc || '';
-                    if (hiddenInput) {
-                        hiddenInput.value = code;
-                    }
-                    updateBtnDisplay(code, desc);
-                    const bsDropdown = bootstrap.Dropdown.getInstance(btn);
-                    if (bsDropdown) bsDropdown.hide();
-                    if (hiddenInput) {
-                        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                });
-            });
-        }
-
-        renderOptions();
-
-        dropdownEl.addEventListener('shown.bs.dropdown', () => {
-            if (searchInput) {
+            dropdown.classList.toggle('d-none');
+            if (!dropdown.classList.contains('d-none') && searchInput) {
                 searchInput.value = '';
                 renderOptions('');
                 searchInput.focus();
+            }
+        });
+
+        listContainer.addEventListener('click', (e) => {
+            const item = e.target.closest('.hsn-opt-item');
+            if (!item) return;
+            const hsn = item.dataset.hsn || '';
+            const gst = parseFloat(item.dataset.gst) || 0;
+            hiddenInput.value = hsn;
+            btnText.textContent = hsn ? hsn : '-- Select HSN --';
+            btn.classList.remove('is-invalid');
+            dropdown.classList.add('d-none');
+
+            // Dispatch change event to update rates if available
+            hiddenInput.dispatchEvent(new Event('change'));
+            if (currentPurchaseType === 'THIRD_PARTY') {
+                updateThirdPartySummary();
+            } else if (currentPurchaseType === 'FABRIC_ROLL') {
+                updateSummary();
             }
         });
 
@@ -814,16 +907,507 @@ $taxValueForItem = static function (array $item, string $type): float {
         }
     }
 
-    function calculateTax(row, base) {
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.hsn-dropdown-wrapper')) {
+            document.querySelectorAll('.hsn-dropdown').forEach(d => d.classList.add('d-none'));
+        }
+    });
+
+    // --- QUICK ADD HSN MODAL ---
+    window.openQuickAddHsnModal = function(btn) {
+        activeHsnTarget = btn ? btn.closest('.tp-card, .roll-card') : null;
+        document.getElementById('quickHsnCodeInput').value = '';
+        document.getElementById('quickHsnDescInput').value = '';
+        document.getElementById('quickHsnGstInput').value = '5.00';
+        document.getElementById('quickHsnAlert').classList.add('d-none');
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('modalQuickAddHsn')).show();
+    };
+
+    const btnSaveQuickHsn = document.getElementById('btnSaveQuickHsn');
+    if (btnSaveQuickHsn) {
+        btnSaveQuickHsn.addEventListener('click', function() {
+            const hsnCode = document.getElementById('quickHsnCodeInput').value.trim().toUpperCase();
+            const desc = document.getElementById('quickHsnDescInput').value.trim();
+            const gstRate = parseFloat(document.getElementById('quickHsnGstInput').value) || 0;
+            const alertBox = document.getElementById('quickHsnAlert');
+
+            if (!hsnCode) {
+                alertBox.textContent = 'Please enter a valid HSN Code.';
+                alertBox.classList.remove('d-none');
+                return;
+            }
+
+            btnSaveQuickHsn.disabled = true;
+            btnSaveQuickHsn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+            fetch('<?= url("production/hsn/store-ajax") ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '<?= CSRF::token() ?>'
+                },
+                body: JSON.stringify({ hsn_code: hsnCode, description: desc, gst_rate: gstRate })
+            })
+            .then(r => r.json())
+            .then(data => {
+                btnSaveQuickHsn.disabled = false;
+                btnSaveQuickHsn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Save & Select HSN';
+                if (data.success) {
+                    if (!window.hsnCodesList) window.hsnCodesList = [];
+                    window.hsnCodesList.unshift({ hsn_code: hsnCode, description: desc, gst_rate: gstRate });
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('modalQuickAddHsn')).hide();
+
+                    if (activeHsnTarget) {
+                        const hsnInput = activeHsnTarget.querySelector('.tp-hsn, .roll-hsn');
+                        const hsnBtnText = activeHsnTarget.querySelector('.hsn-btn-text');
+                        if (hsnInput) hsnInput.value = hsnCode;
+                        if (hsnBtnText) hsnBtnText.textContent = hsnCode;
+                        if (hsnInput) hsnInput.dispatchEvent(new Event('change'));
+                    }
+                    if (currentPurchaseType === 'THIRD_PARTY') updateThirdPartySummary();
+                    else if (currentPurchaseType === 'FABRIC_ROLL') updateSummary();
+                } else {
+                    alertBox.textContent = data.message || 'Failed to save HSN Code.';
+                    alertBox.classList.remove('d-none');
+                }
+            })
+            .catch(() => {
+                btnSaveQuickHsn.disabled = false;
+                btnSaveQuickHsn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Save & Select HSN';
+                alertBox.textContent = 'Server communication error while saving HSN.';
+                alertBox.classList.remove('d-none');
+            });
+        });
+    }
+
+    // =========================================================================
+    // THIRD-PARTY PRODUCTS INWARD LOGIC
+    // =========================================================================
+    function updateTaxInputs(card) {
+        const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+        const rateCol = card.querySelector('.tax-rate-col');
+        const cgstCol = card.querySelector('.cgst-rate-col');
+        const rateLabel = card.querySelector('.tax-rate-label');
+
+        if (rateCol) rateCol.classList.toggle('d-none', gstType === 'EXEMPTED');
+        if (cgstCol) cgstCol.classList.toggle('d-none', gstType !== 'BOTH');
+
+        if (rateLabel) {
+            if (gstType === 'IGST') rateLabel.textContent = 'IGST Rate (%)';
+            else if (gstType === 'CGST') rateLabel.textContent = 'CGST Rate (%)';
+            else rateLabel.textContent = 'SGST Rate (%)';
+        }
+    }
+
+    function generateThirdPartySku(card, index) {
+        const name = (card.querySelector('.tp-name')?.value || '').trim();
+        const color = (card.querySelector('.tp-color')?.value || '').trim();
+        const size = (card.querySelector('.tp-size')?.value || '').trim();
+        const seq = String(index + 1).padStart(2, '0');
+
+        let prefix = 'TP';
+        let nameCode = '';
+        if (name) {
+            const cleanName = name.replace(/[^A-Za-z0-9\s]/g, '').trim();
+            const words = cleanName.split(/\s+/).filter(Boolean);
+            if (words.length > 1) {
+                nameCode = words.map(w => w.substring(0, 3).toUpperCase()).join('');
+            } else if (words.length === 1) {
+                nameCode = words[0].substring(0, 6).toUpperCase();
+            }
+        }
+        if (!nameCode) {
+            nameCode = 'PROD' + seq;
+        }
+
+        const parts = [prefix, nameCode];
+        if (color) {
+            const colClean = color.replace(/[^A-Za-z0-9]/g, '').substring(0, 4).toUpperCase();
+            if (colClean) parts.push(colClean);
+        }
+        if (size) {
+            const szClean = size.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+            if (szClean) parts.push(szClean);
+        }
+        parts.push(seq);
+        return parts.join('-');
+    }
+
+    function initExistingThirdPartyCards() {
+        const container = document.getElementById('thirdPartyContainer');
+        if (!container) return;
+        const cards = container.querySelectorAll('.tp-card');
+
+        cards.forEach((card, idx) => {
+            initHsnDropdown(card, '.tp-hsn');
+
+            const delBtn = card.querySelector('.remove-tp');
+            if (delBtn) {
+                delBtn.addEventListener('click', () => {
+                    card.remove();
+                    Array.from(container.children).forEach((item, i) => {
+                        item.querySelector('.tp-title').textContent = 'PRODUCT #' + (i + 1);
+                    });
+                    updateThirdPartySummary();
+                });
+            }
+
+            const nameInput = card.querySelector('.tp-name');
+            if (nameInput) {
+                nameInput.addEventListener('input', (e) => {
+                    const badge = card.querySelector('.tp-name-badge');
+                    if (badge) {
+                        const val = e.target.value.trim().toUpperCase();
+                        badge.textContent = val;
+                        badge.classList.toggle('d-none', !val);
+                    }
+                });
+            }
+
+            card.querySelectorAll('input, select').forEach(input => {
+                input.addEventListener('input', updateThirdPartySummary);
+                input.addEventListener('change', () => {
+                    updateTaxInputs(card);
+                    updateThirdPartySummary();
+                });
+                input.addEventListener('keyup', updateThirdPartySummary);
+            });
+
+            const hsnHidden = card.querySelector('.tp-hsn');
+            if (hsnHidden) {
+                hsnHidden.addEventListener('change', () => {
+                    const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
+                    if (found && found.gst_rate) {
+                        const rate = parseFloat(found.gst_rate);
+                        const gstTypeSelect = card.querySelector('.item-gst-type');
+                        if (gstTypeSelect && rate > 0) {
+                            gstTypeSelect.value = 'BOTH';
+                            updateTaxInputs(card);
+                            const half = (rate / 2).toFixed(2);
+                            const taxVal = card.querySelector('.item-tax-value');
+                            const cgstVal = card.querySelector('.item-cgst-value');
+                            if (taxVal) taxVal.value = half;
+                            if (cgstVal) cgstVal.value = half;
+                            updateThirdPartySummary();
+                        }
+                    }
+                });
+            }
+
+            updateTaxInputs(card);
+        });
+    }
+
+    let tpItemIndex = <?= count($thirdPartyItems) ?>;
+    function addThirdPartyItem() {
+        const container = document.getElementById('thirdPartyContainer');
+        const template = document.getElementById('thirdPartyTemplate');
+        if (!container || !template) return;
+
+        const index = tpItemIndex++;
+        const card = template.content.firstElementChild.cloneNode(true);
+        card.dataset.index = index;
+        card.dataset.itemId = 0;
+        const title = 'PRODUCT #' + (container.children.length + 1);
+        card.querySelector('.tp-title').textContent = title;
+
+        initHsnDropdown(card, '.tp-hsn');
+
+        card.querySelector('.remove-tp').addEventListener('click', () => {
+            card.remove();
+            Array.from(container.children).forEach((item, i) => {
+                item.querySelector('.tp-title').textContent = 'PRODUCT #' + (i + 1);
+            });
+            updateThirdPartySummary();
+        });
+
+        const nameInput = card.querySelector('.tp-name');
+        nameInput.addEventListener('input', (e) => {
+            const badge = card.querySelector('.tp-name-badge');
+            if (badge) {
+                const val = e.target.value.trim().toUpperCase();
+                badge.textContent = val;
+                badge.classList.toggle('d-none', !val);
+            }
+        });
+
+        card.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateThirdPartySummary);
+            input.addEventListener('change', () => {
+                updateTaxInputs(card);
+                updateThirdPartySummary();
+            });
+            input.addEventListener('keyup', updateThirdPartySummary);
+        });
+
+        const hsnHidden = card.querySelector('.tp-hsn');
+        if (hsnHidden) {
+            hsnHidden.addEventListener('change', () => {
+                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
+                if (found && found.gst_rate) {
+                    const rate = parseFloat(found.gst_rate);
+                    const gstTypeSelect = card.querySelector('.item-gst-type');
+                    if (gstTypeSelect && rate > 0) {
+                        gstTypeSelect.value = 'BOTH';
+                        updateTaxInputs(card);
+                        const half = (rate / 2).toFixed(2);
+                        const taxVal = card.querySelector('.item-tax-value');
+                        const cgstVal = card.querySelector('.item-cgst-value');
+                        if (taxVal) taxVal.value = half;
+                        if (cgstVal) cgstVal.value = half;
+                        updateThirdPartySummary();
+                    }
+                }
+            });
+        }
+
+        updateTaxInputs(card);
+        container.appendChild(card);
+        updateThirdPartySummary();
+    }
+
+    function updateThirdPartySummary() {
+        const container = document.getElementById('thirdPartyContainer');
+        if (!container) return;
+        const cards = Array.from(container.querySelectorAll('.tp-card'));
+        const countBadge = document.getElementById('tpCountBadge');
+        if (countBadge) countBadge.textContent = cards.length;
+        const tblCountBadge = document.getElementById('tpTableCountBadge');
+        if (tblCountBadge) tblCountBadge.textContent = cards.length + (cards.length === 1 ? ' Product' : ' Products');
+
+        let subtotal = 0;
+        let totalTax = 0;
+        let totalQty = 0;
+
+        const tableBody = document.getElementById('tpDetailsTableBody');
+        const tableFoot = document.getElementById('tpDetailsTableFoot');
+
+        if (!cards.length) {
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
+            if (tableFoot) tableFoot.innerHTML = '';
+        } else {
+            let rowsHtml = '';
+            cards.forEach((card, index) => {
+                const autoSku = generateThirdPartySku(card, index);
+                const skuInput = card.querySelector('.tp-sku');
+                if (skuInput && (!skuInput.value || skuInput.value === 'AUTO-GENERATING')) skuInput.value = autoSku;
+                const finalSku = skuInput?.value || autoSku;
+                const skuText = card.querySelector('.tp-sku-text');
+                if (skuText) skuText.textContent = finalSku;
+
+                const name = card.querySelector('.tp-name')?.value?.trim() || ('PRODUCT #' + (index + 1));
+                const color = card.querySelector('.tp-color')?.value?.trim() || '—';
+                const size = card.querySelector('.tp-size')?.value?.trim() || '—';
+                const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
+                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
+                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
+                const sellingInput = card.querySelector('.tp-selling');
+                const mrpInput = card.querySelector('.tp-mrp');
+
+                if (cost > 0 && selling > 0 && selling < cost) {
+                    sellingInput?.classList.add('is-invalid', 'border-danger');
+                    sellingInput?.setAttribute('title', 'Selling price cannot be less than Buyed price (₹' + cost.toFixed(2) + ')');
+                } else {
+                    sellingInput?.classList.remove('is-invalid', 'border-danger');
+                    sellingInput?.removeAttribute('title');
+                }
+
+                if (mrp > 0 && selling > 0 && mrp < selling) {
+                    mrpInput?.classList.add('is-invalid', 'border-danger');
+                    mrpInput?.setAttribute('title', 'MRP cannot be less than Selling price (₹' + selling.toFixed(2) + ')');
+                } else {
+                    mrpInput?.classList.remove('is-invalid', 'border-danger');
+                    mrpInput?.removeAttribute('title');
+                }
+
+                const gross = qty * cost;
+                const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+                const taxMode = card.querySelector('.item-tax-mode')?.value || 'PERCENT';
+                const taxTreatment = card.querySelector('.tp-tax-treatment')?.value || 'INCLUDED';
+                const taxVal = Number(card.querySelector('.item-tax-value')?.value) || 0;
+                const cgstVal = Number(card.querySelector('.item-cgst-value')?.value) || 0;
+
+                let base = gross;
+                let lineTax = 0;
+                let lineTotal = gross;
+
+                if (gstType !== 'EXEMPTED' && gross > 0) {
+                    if (taxTreatment === 'INCLUDED') {
+                        if (taxMode === 'PERCENT') {
+                            const totalRate = (gstType === 'BOTH') ? (taxVal + cgstVal) : taxVal;
+                            if (totalRate > 0) {
+                                base = Math.round((gross / (1 + (totalRate / 100))) * 100) / 100;
+                                lineTax = Math.round((gross - base) * 100) / 100;
+                                lineTotal = gross;
+                            }
+                        } else {
+                            const fixedTax = (gstType === 'BOTH') ? (taxVal + cgstVal) : taxVal;
+                            lineTax = Math.min(gross, fixedTax);
+                            base = Math.round((gross - lineTax) * 100) / 100;
+                            lineTotal = gross;
+                        }
+                    } else {
+                        // EXCLUDED
+                        base = gross;
+                        if (taxMode === 'PERCENT') {
+                            const totalRate = (gstType === 'BOTH') ? (taxVal + cgstVal) : taxVal;
+                            lineTax = Math.round(((base * totalRate) / 100) * 100) / 100;
+                        } else {
+                            lineTax = (gstType === 'BOTH') ? (taxVal + cgstVal) : taxVal;
+                        }
+                        lineTotal = Math.round((base + lineTax) * 100) / 100;
+                    }
+                }
+
+                subtotal += base;
+                totalTax += lineTax;
+                totalQty += qty;
+                const lineSellingTotal = qty * selling;
+                totalSellingValue = (typeof totalSellingValue === 'undefined' ? 0 : totalSellingValue) + lineSellingTotal;
+
+                // Update card header calculation pill
+                const bBase = card.querySelector('.tp-badge-base');
+                const bTax = card.querySelector('.tp-badge-tax');
+                const bTotal = card.querySelector('.tp-badge-total');
+                if (bBase) bBase.textContent = money(base);
+                if (bTax) bTax.textContent = money(lineTax);
+                if (bTotal) bTotal.textContent = money(lineTotal);
+
+                const hsn = card.querySelector('.tp-hsn')?.value || '—';
+                const gstLabel = gstType === 'BOTH' ? 'SGST + CGST' : gstType;
+                const treatmentBadge = taxTreatment === 'INCLUDED' 
+                    ? '<small class="text-muted d-block" style="font-size:10px;">(Incl. Tax)</small>' 
+                    : '<small class="text-muted d-block" style="font-size:10px;">(Excl. Tax)</small>';
+
+                rowsHtml += `
+                    <tr>
+                        <td class="text-center fw-bold text-muted">${index + 1}</td>
+                        <td class="fw-bold text-dark">${safe(name)}</td>
+                        <td class="font-monospace"><span class="badge bg-light text-dark border">${safe(finalSku)}</span></td>
+                        <td>${safe(color)}</td>
+                        <td>${safe(size)}</td>
+                        <td class="text-end fw-bold">${qty}</td>
+                        <td class="text-end">${money(cost)} ${treatmentBadge}</td>
+                        <td class="text-end">${money(base)}</td>
+                        <td class="text-end fw-bold text-primary">${money(selling)}</td>
+                        <td class="text-end fw-bold text-primary">${money(lineSellingTotal)}</td>
+                        <td class="font-monospace text-muted">${safe(hsn)}</td>
+                        <td><span class="badge bg-secondary-subtle text-secondary border">${safe(gstLabel)}</span></td>
+                        <td class="text-end">${money(lineTax)}</td>
+                        <td class="text-end fw-bold text-success">${money(lineTotal)}</td>
+                    </tr>
+                `;
+            });
+
+            if (tableBody) tableBody.innerHTML = rowsHtml;
+            if (tableFoot) {
+                tableFoot.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-end">Totals:</td>
+                        <td class="text-end">${totalQty}</td>
+                        <td></td>
+                        <td class="text-end">${money(subtotal)}</td>
+                        <td class="text-end"></td>
+                        <td class="text-end text-primary fw-bold">${money(totalSellingValue)}</td>
+                        <td colspan="2"></td>
+                        <td class="text-end">${money(totalTax)}</td>
+                        <td class="text-end text-success">${money(subtotal + totalTax)}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        const sProds = document.getElementById('summaryTpProducts');
+        const sUnits = document.getElementById('summaryTpUnits');
+        const sBase = document.getElementById('summaryTpBase');
+        const sTax = document.getElementById('summaryTpTax');
+        const sTotal = document.getElementById('summaryTpTotal');
+        if (sProds) sProds.textContent = cards.length + (cards.length === 1 ? ' Product' : ' Products');
+        if (sUnits) sUnits.textContent = totalQty + ' Pcs';
+        if (sBase) sBase.textContent = money(subtotal);
+        if (sTax) sTax.textContent = money(totalTax);
+        if (sTotal) sTotal.textContent = money(subtotal + totalTax);
+
+        const sSellingUnits = document.getElementById('summaryTpSellingUnits');
+        if (sSellingUnits) sSellingUnits.textContent = totalQty + ' Pcs';
+        const sSellingTotal = document.getElementById('summaryTpSellingTotal');
+        if (sSellingTotal) sSellingTotal.textContent = money(typeof totalSellingValue !== 'undefined' ? totalSellingValue : 0);
+
+        const pSubtotal = document.getElementById('purchaseSubtotal');
+        const pTaxes = document.getElementById('purchaseTaxes');
+        const pTotal = document.getElementById('purchaseTotal');
+        if (pSubtotal) pSubtotal.textContent = money(subtotal);
+        if (pTaxes) pTaxes.textContent = money(totalTax);
+        if (pTotal) pTotal.textContent = money(subtotal + totalTax);
+    }
+
+    const btnAddThirdParty = document.getElementById('btnAddThirdPartyItem');
+    if (btnAddThirdParty) {
+        btnAddThirdParty.addEventListener('click', addThirdPartyItem);
+    }
+
+    // =========================================================================
+    // FABRIC ROLL LOGIC
+    // =========================================================================
+    const rollsContainer = document.getElementById('rollsContainer');
+
+    function calculateTax(row, grossAmount) {
+        const taxTreatment = row.querySelector('.item-tax-treatment')?.value || 'INCLUDED';
         const type = row.querySelector('.item-gst-type').value;
         const mode = row.querySelector('.item-tax-mode').value;
         const value = Number(row.querySelector('.item-tax-value').value) || 0;
         const cgstValue = Number(row.querySelector('.item-cgst-value').value) || 0;
-        const taxAmount = amount => mode === 'AMOUNT' ? amount : Math.round(base * amount) / 100;
+
+        if (type === 'EXEMPTED' || grossAmount <= 0) {
+            return { treatment: taxTreatment, type, sgst: 0, cgst: 0, igst: 0, amount: 0, base: grossAmount, total: grossAmount };
+        }
+
+        if (taxTreatment === 'INCLUDED') {
+            if (mode === 'PERCENT') {
+                const totalRate = (type === 'BOTH') ? (value + cgstValue) : value;
+                if (totalRate > 0) {
+                    const base = Math.round((grossAmount / (1 + (totalRate / 100))) * 100) / 100;
+                    const tax = Math.round((grossAmount - base) * 100) / 100;
+                    let sgst = 0, cgst = 0, igst = 0;
+                    if (type === 'BOTH') {
+                        sgst = Math.round((tax * (value / totalRate)) * 100) / 100;
+                        cgst = Math.round((tax - sgst) * 100) / 100;
+                    } else if (type === 'IGST') {
+                        igst = tax;
+                    } else if (type === 'SGST') {
+                        sgst = tax;
+                    } else if (type === 'CGST') {
+                        cgst = tax;
+                    }
+                    return { treatment: taxTreatment, type, sgst, cgst, igst, amount: tax, base, total: grossAmount };
+                }
+            } else {
+                const fixedTax = (type === 'BOTH') ? (value + cgstValue) : value;
+                const tax = Math.min(grossAmount, fixedTax);
+                const base = Math.round((grossAmount - tax) * 100) / 100;
+                let sgst = 0, cgst = 0, igst = 0;
+                if (type === 'BOTH' && fixedTax > 0) {
+                    sgst = Math.round((tax * (value / fixedTax)) * 100) / 100;
+                    cgst = Math.round((tax - sgst) * 100) / 100;
+                } else if (type === 'IGST') {
+                    igst = tax;
+                } else if (type === 'SGST') {
+                    sgst = tax;
+                } else if (type === 'CGST') {
+                    cgst = tax;
+                }
+                return { treatment: taxTreatment, type, sgst, cgst, igst, amount: tax, base, total: grossAmount };
+            }
+        }
+
+        // EXCLUDED mode
+        const taxAmount = amount => mode === 'AMOUNT' ? amount : Math.round((grossAmount * amount) / 100 * 100) / 100;
         const sgst = ['SGST', 'BOTH'].includes(type) ? taxAmount(value) : 0;
         const cgst = type === 'CGST' ? taxAmount(value) : (type === 'BOTH' ? taxAmount(cgstValue) : 0);
         const igst = type === 'IGST' ? taxAmount(value) : 0;
-        return {type, sgst, cgst, igst, amount: sgst + cgst + igst};
+        const tax = Math.round((sgst + cgst + igst) * 100) / 100;
+        return { treatment: taxTreatment, type, sgst, cgst, igst, amount: tax, base: grossAmount, total: Math.round((grossAmount + tax) * 100) / 100 };
     }
 
     function updateTaxFields(row) {
@@ -837,29 +1421,27 @@ $taxValueForItem = static function (array $item, string $type): float {
         row.querySelector('.item-cgst-value').required = type === 'BOTH';
         row.querySelector('.item-tax-label').textContent = `${type === 'BOTH' ? 'SGST' : type} (${mode === 'PERCENT' ? '%' : '₹'})`;
         row.querySelector('.item-cgst-label').textContent = `CGST (${mode === 'PERCENT' ? '%' : '₹'})`;
-        [row.querySelector('.item-tax-value'), row.querySelector('.item-cgst-value')].forEach(input => {
-            if (mode === 'PERCENT') input.dataset.max = '100';
-            else delete input.dataset.max;
-        });
     }
 
     function updateSummary() {
+        if (!rollsContainer) return;
         const rolls = Array.from(rollsContainer.querySelectorAll('.roll-card'));
         const rollTableBody = document.getElementById('rollDetailsTableBody');
         const rollTableRows = [];
         let subtotal = 0, taxes = 0, total = 0, totalWeight = 0, totalRq = 0;
         const colors = new Set(), designs = new Set();
-        document.getElementById('editFabricDescription').required = rolls.length > 0;
+        const fabricDescInput = document.getElementById('editFabricDescription');
+        if (fabricDescInput) fabricDescInput.required = rolls.length > 0;
+
         rolls.forEach((card, index) => {
             const key = card.dataset.itemKey;
             const nameInput = card.querySelector('.roll-item-name');
-            nameInput.value = document.getElementById('editFabricDescription').value.trim().toUpperCase();
+            if (nameInput && fabricDescInput) nameInput.value = fabricDescInput.value.trim().toUpperCase();
             const price = Number(card.querySelector('.roll-price').value) || 0;
             const weight = Number(card.querySelector('.roll-weight').value) || 0;
             const quantity = Number(card.querySelector('.roll-quantity')?.value) || Number(card.querySelector(`[name="items[${key}][quantity]"]`)?.value) || 0;
             const tax = calculateTax(card, price);
 
-            // Dynamically recalculate roll code range based on editable RQ
             const seqStart = Number(card.dataset.sequenceStart) || 1;
             const prefix = card.dataset.codePrefix || '';
             const baseStartCode = card.dataset.startCode || '';
@@ -871,49 +1453,58 @@ $taxValueForItem = static function (array $item, string $type): float {
             }
             const codeBadgeText = (quantity > 1 && endCode !== baseStartCode) ? `${baseStartCode}–${endCode}` : baseStartCode;
             const codeBadge = card.querySelector('.roll-code-text');
-            if (codeBadge) {
-                codeBadge.textContent = codeBadgeText;
-            }
+            if (codeBadge) codeBadge.textContent = codeBadgeText;
 
-            const photoFile = card.querySelector('.roll-photo').files[0];
+            const photoFile = card.querySelector('.roll-photo')?.files[0];
             const photoUrl = card.dataset.photoUrl;
             const photoHtml = photoFile
                 ? '<span class="text-muted"><i class="bi bi-image"></i></span>'
                 : (photoUrl ? `<a href="${safe(photoUrl)}" target="_blank" rel="noopener"><img src="${safe(photoUrl)}" alt="Roll" style="width:38px;height:38px;object-fit:cover"></a>` : '<span class="text-muted"><i class="bi bi-camera"></i></span>');
-            subtotal += price;
+            subtotal += tax.base;
             taxes += tax.amount;
-            total += price + tax.amount;
+            total += tax.total;
             totalWeight += weight;
             totalRq += quantity;
             if (card.querySelector('.roll-color').value.trim()) colors.add(card.querySelector('.roll-color').value.trim().toUpperCase());
             if (card.querySelector('.roll-design').value.trim()) designs.add(card.querySelector('.roll-design').value.trim().toUpperCase());
             const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : tax.type;
+            const treatmentBadge = tax.treatment === 'INCLUDED' ? '<small class="text-muted d-block" style="font-size:10px;">(Incl. Tax)</small>' : '<small class="text-muted d-block" style="font-size:10px;">(Excl. Tax)</small>';
             card.querySelector('.roll-title').textContent = `ROLL #${index + 1}`;
             const hsn = card.querySelector('.roll-hsn')?.value?.trim() || '—';
-            rollTableRows.push(`<tr><td class="text-center">${index + 1}</td><td>${photoHtml}</td><td><strong>${safe(card.querySelector('.roll-number').value)}</strong><small class="d-block font-monospace">${safe(codeBadgeText || '—')}</small></td><td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td><td>${safe(card.querySelector('.roll-color').value || '—')}</td><td>${safe(card.querySelector('.roll-design').value || '—')}</td><td class="text-center">${Number(card.querySelector('.roll-design-count').value) || 0}</td><td class="text-end">${quantity.toLocaleString('en-IN')} RQ</td><td class="text-end">${weight.toFixed(2)} kg</td><td class="text-end">${money(price)}</td><td>${taxLabel}</td><td class="text-end">${money(tax.amount)}</td><td class="text-end fw-bold text-success">${money(price + tax.amount)}</td><td class="text-center"><span class="badge bg-info-subtle text-info">Existing roll</span></td></tr>`);
+            rollTableRows.push(`<tr><td class="text-center">${index + 1}</td><td>${photoHtml}</td><td><strong>${safe(card.querySelector('.roll-number').value)}</strong><small class="d-block font-monospace">${safe(codeBadgeText || '—')}</small></td><td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td><td>${safe(card.querySelector('.roll-color').value || '—')}</td><td>${safe(card.querySelector('.roll-design').value || '—')}</td><td class="text-center">${Number(card.querySelector('.roll-design-count').value) || 0}</td><td class="text-end">${quantity.toLocaleString('en-IN')} RQ</td><td class="text-end">${weight.toFixed(2)} kg</td><td class="text-end">${money(price)} ${treatmentBadge}</td><td>${taxLabel}</td><td class="text-end">${money(tax.amount)}</td><td class="text-end fw-bold text-success">${money(tax.total)}</td><td class="text-center"><span class="badge bg-info-subtle text-info">Existing roll</span></td></tr>`);
         });
-        document.getElementById('rollCountBadge').textContent = rolls.length;
-        document.getElementById('tableRollCountBadge').textContent = `${rolls.length} ${rolls.length === 1 ? 'Roll' : 'Rolls'}`;
-        document.getElementById('summaryTotalRolls').textContent = `${rolls.length} ${rolls.length === 1 ? 'Roll' : 'Rolls'}`;
-        document.getElementById('summaryTotalRQ').textContent = `${totalRq.toLocaleString('en-IN')} RQ`;
-        document.getElementById('summaryColorsDesigns').textContent = `${colors.size} Colors • ${designs.size} Designs`;
-        document.getElementById('summaryTotalWeight').textContent = `${totalWeight.toFixed(2)} kg`;
-        document.getElementById('summaryTotalPrice').textContent = money(rolls.reduce((sum, row) => {
-            const price = Number(row.querySelector('.roll-price').value) || 0;
-            return sum + price + calculateTax(row, price).amount;
-        }, 0));
-        rollTableBody.innerHTML = rollTableRows.length ? rollTableRows.join('') : '<tr><td colspan="14" class="text-center text-muted py-4">No fabric rolls in this purchase.</td></tr>';
 
-        document.getElementById('purchaseSubtotal').textContent = money(subtotal);
-        document.getElementById('purchaseTaxes').textContent = money(taxes);
-        document.getElementById('purchaseTotal').textContent = money(total);
+        const rBadge = document.getElementById('rollCountBadge');
+        const trBadge = document.getElementById('tableRollCountBadge');
+        const sRolls = document.getElementById('summaryTotalRolls');
+        const sRq = document.getElementById('summaryTotalRQ');
+        const sCD = document.getElementById('summaryColorsDesigns');
+        const sW = document.getElementById('summaryTotalWeight');
+        const sP = document.getElementById('summaryTotalPrice');
+
+        if (rBadge) rBadge.textContent = rolls.length;
+        if (trBadge) trBadge.textContent = `${rolls.length} ${rolls.length === 1 ? 'Roll' : 'Rolls'}`;
+        if (sRolls) sRolls.textContent = `${rolls.length} ${rolls.length === 1 ? 'Roll' : 'Rolls'}`;
+        if (sRq) sRq.textContent = `${totalRq.toLocaleString('en-IN')} RQ`;
+        if (sCD) sCD.textContent = `${colors.size} Colors • ${designs.size} Designs`;
+        if (sW) sW.textContent = `${totalWeight.toFixed(2)} kg`;
+        if (sP) sP.textContent = money(total);
+        if (rollTableBody) rollTableBody.innerHTML = rollTableRows.length ? rollTableRows.join('') : '<tr><td colspan="14" class="text-center text-muted py-4">No fabric rolls in this purchase.</td></tr>';
+
+        const pSubtotal = document.getElementById('purchaseSubtotal');
+        const pTaxes = document.getElementById('purchaseTaxes');
+        const pTotal = document.getElementById('purchaseTotal');
+        if (pSubtotal) pSubtotal.textContent = money(subtotal);
+        if (pTaxes) pTaxes.textContent = money(taxes);
+        if (pTotal) pTotal.textContent = money(total);
     }
 
     function previewLabels() {
         const cards = document.getElementById('editPurchaseLabelCards');
+        if (!cards || !rollsContainer) return;
         cards.innerHTML = '';
         let labelCount = 0;
-        const material = document.getElementById('editFabricDescription').value.trim().toUpperCase() || 'FABRIC';
+        const material = document.getElementById('editFabricDescription')?.value?.trim()?.toUpperCase() || 'FABRIC';
         const supplier = <?= json_encode($purchase['seller_company'] ?: ($purchase['seller_name'] ?? 'SUPPLIER'), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const poNumber = <?= json_encode($purchase['purchase_number'] ?? '', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         const purchaseDate = <?= json_encode(date('d M Y', strtotime($purchase['purchase_date'])), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
@@ -929,7 +1520,6 @@ $taxValueForItem = static function (array $item, string $type): float {
             }
             const rollNum = card.querySelector('.roll-number')?.value?.trim() || `ROLL #${index + 1}`;
             const color = (card.querySelector('.roll-color')?.value?.trim() || 'STANDARD').toUpperCase();
-            const design = (card.querySelector('.roll-design')?.value?.trim() || '').toUpperCase();
             const totalWeight = Number(card.querySelector('.roll-weight')?.value) || 0;
             const pieceWeight = quantity > 0 ? (totalWeight / quantity).toFixed(2) : totalWeight.toFixed(2);
 
@@ -979,33 +1569,153 @@ $taxValueForItem = static function (array $item, string $type): float {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('editPurchaseLabelsModal')).show();
     }
 
-    rollsContainer.querySelectorAll('.roll-card').forEach(card => {
-        initHsnDropdown(card, '.roll-hsn');
-        card.querySelectorAll('input,select').forEach(input => {
-            input.addEventListener('input', updateSummary);
-            input.addEventListener('change', updateSummary);
+    if (rollsContainer) {
+        rollsContainer.querySelectorAll('.roll-card').forEach(card => {
+            initHsnDropdown(card, '.roll-hsn');
+            card.querySelectorAll('input,select').forEach(input => {
+                input.addEventListener('input', updateSummary);
+                input.addEventListener('change', updateSummary);
+            });
+            card.querySelector('.item-gst-type').addEventListener('change', () => { updateTaxFields(card); updateSummary(); });
+            card.querySelector('.item-tax-mode').addEventListener('change', () => { updateTaxFields(card); updateSummary(); });
+            updateTaxFields(card);
         });
-        card.querySelector('.item-gst-type').addEventListener('change', () => { updateTaxFields(card); updateSummary(); });
-        card.querySelector('.item-tax-mode').addEventListener('change', () => { updateTaxFields(card); updateSummary(); });
-        updateTaxFields(card);
-    });
-    document.getElementById('editFabricDescription').addEventListener('input', updateSummary);
-    document.getElementById('previewPurchaseLabels').addEventListener('click', previewLabels);
+        const editFabDesc = document.getElementById('editFabricDescription');
+        if (editFabDesc) editFabDesc.addEventListener('input', updateSummary);
+        const prevBtn = document.getElementById('previewPurchaseLabels');
+        if (prevBtn) prevBtn.addEventListener('click', previewLabels);
+    }
+
+    // =========================================================================
+    // FORM SUBMISSION VALIDATION & PAYLOAD PACKING
+    // =========================================================================
     form.addEventListener('submit', event => {
-        const hasRoll = rollsContainer.querySelector('.roll-card');
-        if (!hasRoll) {
-            event.preventDefault();
-            alert('Add at least one fabric roll.');
+        if (currentPurchaseType === 'THIRD_PARTY') {
+            const container = document.getElementById('thirdPartyContainer');
+            const cards = container ? Array.from(container.querySelectorAll('.tp-card')) : [];
+
+            if (cards.length === 0) {
+                event.preventDefault();
+                alert('Add at least one third-party product before saving.');
+                return;
+            }
+
+            let hasError = false;
+            let errorMessage = '';
+            const itemsPayload = [];
+
+            cards.forEach((card, idx) => {
+                if (hasError) return;
+
+                const itemId = parseInt(card.dataset.itemId || '0', 10);
+                const name = card.querySelector('.tp-name')?.value?.trim();
+                const sku = card.querySelector('.tp-sku')?.value?.trim() || generateThirdPartySku(card, idx);
+                const color = card.querySelector('.tp-color')?.value?.trim() || '';
+                const size = card.querySelector('.tp-size')?.value?.trim() || '';
+                const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
+                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
+                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
+                const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '';
+                const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+                const taxMode = card.querySelector('.item-tax-mode')?.value || 'PERCENT';
+                const taxTreatment = card.querySelector('.tp-tax-treatment')?.value || 'INCLUDED';
+                const taxVal = Number(card.querySelector('.item-tax-value')?.value) || 0;
+                const cgstVal = Number(card.querySelector('.item-cgst-value')?.value) || 0;
+
+                if (!name) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1}: Item name is required.`;
+                    return;
+                }
+                if (qty <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): Quantity must be greater than zero.`;
+                    return;
+                }
+                if (cost <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): Buyed price must be greater than zero.`;
+                    return;
+                }
+                if (!hsn) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): HSN Code is mandatory.`;
+                    return;
+                }
+                if (selling <= 0) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): Selling price is required.`;
+                    return;
+                }
+                if (selling < cost) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): Selling price (₹${selling.toFixed(2)}) cannot be less than Buyed price (₹${cost.toFixed(2)}).`;
+                    return;
+                }
+                if (mrp > 0 && mrp < selling) {
+                    hasError = true;
+                    errorMessage = `Product #${idx + 1} (${name}): MRP (₹${mrp.toFixed(2)}) cannot be less than Selling price (₹${selling.toFixed(2)}).`;
+                    return;
+                }
+
+                itemsPayload.push({
+                    id: itemId,
+                    item_type: 'THIRD_PARTY',
+                    item_name: name,
+                    vendor_sku: sku,
+                    product_code: sku,
+                    color: color,
+                    size: size,
+                    quantity: qty,
+                    unit_price: cost,
+                    mrp: mrp,
+                    selling_price: selling,
+                    hsn_code: hsn,
+                    gst_type: gstType,
+                    tax_mode: taxMode,
+                    tax_treatment: taxTreatment,
+                    tax_value: taxVal,
+                    cgst_tax_value: cgstVal,
+                    unit: 'PCS'
+                });
+            });
+
+            if (hasError) {
+                event.preventDefault();
+                alert(errorMessage);
+                return;
+            }
+
+            let payloadInput = document.getElementById('itemsPayloadInput');
+            if (!payloadInput) {
+                payloadInput = document.createElement('input');
+                payloadInput.type = 'hidden';
+                payloadInput.name = 'items_payload';
+                payloadInput.id = 'itemsPayloadInput';
+                form.appendChild(payloadInput);
+            }
+            payloadInput.value = JSON.stringify(itemsPayload);
             return;
         }
 
-        // Clean up empty roll photo inputs so max_file_uploads is never exceeded
-        rollsContainer.querySelectorAll('.roll-card').forEach(card => {
-            const photoInput = card.querySelector('.roll-photo');
-            if (photoInput && (!photoInput.files || photoInput.files.length === 0)) {
-                photoInput.removeAttribute('name');
+        if (currentPurchaseType === 'FABRIC_ROLL') {
+            if (!rollsContainer) return;
+            const hasRoll = rollsContainer.querySelector('.roll-card');
+            if (!hasRoll) {
+                event.preventDefault();
+                alert('Add at least one fabric roll.');
+                return;
             }
-        });
+
+            // Clean up empty roll photo inputs so max_file_uploads is never exceeded
+            rollsContainer.querySelectorAll('.roll-card').forEach(card => {
+                const photoInput = card.querySelector('.roll-photo');
+                if (photoInput && (!photoInput.files || photoInput.files.length === 0)) {
+                    photoInput.removeAttribute('name');
+                }
+            });
+        }
     });
 
     // Tax Invoice Document Preview
@@ -1069,6 +1779,12 @@ $taxValueForItem = static function (array $item, string $type): float {
         }
     };
 
-    updateSummary();
+    // Initialize based on purchase type
+    if (currentPurchaseType === 'THIRD_PARTY') {
+        initExistingThirdPartyCards();
+        updateThirdPartySummary();
+    } else if (currentPurchaseType === 'FABRIC_ROLL') {
+        updateSummary();
+    }
 })();
 </script>
