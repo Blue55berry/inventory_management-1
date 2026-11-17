@@ -72,6 +72,8 @@ if (!empty($authUser['production_unit_name'])) {
                         || hasPermission('production_purchases', 'view')
                         || hasPermission('damages', 'view')
                         || hasPermission('catalog', 'view')
+                        || hasPermission('variants', 'view')
+                        || hasPermission('qr_generation', 'view')
                         || hasPermission('programs', 'view')
                         || hasPermission('cutting', 'view')
                         || hasPermission('wastage', 'view')
@@ -80,37 +82,44 @@ if (!empty($authUser['production_unit_name'])) {
                         || hasPermission('labels', 'view')
                         || hasPermission('qc', 'view')
                         || hasPermission('inventory', 'view')
+                        || hasPermission('inward', 'view')
+                        || hasPermission('stock_adjustments', 'view')
                         || hasPermission('production_expenses', 'view')
                         || hasPermission('production_billing', 'view')
                         || hasPermission('production_returns', 'view')
                         || hasPermission('batches', 'view')
                         || hasPermission('outward', 'view')
                         || hasPermission('production_stock_requests', 'view')
-                        || hasPermission('warehouse_rework', 'view');
+                        || hasPermission('warehouse_rework', 'view')
+                        || hasPermission('asset_register', 'view')
+                        || hasPermission('assets', 'view')
+                        || hasPermission('asset_maintenance', 'view');
                     ?>
                     <?php if ($canViewProduction): ?>
                     <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'production' ? 'active' : '' ?>">
+                        <a href="#" class="nav-link <?= in_array(($activeModule ?? ''), ['production', 'assets']) ? 'active' : '' ?>">
                             <i class="bi bi-gear-wide-connected"></i>
                             <span>Production</span>
                             <i class="bi bi-chevron-down submenu-arrow"></i>
                         </a>
-                        <ul class="submenu <?= ($activeModule ?? '') === 'production' ? 'show' : '' ?>">
-                            <?php if (hasPermission('production', 'view')): ?>
-                            <li><a href="<?= url('production/dashboard') ?>" class="<?= ($activeMenu ?? '') === 'prod-dashboard' ? 'active' : '' ?>">Production Dashboard</a></li>
-                            <?php endif; ?>
+                        <ul class="submenu <?= in_array(($activeModule ?? ''), ['production', 'assets']) ? 'show' : '' ?>">
                             <?php if (hasPermission('sellers', 'view')): ?>
                             <li><a href="<?= url('production/sellers') ?>" class="<?= ($activeMenu ?? '') === 'prod-sellers' ? 'active' : '' ?>">Suppliers &amp; Mills</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_purchases', 'view')): ?>
-                            <li><a href="<?= url('production/purchases') ?>" class="<?= ($activeMenu ?? '') === 'prod-purchases' ? 'active' : '' ?>">Material Purchases</a></li>
+                            <?php if (hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view')): ?>
+                            <li><a href="<?= url('production/purchases') ?>" class="<?= in_array($activeMenu ?? '', ['purchases', 'prod-purchases']) ? 'active' : '' ?>">Purchases</a></li>
+                            <li><a href="<?= url('production/purchases/mapping') ?>" class="<?= in_array($activeMenu ?? '', ['purchases-mapping', 'prod-purchases-mapping']) ? 'active' : '' ?>">Third-Party Product Mapping</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('damages', 'view')): ?>
                             <li><a href="<?= url('production/damages') ?>" class="<?= ($activeMenu ?? '') === 'prod-damages' ? 'active' : '' ?>">Damage Management</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('catalog', 'view')): ?>
                             <li><a href="<?= url('production/catalog') ?>" class="<?= ($activeMenu ?? '') === 'prod-catalog' ? 'active' : '' ?>">Product Catalog</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('variants', 'view') || hasPermission('catalog', 'view')): ?>
                             <li><a href="<?= url('production/variants') ?>" class="<?= ($activeMenu ?? '') === 'prod-variants' ? 'active' : '' ?>">Product Variants</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('qr_generation', 'view') || hasPermission('labels', 'view') || hasPermission('catalog', 'view')): ?>
                             <li><a href="<?= url('production/qr-generations') ?>" class="<?= ($activeMenu ?? '') === 'prod-qr-generation' ? 'active' : '' ?>">QR Generations</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('programs', 'view')): ?>
@@ -136,8 +145,12 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php endif; ?>
                             <?php if (hasPermission('inventory', 'view')): ?>
                             <li><a href="<?= url('production/inventory') ?>" class="<?= ($activeMenu ?? '') === 'prod-inventory' ? 'active' : '' ?>">Finished Goods Inventory</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('inward', 'view') || hasPermission('inventory', 'view')): ?>
                             <li><a href="<?= url('production/inwards') ?>" class="<?= in_array($activeMenu ?? '', ['inwards', 'prod-inwards']) ? 'active' : '' ?>">Goods Inward (GRN)</a></li>
-                            <li><a href="<?= url('production/stock-adjustments') ?>" class="<?= in_array($activeMenu ?? '', ['stock-adjustments', 'prod-stock-adjustments']) ? 'active' : '' ?>">Stock Adjustments (QR)</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('production_stock_requests', 'view') || hasPermission('stock_requests', 'view') || hasPermission('inventory', 'view')): ?>
+                            <li><a href="<?= url('production/stock-requests') ?>" class="<?= in_array($activeMenu ?? '', ['prod-stock-requests', 'stock-requests', 'stock-requirements']) ? 'active' : '' ?>">Stock Requirements</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('production_expenses', 'view')): ?>
                             <li><a href="<?= url('production/expenses') ?>" class="<?= ($activeMenu ?? '') === 'production-expenses' ? 'active' : '' ?>">Production Expenses</a></li>
@@ -154,38 +167,21 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php if (hasPermission('outward', 'view')): ?>
                             <li><a href="<?= url('production/outward') ?>" class="<?= in_array($activeMenu ?? '', ['outward', 'prod-outward', 'batch-outward']) ? 'active' : '' ?>">Warehouse Outward Dispatch</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_stock_requests', 'view')): ?>
-                            <li><a href="<?= url('production/stock-requests') ?>" class="<?= ($activeMenu ?? '') === 'prod-stock-requests' ? 'active' : '' ?>">Stock Requisitions</a></li>
-                            <?php endif; ?>
                             <?php if (hasPermission('warehouse_rework', 'view')): ?>
                             <li><a href="<?= url('production/warehouse-rework') ?>" class="<?= ($activeMenu ?? '') === 'warehouse-rework' ? 'active' : '' ?>">Warehouse Rework</a></li>
                             <?php endif; ?>
                             <?php if (hasPermission('reports', 'view')): ?>
                             <li><a href="<?= url('production/reports') ?>" class="<?= ($activeMenu ?? '') === 'reports' ? 'active' : '' ?>">Production Analytics &amp; Reports</a></li>
                             <?php endif; ?>
-                        </ul>
-                    </li>
-                    <?php endif; ?>
-
-                    <li class="nav-divider"></li>
-
-                    <!-- Assets Management -->
-                    <?php 
-                    $canViewAssets = hasPermission('asset_register', 'view') 
-                        || hasPermission('assets', 'view')
-                        || hasPermission('asset_maintenance', 'view');
-                    ?>
-                    <?php if ($canViewAssets): ?>
-                    <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'assets' ? 'active' : '' ?>">
-                            <i class="bi bi-tools"></i>
-                            <span>Assets Management</span>
-                            <i class="bi bi-chevron-down submenu-arrow"></i>
-                        </a>
-                        <ul class="submenu <?= ($activeModule ?? '') === 'assets' ? 'show' : '' ?>">
+                            <?php if (hasPermission('asset_register', 'view') || hasPermission('assets', 'view')): ?>
                             <li><a href="<?= url('assets') ?>" class="<?= ($activeMenu ?? '') === 'assets-list' ? 'active' : '' ?>">Asset Register</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('asset_register', 'create') || hasPermission('assets', 'create')): ?>
                             <li><a href="<?= url('assets/create') ?>" class="<?= ($activeMenu ?? '') === 'assets-create' ? 'active' : '' ?>">Register New Asset</a></li>
+                            <?php endif; ?>
+                            <?php if (hasPermission('asset_maintenance', 'view') || hasPermission('assets', 'view')): ?>
                             <li><a href="<?= url('assets/maintenance') ?>" class="<?= ($activeMenu ?? '') === 'assets-maintenance' ? 'active' : '' ?>">Maintenance &amp; Services</a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                     <?php endif; ?>

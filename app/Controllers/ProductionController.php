@@ -120,28 +120,10 @@ class ProductionController {
     }
 
     /**
-     * Production Dashboard.
+     * Production Dashboard (Removed/Redirected).
      */
     public function dashboard(): void {
-        self::ensureDatabaseSchema();
-        $scopedUnitId = function_exists('currentProductionUnitId') ? currentProductionUnitId() : null;
-        $stats = ProductionService::getDashboardStats($scopedUnitId);
-        $productionUnits = function_exists('getScopedProductionUnits') ? getScopedProductionUnits() : ProductionUnit::getAll(['is_active' => 1]);
-        $productionUnitProfile = $scopedUnitId
-            ? ProductionUnit::find((int)$scopedUnitId)
-            : ($productionUnits[0] ?? null);
-        Response::view('production.dashboard', array_merge($stats, [
-            'pageTitle'    => 'Production Dashboard',
-            'activeModule' => 'production',
-            'activeMenu'   => 'prod-dashboard',
-            'scopedUnitId' => $scopedUnitId,
-            'productionUnits' => $productionUnits,
-            'productionUnitProfile' => $productionUnitProfile,
-            'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
-                ['label' => 'Dashboard'],
-            ],
-        ]));
+        Response::redirect(url('dashboard'));
     }
 
 
@@ -439,7 +421,7 @@ class ProductionController {
             'Supplier Name' => $name, 'Company / Mill' => $company, 'Phone' => $phone,
             'Email' => $email, 'City' => $city, 'State' => $state, 'Address' => $address,
         ]);
-        Session::flash('success', 'Supplier details saved. Record fabric and other purchases in Production Purchases.');
+        Session::flash('success', 'Supplier details saved. Record fabric and other purchases in Purchases.');
         Response::redirect(url('production/sellers'));
     }
 
@@ -593,7 +575,7 @@ class ProductionController {
             'cities'         => $cities,
             'damageFilter'   => $damageFilter,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Suppliers'],
             ],
         ]);
@@ -606,7 +588,7 @@ class ProductionController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-sellers',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Suppliers', 'url' => url('production/sellers')],
                 ['label' => 'Add Supplier'],
             ],
@@ -1081,7 +1063,7 @@ class ProductionController {
             'totalActiveRollsCount'     => count($activeRolls),
             'totalDamagesCount'         => count($allDamages),
             'breadcrumb'                => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Suppliers', 'url' => url('production/sellers')],
                 ['label' => $seller['name']],
             ],
@@ -1110,7 +1092,7 @@ class ProductionController {
             'activeMenu'   => 'prod-sellers',
             'seller'       => $seller,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Suppliers', 'url' => url('production/sellers')],
                 ['label' => 'Edit Supplier'],
             ],
@@ -1267,7 +1249,7 @@ class ProductionController {
             'connections'  => $connections,
             'canDelete'    => $connections['can_delete'],
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Suppliers', 'url' => url('production/sellers')],
                 ['label' => 'Delete Supplier'],
             ],
@@ -1362,27 +1344,83 @@ class ProductionController {
     }
 
     public function productionPurchaseList(): void {
+        $filterType = !empty($_GET['type']) ? strtoupper(trim((string)$_GET['type'])) : '';
+        $search = !empty($_GET['search']) ? trim((string)$_GET['search']) : '';
+        $where = [];
+        $params = [];
+
+        if (in_array($filterType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+            $where[] = "pp.purchase_type = ?";
+            $params[] = $filterType;
+        }
+        if ($search !== '') {
+            $where[] = "(pp.purchase_number LIKE ? OR pp.invoice_number LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
+            $term = $search . '%';
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+        }
+        $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+        // Explicit column projection (avoiding SELECT *)
         $purchases = Database::fetchAll(
-            "SELECT pp.*, s.name AS seller_name, s.company
+            "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.seller_id, pp.purchase_date,
+                    pp.invoice_number, pp.document_url, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
+                    s.name AS seller_name, s.company, s.seller_type
              FROM production_purchases pp
-             JOIN sellers s ON s.id = pp.seller_id
-             ORDER BY pp.purchase_date DESC, pp.id DESC"
+             INNER JOIN sellers s ON s.id = pp.seller_id
+             $whereSql
+             ORDER BY pp.purchase_date DESC, pp.id DESC",
+            $params
         );
-        foreach ($purchases as &$purchase) {
-            $purchase['items'] = Database::fetchAll(
-                "SELECT ppi.*, sr.start_code, sr.end_code
+
+        // N+1 Query Consolidation: Batch-load items for all purchases in a single query
+        if (!empty($purchases)) {
+            $purchaseIds = array_column($purchases, 'id');
+            $placeholders = implode(',', array_fill(0, count($purchaseIds), '?'));
+            $items = Database::fetchAll(
+                "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.product_code, ppi.vendor_sku,
+                        ppi.product_id, ppi.variant_id, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
+                        ppi.selling_price, ppi.total_price, ppi.roll_number, ppi.color, ppi.size,
+                        ppi.design_name, ppi.design_count, ppi.weight_kg, ppi.gst_type, ppi.tax_input_type,
+                        ppi.sgst_amount, ppi.cgst_amount, ppi.igst_amount, ppi.is_inwarded, ppi.is_mapped,
+                        ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.hsn_code, ppi.start_code,
+                        ppi.end_code, ppi.qr_code,
+                        sr.start_code AS sr_start_code, sr.end_code AS sr_end_code
                  FROM production_purchase_items ppi
                  LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
-                 WHERE ppi.purchase_id = ?
-                 ORDER BY ppi.id",
-                [(int)$purchase['id']]
+                 WHERE ppi.purchase_id IN ($placeholders)
+                 ORDER BY ppi.id ASC",
+                $purchaseIds
             );
+            $itemsByPurchase = [];
+            foreach ($items as $item) {
+                $itemsByPurchase[$item['purchase_id']][] = $item;
+            }
+            foreach ($purchases as &$p) {
+                $p['items'] = $itemsByPurchase[$p['id']] ?? [];
+            }
+            unset($p);
         }
-        unset($purchase);
 
-        $totalPurchaseValue = (float)(Database::fetchOne(
-            "SELECT COALESCE(SUM(total_amount), 0) AS total FROM production_purchases"
-        )['total'] ?? 0);
+        // Fast Aggregated Metrics via single pre-aggregation query
+        $metrics = Database::fetchOne(
+            "SELECT 
+                COUNT(*) AS total_count,
+                COALESCE(SUM(total_amount), 0) AS total_value,
+                COUNT(CASE WHEN purchase_type = 'FABRIC_ROLL' THEN 1 END) AS fabric_roll_count,
+                COUNT(CASE WHEN purchase_type = 'THIRD_PARTY' THEN 1 END) AS third_party_count,
+                COUNT(CASE WHEN purchase_type = 'OWN_PRODUCT' THEN 1 END) AS own_product_count
+             FROM production_purchases"
+        );
+        $totalPurchaseValue = (float)($metrics['total_value'] ?? 0);
+
+        // Count pending unmapped third-party products
+        $unmappedThirdPartyCount = (int)(Database::fetchOne(
+            "SELECT COUNT(*) AS c FROM production_purchase_items WHERE item_type = 'THIRD_PARTY' AND is_mapped = 0"
+        )['c'] ?? 0);
+
         $supplyStock = Database::fetchAll(
             "SELECT item_name, unit, SUM(quantity) AS total_quantity, COUNT(*) AS purchase_lines
              FROM production_purchase_items
@@ -1390,8 +1428,12 @@ class ProductionController {
              GROUP BY item_name, unit
              ORDER BY item_name, unit"
         );
+
         $fabricRollInventory = Database::fetchAll(
-            "SELECT sr.*, s.name AS seller_name, s.company,
+            "SELECT sr.id, sr.seller_id, sr.roll_number, sr.color, sr.design_name, sr.design_count,
+                    sr.quantity, sr.weight, sr.price, sr.material_type, sr.photo_url, sr.start_code,
+                    sr.end_code, sr.qr_code, sr.hsn_code,
+                    s.name AS seller_name, s.company,
                     COALESCE(sr.material_type, s.material_type, 'FABRIC') AS fabric_description,
                     COALESCE(u.used_quantity, 0) AS used_quantity,
                     COALESCE(dmg.damaged_quantity, 0) AS damaged_quantity,
@@ -1416,15 +1458,19 @@ class ProductionController {
         );
 
         Response::view('production.purchases.index', [
-            'pageTitle' => 'Production Purchases',
-            'activeModule' => 'production',
-            'activeMenu' => 'prod-purchases',
+            'pageTitle' => 'Purchases & Procurement',
+            'activeModule' => 'purchases',
+            'activeMenu' => 'purchases-all',
             'purchases' => $purchases,
             'totalPurchaseValue' => $totalPurchaseValue,
+            'metrics' => $metrics,
+            'unmappedThirdPartyCount' => $unmappedThirdPartyCount,
             'supplyStock' => $supplyStock,
             'fabricRollInventory' => $fabricRollInventory,
+            'filterType' => $filterType,
+            'search' => $search,
             'breadcrumb' => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Dashboard', 'url' => url('dashboard')],
                 ['label' => 'Purchases'],
             ],
         ]);
@@ -1495,11 +1541,14 @@ class ProductionController {
 
     private function getProductionPurchase(int $purchaseId): ?array {
         return Database::fetchOne(
-            "SELECT pp.*, s.name AS seller_name, s.company AS seller_company, s.phone AS seller_phone,
+            "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.seller_id, pp.purchase_date,
+                    pp.invoice_number, pp.document_url, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
+                    s.name AS seller_name, s.company AS seller_company, s.phone AS seller_phone,
                     s.email AS seller_email, s.gst_number AS seller_gst_number, s.city AS seller_city,
-                    s.state AS seller_state, s.address AS seller_address, s.payment_terms AS seller_payment_terms
+                    s.state AS seller_state, s.address AS seller_address, s.payment_terms AS seller_payment_terms,
+                    s.seller_type
              FROM production_purchases pp
-             JOIN sellers s ON s.id = pp.seller_id
+             INNER JOIN sellers s ON s.id = pp.seller_id
              WHERE pp.id = ?",
             [$purchaseId]
         );
@@ -1512,22 +1561,34 @@ class ProductionController {
             return;
         }
         $items = Database::fetchAll(
-            "SELECT ppi.*, sr.start_code, sr.end_code, sr.photo_url
+            "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.product_code, ppi.vendor_sku,
+                    ppi.product_id, ppi.variant_id, ppi.quantity, ppi.unit, ppi.weight_kg,
+                    ppi.unit_price, ppi.mrp, ppi.selling_price, ppi.total_price,
+                    ppi.gst_type, ppi.tax_input_type, ppi.sgst_value, ppi.cgst_value, ppi.igst_value,
+                    ppi.sgst_amount, ppi.cgst_amount, ppi.igst_amount,
+                    ppi.roll_number, ppi.color, ppi.size, ppi.design_name, ppi.design_count,
+                    ppi.seller_roll_id, ppi.hsn_code, ppi.start_code, ppi.end_code, ppi.qr_code,
+                    ppi.is_inwarded, ppi.inwarded_at, ppi.is_mapped, ppi.mapped_category_id,
+                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
+                    sr.start_code AS sr_start_code, sr.end_code AS sr_end_code, sr.photo_url,
+                    c.name AS category_name, sub.name AS subcategory_name, subsub.name AS sub_subcategory_name
              FROM production_purchase_items ppi
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
+             LEFT JOIN categories c ON c.id = ppi.mapped_category_id
+             LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
+             LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
              WHERE ppi.purchase_id = ?
-             ORDER BY ppi.id",
+             ORDER BY ppi.id ASC",
             [(int)$purchase['id']]
         );
         Response::view('production.purchases.view', [
             'pageTitle' => 'Purchase ' . $purchase['purchase_number'],
-            'activeModule' => 'production',
-            'activeMenu' => 'prod-purchases',
+            'activeModule' => 'purchases',
+            'activeMenu' => 'purchases-all',
             'purchase' => $purchase,
             'items' => $items,
             'breadcrumb' => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
-                ['label' => 'Purchases', 'url' => url('production/purchases')],
+                ['label' => 'Purchases', 'url' => url('purchases')],
                 ['label' => $purchase['purchase_number']],
             ],
         ]);
@@ -1556,7 +1617,7 @@ class ProductionController {
             'items' => $items,
             'hsnCodes' => $hsnCodes,
             'breadcrumb' => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Purchases', 'url' => url('production/purchases')],
                 ['label' => 'Edit ' . $purchase['purchase_number']],
             ],
@@ -1986,21 +2047,48 @@ class ProductionController {
     public function createProductionPurchase(): void {
         self::ensureDatabaseSchema();
         $sellers = Database::fetchAll(
-            "SELECT id, name, company, phone, email, gst_number, city, state, address
+            "SELECT id, name, company, phone, email, gst_number, city, state, address, seller_type
              FROM sellers
-             WHERE seller_type = 'MATERIAL_SUPPLIER' AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL
+             WHERE (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL
              ORDER BY company, name"
         );
-        $hsnCodes = Database::fetchAll("SELECT * FROM hsn_codes ORDER BY hsn_code ASC");
+        $masterProducts = Database::fetchAll(
+            "SELECT id, name, code, catalog_code, product_code, brand_id, category_id, subcategory_id
+             FROM products
+             WHERE is_active = 1
+             ORDER BY name ASC"
+        );
+        $masterVariants = Database::fetchAll(
+            "SELECT pv.id, pv.product_id, pv.variant_code, pv.sku, pv.mrp, pv.purchase_price,
+                    pv.production_cost, pv.selling_price, pv.weight,
+                    s.name AS size_name, c.name AS color_name, d.name AS design_name
+             FROM product_variants pv
+             LEFT JOIN sizes s ON pv.size_id = s.id
+             LEFT JOIN colors c ON pv.color_id = c.id
+             LEFT JOIN designs d ON pv.design_id = d.id
+             WHERE pv.is_active = 1
+             ORDER BY pv.id ASC"
+        );
+        $sizes = Database::fetchAll(
+            "SELECT id, name, code FROM sizes WHERE is_active = 1 ORDER BY sort_order ASC, name ASC"
+        );
+        $colors = Database::fetchAll(
+            "SELECT id, name, hex_code FROM colors WHERE is_active = 1 ORDER BY name ASC"
+        );
+        $hsnCodes = Database::fetchAll("SELECT id, hsn_code, description, gst_rate FROM hsn_codes ORDER BY hsn_code ASC");
+
         Response::view('production.purchases.create', [
-            'pageTitle' => 'Record Production Purchase',
-            'activeModule' => 'production',
-            'activeMenu' => 'prod-purchases',
+            'pageTitle' => 'Record Purchase',
+            'activeModule' => 'purchases',
+            'activeMenu' => 'purchases-create',
             'sellers' => $sellers,
+            'masterProducts' => $masterProducts,
+            'masterVariants' => $masterVariants,
+            'sizes' => $sizes,
+            'colors' => $colors,
             'hsnCodes' => $hsnCodes,
             'breadcrumb' => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
-                ['label' => 'Purchases', 'url' => url('production/purchases')],
+                ['label' => 'Purchases', 'url' => url('purchases')],
                 ['label' => 'Record Purchase'],
             ],
         ]);
@@ -2016,8 +2104,8 @@ class ProductionController {
 
         $sellerId = (int)($_POST['seller_id'] ?? 0);
         $seller = Database::fetchOne(
-            "SELECT id, name, company FROM sellers
-             WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL",
+            "SELECT id, name, company, seller_type FROM sellers
+             WHERE id = ? AND production_deleted_at IS NULL",
             [$sellerId]
         );
         if (!$seller) {
@@ -2032,6 +2120,11 @@ class ProductionController {
             Session::flash('error', 'Enter a valid purchase date.');
             Response::back();
             return;
+        }
+
+        $purchaseType = strtoupper(trim((string)($_POST['purchase_type'] ?? 'FABRIC_ROLL')));
+        if (!in_array($purchaseType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+            $purchaseType = 'FABRIC_ROLL';
         }
 
         $submittedItems = [];
@@ -2050,17 +2143,22 @@ class ProductionController {
         if (!is_array($submittedItems)) {
             $submittedItems = [];
         }
+
         $items = [];
-        $allowedUnits = ['PCS', 'KG', 'METRE', 'LITRE', 'BOX', 'PACK', 'PAIR', 'SET', 'BUNDLE'];
         $fabricDescription = mb_strtoupper(trim((string)($_POST['fabric_description'] ?? '')));
         $calculateTaxAmount = static function (float $base, string $mode, float $value): float {
             return round($mode === 'AMOUNT' ? $value : ($base * $value / 100), 2);
         };
+
         foreach ($submittedItems as $index => $submitted) {
             if (!is_array($submitted)) {
                 continue;
             }
-            $type = strtoupper(trim((string)($submitted['item_type'] ?? '')));
+            $itemType = strtoupper(trim((string)($submitted['item_type'] ?? $purchaseType)));
+            if (!in_array($itemType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT', 'GENERAL_SUPPLY'], true)) {
+                $itemType = $purchaseType;
+            }
+
             $quantityInput = $submitted['quantity'] ?? null;
             $unitPriceInput = $submitted['unit_price'] ?? null;
             $quantity = is_numeric($quantityInput) ? (float)$quantityInput : 0;
@@ -2069,11 +2167,13 @@ class ProductionController {
             $taxMode = strtoupper(trim((string)($submitted['tax_mode'] ?? 'PERCENT')));
             $taxInput = $submitted['tax_value'] ?? '0';
             $cgstTaxInput = $submitted['cgst_tax_value'] ?? '0';
-            if (!in_array($type, ['FABRIC_ROLL', 'GENERAL_SUPPLY'], true) || $quantity <= 0 || $unitPrice < 0) {
-                Session::flash('error', 'Each purchase line needs a valid item type, quantity, and non-negative price.');
+
+            if ($quantity <= 0 || $unitPrice < 0) {
+                Session::flash('error', 'Each purchase line needs a valid positive quantity and non-negative price.');
                 Response::back();
                 return;
             }
+
             if (!in_array($gstType, ['SGST', 'IGST', 'CGST', 'BOTH', 'EXEMPTED'], true)
                 || !in_array($taxMode, ['PERCENT', 'AMOUNT'], true)
                 || !is_numeric($taxInput) || (float)$taxInput < 0
@@ -2085,16 +2185,19 @@ class ProductionController {
                 Response::back();
                 return;
             }
+
             $taxValue = $gstType === 'EXEMPTED' ? 0.0 : (float)$taxInput;
             $cgstTaxValue = $gstType === 'BOTH' ? (float)$cgstTaxInput : 0.0;
 
-            if ($type === 'FABRIC_ROLL') {
+            // 1. FABRIC ROLL TYPE
+            if ($itemType === 'FABRIC_ROLL') {
                 $rollNumber = mb_strtoupper(trim((string)($submitted['roll_number'] ?? '')));
                 $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
                 $color = mb_strtoupper(trim((string)($submitted['color'] ?? '')));
                 $design = mb_strtoupper(trim((string)($submitted['design_name'] ?? '')));
                 $designCount = (int)($submitted['design_count'] ?? 0);
                 $weight = (float)($submitted['weight_kg'] ?? 0);
+
                 if ($fabricDescription === '' || mb_strlen($fabricDescription) > 150
                     || $rollNumber === '' || mb_strlen($rollNumber) > 50
                     || $color === '' || mb_strlen($color) > 100
@@ -2114,11 +2217,20 @@ class ProductionController {
                     : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
                 $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
                 $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+
                 $items[] = [
-                    'type' => $type, 'item_name' => $fabricDescription, 'quantity' => $quantity,
-                    'unit' => 'PCS', 'weight' => $weight, 'unit_price' => $unitPrice,
+                    'type' => 'FABRIC_ROLL',
+                    'item_name' => $fabricDescription,
+                    'quantity' => $quantity,
+                    'unit' => 'PCS',
+                    'weight' => $weight,
+                    'unit_price' => $unitPrice,
+                    'mrp' => 0.0,
+                    'selling_price' => 0.0,
                     'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
-                    'gst_type' => $gstType, 'tax_mode' => $taxMode, 'tax_value' => $taxValue,
+                    'gst_type' => $gstType,
+                    'tax_mode' => $taxMode,
+                    'tax_value' => $taxValue,
                     'cgst_tax_value' => $cgstTaxValue,
                     'tax_amount' => $taxAmount,
                     'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
@@ -2128,26 +2240,184 @@ class ProductionController {
                     'cgst_amount' => $cgstAmount,
                     'igst_amount' => $igstAmount,
                     'line_total' => $baseTotal + $taxAmount,
-                    'roll_number' => $rollNumber, 'color' => $color,
-                    'design_name' => $design, 'design_count' => $designCount,
-                    'form_index' => (string)$index, 'photo_url' => null,
+                    'roll_number' => $rollNumber,
+                    'color' => $color,
+                    'size' => null,
+                    'design_name' => $design,
+                    'design_count' => $designCount,
+                    'product_code' => $rollNumber,
+                    'vendor_sku' => null,
+                    'product_id' => null,
+                    'variant_id' => null,
+                    'is_mapped' => 1,
+                    'form_index' => (string)$index,
+                    'photo_url' => null,
                 ];
                 continue;
             }
 
+            // 2. THIRD-PARTY PRODUCTS TYPE (NO Category/Attributes required on purchase entry)
+            if ($itemType === 'THIRD_PARTY') {
+                $itemName = trim((string)($submitted['item_name'] ?? ''));
+                $vendorSku = trim((string)($submitted['vendor_sku'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? ''));
+                $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
+                $mrp = (float)($submitted['mrp'] ?? 0);
+                $sellingPrice = (float)($submitted['selling_price'] ?? 0);
+                if ($sellingPrice <= 0 && $mrp > 0) {
+                    $sellingPrice = $mrp;
+                }
+
+                if ($itemName === '') {
+                    Session::flash('error', 'Third-party product lines require a product/item name.');
+                    Response::back();
+                    return;
+                }
+
+                $baseTotal = round($quantity * $unitPrice, 2);
+                $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
+                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
+                $cgstAmount = $gstType === 'CGST'
+                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
+                    : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
+                $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
+                $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+
+                $items[] = [
+                    'type' => 'THIRD_PARTY',
+                    'item_name' => $itemName,
+                    'quantity' => $quantity,
+                    'unit' => 'PCS',
+                    'weight' => null,
+                    'unit_price' => $unitPrice,
+                    'mrp' => $mrp,
+                    'selling_price' => $sellingPrice,
+                    'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
+                    'gst_type' => $gstType,
+                    'tax_mode' => $taxMode,
+                    'tax_value' => $taxValue,
+                    'cgst_tax_value' => $cgstTaxValue,
+                    'tax_amount' => $taxAmount,
+                    'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
+                    'cgst_value' => $gstType === 'CGST' ? $taxValue : $cgstTaxValue,
+                    'igst_value' => $gstType === 'IGST' ? $taxValue : 0,
+                    'sgst_amount' => $sgstAmount,
+                    'cgst_amount' => $cgstAmount,
+                    'igst_amount' => $igstAmount,
+                    'line_total' => $baseTotal + $taxAmount,
+                    'roll_number' => null,
+                    'color' => $color !== '' ? $color : null,
+                    'size' => $size !== '' ? $size : null,
+                    'design_name' => null,
+                    'design_count' => null,
+                    'product_code' => $vendorSku !== '' ? $vendorSku : null,
+                    'vendor_sku' => $vendorSku !== '' ? $vendorSku : null,
+                    'product_id' => null,
+                    'variant_id' => null,
+                    'is_mapped' => 0, // Unmapped! Dedicated mapping module will assign category/attributes
+                    'form_index' => (string)$index,
+                    'photo_url' => null,
+                ];
+                continue;
+            }
+
+            // 3. OWN PRODUCTION PRODUCTS TYPE
+            if ($itemType === 'OWN_PRODUCT') {
+                $productId = (int)($submitted['product_id'] ?? 0);
+                $variantId = (int)($submitted['variant_id'] ?? 0);
+                $itemName = trim((string)($submitted['item_name'] ?? ''));
+                $productCode = trim((string)($submitted['product_code'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? ''));
+                $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
+                $mrp = (float)($submitted['mrp'] ?? 0);
+                $sellingPrice = (float)($submitted['selling_price'] ?? 0);
+
+                if ($productId > 0) {
+                    $prod = Database::fetchOne("SELECT name, code FROM products WHERE id = ?", [$productId]);
+                    if ($prod) {
+                        if ($itemName === '') $itemName = $prod['name'];
+                        if ($productCode === '') $productCode = $prod['code'];
+                    }
+                }
+                if ($variantId > 0) {
+                    $var = Database::fetchOne(
+                        "SELECT pv.sku, pv.mrp, pv.selling_price, s.name AS size_name, c.name AS color_name
+                         FROM product_variants pv
+                         LEFT JOIN sizes s ON pv.size_id = s.id
+                         LEFT JOIN colors c ON pv.color_id = c.id
+                         WHERE pv.id = ?",
+                        [$variantId]
+                    );
+                    if ($var) {
+                        if ($size === '' && !empty($var['size_name'])) $size = $var['size_name'];
+                        if ($color === '' && !empty($var['color_name'])) $color = $var['color_name'];
+                        if ($productCode === '' && !empty($var['sku'])) $productCode = $var['sku'];
+                        if ($mrp <= 0 && (float)$var['mrp'] > 0) $mrp = (float)$var['mrp'];
+                        if ($sellingPrice <= 0 && (float)$var['selling_price'] > 0) $sellingPrice = (float)$var['selling_price'];
+                    }
+                }
+
+                if ($itemName === '') {
+                    Session::flash('error', 'Own production product lines require a product or style selection.');
+                    Response::back();
+                    return;
+                }
+
+                $baseTotal = round($quantity * $unitPrice, 2);
+                $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
+                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
+                $cgstAmount = $gstType === 'CGST'
+                    ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue)
+                    : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
+                $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
+                $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+
+                $items[] = [
+                    'type' => 'OWN_PRODUCT',
+                    'item_name' => $itemName,
+                    'quantity' => $quantity,
+                    'unit' => 'PCS',
+                    'weight' => null,
+                    'unit_price' => $unitPrice,
+                    'mrp' => $mrp,
+                    'selling_price' => $sellingPrice,
+                    'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
+                    'gst_type' => $gstType,
+                    'tax_mode' => $taxMode,
+                    'tax_value' => $taxValue,
+                    'cgst_tax_value' => $cgstTaxValue,
+                    'tax_amount' => $taxAmount,
+                    'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
+                    'cgst_value' => $gstType === 'CGST' ? $taxValue : $cgstTaxValue,
+                    'igst_value' => $gstType === 'IGST' ? $taxValue : 0,
+                    'sgst_amount' => $sgstAmount,
+                    'cgst_amount' => $cgstAmount,
+                    'igst_amount' => $igstAmount,
+                    'line_total' => $baseTotal + $taxAmount,
+                    'roll_number' => null,
+                    'color' => $color !== '' ? $color : null,
+                    'size' => $size !== '' ? $size : null,
+                    'design_name' => null,
+                    'design_count' => null,
+                    'product_code' => $productCode !== '' ? $productCode : null,
+                    'vendor_sku' => null,
+                    'product_id' => $productId > 0 ? $productId : null,
+                    'variant_id' => $variantId > 0 ? $variantId : null,
+                    'is_mapped' => 1,
+                    'form_index' => (string)$index,
+                    'photo_url' => null,
+                ];
+                continue;
+            }
+
+            // 4. GENERAL SUPPLY FALLBACK
             $productCode = trim((string)($submitted['product_code'] ?? ''));
             $itemName = trim((string)($submitted['item_name'] ?? ''));
             $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
-            $unit = strtoupper(trim((string)($submitted['unit'] ?? '')));
-            if ($unit === 'OTHER') {
-                $unit = strtoupper(trim((string)($submitted['custom_unit'] ?? '')));
-            }
-            if ($itemName === '' || mb_strlen($itemName) > 255 || $unit === '' || mb_strlen($unit) > 30
-                || (!in_array($unit, $allowedUnits, true) && strtoupper(trim((string)($submitted['unit'] ?? ''))) !== 'OTHER')) {
-                Session::flash('error', 'General supply lines require an item name and a valid unit.');
-                Response::back();
-                return;
-            }
+            $unit = strtoupper(trim((string)($submitted['unit'] ?? 'PCS')));
+
             $baseTotal = round($quantity * $unitPrice, 2);
             $sgstAmount = in_array($gstType, ['SGST', 'BOTH'], true)
                 ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
@@ -2156,12 +2426,20 @@ class ProductionController {
                 : ($gstType === 'BOTH' ? $calculateTaxAmount($baseTotal, $taxMode, $cgstTaxValue) : 0.0);
             $igstAmount = $gstType === 'IGST' ? $calculateTaxAmount($baseTotal, $taxMode, $taxValue) : 0.0;
             $taxAmount = $sgstAmount + $cgstAmount + $igstAmount;
+
             $items[] = [
-                'type' => $type, 'item_name' => mb_strtoupper($itemName), 'quantity' => $quantity,
-                'unit' => $unit, 'weight' => null, 'unit_price' => $unitPrice,
+                'type' => 'GENERAL_SUPPLY',
+                'item_name' => mb_strtoupper($itemName),
+                'quantity' => $quantity,
+                'unit' => $unit,
+                'weight' => null,
+                'unit_price' => $unitPrice,
+                'mrp' => 0.0,
+                'selling_price' => 0.0,
                 'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
-                'product_code' => $productCode !== '' ? mb_strtoupper($productCode) : null,
-                'gst_type' => $gstType, 'tax_mode' => $taxMode, 'tax_value' => $taxValue,
+                'gst_type' => $gstType,
+                'tax_mode' => $taxMode,
+                'tax_value' => $taxValue,
                 'cgst_tax_value' => $cgstTaxValue,
                 'tax_amount' => $taxAmount,
                 'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
@@ -2170,8 +2448,19 @@ class ProductionController {
                 'sgst_amount' => $sgstAmount,
                 'cgst_amount' => $cgstAmount,
                 'igst_amount' => $igstAmount,
-                'line_total' => $baseTotal + $taxAmount, 'roll_number' => $productCode !== '' ? mb_strtoupper($productCode) : null,
-                'color' => null, 'design_name' => null, 'design_count' => null, 'photo_url' => null,
+                'line_total' => $baseTotal + $taxAmount,
+                'roll_number' => $productCode !== '' ? mb_strtoupper($productCode) : null,
+                'color' => null,
+                'size' => null,
+                'design_name' => null,
+                'design_count' => null,
+                'product_code' => $productCode !== '' ? mb_strtoupper($productCode) : null,
+                'vendor_sku' => null,
+                'product_id' => null,
+                'variant_id' => null,
+                'is_mapped' => 1,
+                'form_index' => (string)$index,
+                'photo_url' => null,
             ];
         }
 
@@ -2225,9 +2514,9 @@ class ProductionController {
             $temporaryNumber = 'TMP-PP-' . bin2hex(random_bytes(12));
             Database::execute(
                 "INSERT INTO production_purchases
-                    (purchase_number, seller_id, purchase_date, invoice_number, document_url, notes, total_amount, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [$temporaryNumber, $sellerId, $purchaseDate, $invoiceNumber !== '' ? $invoiceNumber : null,
+                    (purchase_number, purchase_type, seller_id, purchase_date, invoice_number, document_url, notes, total_amount, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [$temporaryNumber, $purchaseType, $sellerId, $purchaseDate, $invoiceNumber !== '' ? $invoiceNumber : null,
                     $documentUrl, $notes !== '' ? $notes : null, $totalAmount, $userId ?: null]
             );
             $purchaseId = (int)Database::lastInsertId();
@@ -2244,10 +2533,8 @@ class ProductionController {
 
             self::ensureDatabaseSchema();
             $hasRollHsn = false;
-            $hasItemHsn = false;
             try {
                 $hasRollHsn = (bool)Database::fetchOne("SHOW COLUMNS FROM seller_rolls LIKE 'hsn_code'");
-                $hasItemHsn = (bool)Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'hsn_code'");
             } catch (\Throwable $e) {}
 
             $supplySeqIndex = 0;
@@ -2305,6 +2592,26 @@ class ProductionController {
                     if (isset($rollPhotoFiles[(string)$item['form_index']])) {
                         $rollPhotoTargets[(string)$item['form_index']] = $sellerRollId;
                     }
+                } elseif ($item['type'] === 'THIRD_PARTY') {
+                    $supplySeqIndex++;
+                    $tpPrefix = 'TP' . date('my', strtotime($purchaseDate));
+                    $tpCode = sprintf('%s%03d', $tpPrefix, $supplySeqIndex);
+                    $itemStartCode = $tpCode;
+                    $itemEndCode = $tpCode;
+                    $itemQrCode = $tpCode;
+                    if (empty($itemProductCode)) {
+                        $itemProductCode = $tpCode;
+                    }
+                } elseif ($item['type'] === 'OWN_PRODUCT') {
+                    $supplySeqIndex++;
+                    $opPrefix = 'OP' . date('my', strtotime($purchaseDate));
+                    $opCode = sprintf('%s%03d', $opPrefix, $supplySeqIndex);
+                    $itemStartCode = $opCode;
+                    $itemEndCode = $opCode;
+                    $itemQrCode = $opCode;
+                    if (empty($itemProductCode)) {
+                        $itemProductCode = $opCode;
+                    }
                 } else {
                     $supplySeqIndex++;
                     $spPrefix = 'SP' . date('my', strtotime($purchaseDate));
@@ -2312,7 +2619,6 @@ class ProductionController {
                     if (empty($itemProductCode)) {
                         $itemProductCode = 'OTH-' . sprintf('%03d', $supplySeqIndex);
                     }
-                    $item['roll_number'] = $itemProductCode;
                     $itemStartCode = $spCode;
                     $itemEndCode = $spCode;
                     $itemQrCode = $spCode;
@@ -2320,26 +2626,30 @@ class ProductionController {
 
                 Database::execute(
                     "INSERT INTO production_purchase_items
-                        (purchase_id, item_type, item_name, quantity, unit, weight_kg, unit_price, total_price,
+                        (purchase_id, item_type, item_name, product_id, variant_id, quantity, unit, weight_kg,
+                         unit_price, mrp, selling_price, total_price,
                          gst_type, tax_input_type, sgst_value, cgst_value, igst_value,
                          sgst_amount, cgst_amount, igst_amount,
-                         roll_number, color, design_name, design_count, seller_roll_id, hsn_code,
-                         product_code, start_code, end_code, qr_code)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    [$purchaseId, $item['type'], $item['item_name'], $item['quantity'], $item['unit'], $item['weight'],
-                        $item['unit_price'], $item['line_total'], $item['gst_type'], $item['tax_mode'],
-                        $item['sgst_value'], $item['cgst_value'], $item['igst_value'],
-                        $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'],
-                        $item['roll_number'], $item['color'],
-                        $item['design_name'], $item['design_count'], $sellerRollId, $item['hsn_code'],
-                        $itemProductCode, $itemStartCode, $itemEndCode, $itemQrCode]
+                         roll_number, color, size, design_name, design_count, seller_roll_id, hsn_code,
+                         product_code, vendor_sku, start_code, end_code, qr_code, is_mapped)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    [$purchaseId, $item['type'], $item['item_name'], $item['product_id'], $item['variant_id'],
+                     $item['quantity'], $item['unit'], $item['weight'],
+                     $item['unit_price'], $item['mrp'], $item['selling_price'], $item['line_total'],
+                     $item['gst_type'], $item['tax_mode'],
+                     $item['sgst_value'], $item['cgst_value'], $item['igst_value'],
+                     $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'],
+                     $item['roll_number'], $item['color'], $item['size'],
+                     $item['design_name'], $item['design_count'], $sellerRollId, $item['hsn_code'],
+                     $itemProductCode, $item['vendor_sku'], $itemStartCode, $itemEndCode, $itemQrCode, $item['is_mapped']]
                 );
             }
 
             Database::commit();
 
-            AuditService::log('production', 'CREATE', 'production_purchases', $purchaseId, null, [
+            AuditService::log('purchases', 'CREATE', 'production_purchases', $purchaseId, null, [
                 'purchase_number' => $purchaseNumber,
+                'purchase_type' => $purchaseType,
                 'seller_id' => $sellerId,
                 'total_amount' => $totalAmount,
                 'item_count' => count($items),
@@ -2361,18 +2671,18 @@ class ProductionController {
                                 [$photoUrl, $sellerRollId, $sellerId]
                             );
                         } catch (\Throwable $e) {
-                            error_log('Production purchase roll photo URL could not be saved: ' . $e->getMessage());
+                            error_log('Purchase roll photo URL could not be saved: ' . $e->getMessage());
                             $failedAttachmentCount++;
                         }
                     }
                 } catch (\Throwable $e) {
-                    error_log('Production purchase roll photo upload failed after purchase was saved: ' . $e->getMessage());
+                    error_log('Purchase roll photo upload failed: ' . $e->getMessage());
                     $failedAttachmentCount = count($rollPhotoFiles);
                 }
             }
             if ($documentFile) {
                 try {
-                    $documentUrl = CloudinaryService::upload($documentFile, 'grm_inventory/production/purchases', 'auto');
+                    $documentUrl = CloudinaryService::upload($documentFile, 'grm_inventory/purchases', 'auto');
                     if (!$documentUrl) {
                         $failedAttachmentCount++;
                     } else {
@@ -2382,23 +2692,244 @@ class ProductionController {
                         );
                     }
                 } catch (\Throwable $e) {
-                    error_log('Production purchase invoice upload failed after purchase was saved: ' . $e->getMessage());
+                    error_log('Purchase invoice upload failed: ' . $e->getMessage());
                     $failedAttachmentCount++;
                 }
             }
-            Session::flash('success', "Purchase {$purchaseNumber} recorded successfully.");
-            if ($failedAttachmentCount > 0) {
-                Session::flash('warning', "Purchase and roll data were saved, but {$failedAttachmentCount} attachment(s) could not be uploaded or linked.");
+
+            if ($purchaseType === 'THIRD_PARTY') {
+                Session::flash('success', "Purchase {$purchaseNumber} recorded successfully with " . count($items) . " third-party product(s). Map their categories and attributes in Third-Party Mapping.");
+            } else {
+                Session::flash('success', "Purchase {$purchaseNumber} recorded successfully.");
             }
-            Response::redirect(url('production/purchases'));
+            if ($failedAttachmentCount > 0) {
+                Session::flash('warning', "Purchase data saved, but {$failedAttachmentCount} attachment(s) could not be uploaded.");
+            }
+            Response::redirect(url('purchases'));
         } catch (\Throwable $e) {
             if (Database::inTransaction()) {
                 Database::rollback();
             }
-            error_log('Production purchase could not be saved: ' . $e->getMessage());
+            error_log('Purchase could not be saved: ' . $e->getMessage());
             Session::flash('error', 'Purchase could not be saved: ' . $e->getMessage());
             Response::back();
         }
+    }
+
+    /**
+     * Third-Party Product Mapping: List inwarded third-party items and their taxonomy mapping status.
+     */
+    public function thirdPartyMappingList(): void {
+        $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'unmapped';
+        $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
+        $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
+
+        $where = ["ppi.item_type = 'THIRD_PARTY'"];
+        $params = [];
+
+        if ($status === 'unmapped') {
+            $where[] = "ppi.is_mapped = 0";
+        } elseif ($status === 'mapped') {
+            $where[] = "ppi.is_mapped = 1";
+        }
+
+        if ($search !== '') {
+            $where[] = "(ppi.item_name LIKE ? OR ppi.vendor_sku LIKE ? OR pp.purchase_number LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
+            $term = '%' . $search . '%';
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+            $params[] = $term;
+        }
+
+        if ($categoryId > 0) {
+            $where[] = "ppi.mapped_category_id = ?";
+            $params[] = $categoryId;
+        }
+
+        $whereClause = implode(' AND ', $where);
+
+        $items = Database::fetchAll(
+            "SELECT ppi.id, ppi.purchase_id, ppi.item_name, ppi.vendor_sku, ppi.product_code,
+                    ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
+                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.mapped_category_id,
+                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
+                    ppi.mapped_at, ppi.mapped_by, ppi.created_at,
+                    pp.purchase_number, pp.purchase_date, pp.invoice_number,
+                    s.name AS seller_name, s.company AS seller_company,
+                    c.name AS category_name, sub.name AS subcategory_name, subsub.name AS sub_subcategory_name,
+                    u.full_name AS mapped_by_name
+             FROM production_purchase_items ppi
+             INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+             INNER JOIN sellers s ON s.id = pp.seller_id
+             LEFT JOIN categories c ON c.id = ppi.mapped_category_id
+             LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
+             LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
+             LEFT JOIN users u ON u.id = ppi.mapped_by
+             WHERE $whereClause
+             ORDER BY ppi.is_mapped ASC, ppi.id DESC",
+            $params
+        );
+
+        $metrics = Database::fetchOne(
+            "SELECT 
+                COUNT(*) AS total_items,
+                COUNT(CASE WHEN is_mapped = 0 THEN 1 END) AS unmapped_count,
+                COUNT(CASE WHEN is_mapped = 1 THEN 1 END) AS mapped_count,
+                COALESCE(SUM(quantity), 0) AS total_quantity
+             FROM production_purchase_items
+             WHERE item_type = 'THIRD_PARTY'"
+        );
+
+        $categories = Database::fetchAll(
+            "SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC"
+        );
+
+        Response::view('production.purchases.mapping', [
+            'pageTitle' => 'Third-Party Product Mapping',
+            'activeModule' => 'purchases',
+            'activeMenu' => 'purchases-mapping',
+            'items' => $items,
+            'metrics' => $metrics,
+            'categories' => $categories,
+            'status' => $status,
+            'search' => $search,
+            'categoryId' => $categoryId,
+            'breadcrumb' => [
+                ['label' => 'Purchases', 'url' => url('purchases')],
+                ['label' => 'Third-Party Product Mapping'],
+            ],
+        ]);
+    }
+
+    /**
+     * Third-Party Product Mapping: Save Category, Subcategory, Sub-subcategory, and Attributes.
+     */
+    public function saveThirdPartyMapping(): void {
+        if (!CSRF::validateRequest()) {
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => 'Invalid security token.'], 403);
+                return;
+            }
+            Session::flash('error', 'Invalid security token.');
+            Response::back();
+            return;
+        }
+
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+        $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
+        $subSubcategoryId = !empty($_POST['sub_subcategory_id']) ? (int)$_POST['sub_subcategory_id'] : null;
+        $rawAttributes = $_POST['attributes'] ?? [];
+
+        if ($itemId <= 0 || $categoryId <= 0) {
+            $msg = 'Please select a valid item and master category.';
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 422);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
+
+        $item = Database::fetchOne(
+            "SELECT id, item_name, item_type FROM production_purchase_items WHERE id = ? AND item_type = 'THIRD_PARTY'",
+            [$itemId]
+        );
+        if (!$item) {
+            $msg = 'Third-party purchase item not found.';
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 404);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
+
+        $category = Database::fetchOne("SELECT id, name FROM categories WHERE id = ?", [$categoryId]);
+        if (!$category) {
+            $msg = 'Selected category does not exist.';
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 422);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
+
+        $encodedAttributes = null;
+        if (!empty($rawAttributes)) {
+            $encodedAttributes = is_string($rawAttributes) ? $rawAttributes : json_encode($rawAttributes, JSON_UNESCAPED_UNICODE);
+        }
+
+        $userId = (int)(Session::get('user_id') ?? 0);
+
+        Database::execute(
+            "UPDATE production_purchase_items 
+             SET mapped_category_id = ?, 
+                 mapped_subcategory_id = ?, 
+                 mapped_sub_subcategory_id = ?, 
+                 mapped_attributes = ?, 
+                 is_mapped = 1, 
+                 mapped_at = NOW(), 
+                 mapped_by = ? 
+             WHERE id = ?",
+            [$categoryId, $subcategoryId, $subSubcategoryId, $encodedAttributes, $userId ?: null, $itemId]
+        );
+
+        AuditService::log('purchases', 'UPDATE', 'production_purchase_items', $itemId, null, [
+            'action' => 'third_party_product_mapping',
+            'category_id' => $categoryId,
+            'subcategory_id' => $subcategoryId,
+            'sub_subcategory_id' => $subSubcategoryId,
+        ]);
+
+        if (Request::isAjax()) {
+            Response::json([
+                'success' => true,
+                'message' => "Product '{$item['item_name']}' successfully mapped to {$category['name']}.",
+            ]);
+            return;
+        }
+
+        Session::flash('success', "Product '{$item['item_name']}' successfully mapped to {$category['name']}.");
+        Response::redirect(url('purchases/mapping'));
+    }
+
+    /**
+     * AJAX endpoint: Get details and current mapping for a specific third-party item.
+     */
+    public function ajaxGetThirdPartyItem(string $id): void {
+        $itemId = (int)$id;
+        $item = Database::fetchOne(
+            "SELECT ppi.id, ppi.purchase_id, ppi.item_name, ppi.vendor_sku, ppi.product_code,
+                    ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
+                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.mapped_category_id,
+                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
+                    pp.purchase_number, pp.purchase_date,
+                    s.name AS seller_name, s.company AS seller_company
+             FROM production_purchase_items ppi
+             INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+             INNER JOIN sellers s ON s.id = pp.seller_id
+             WHERE ppi.id = ? AND ppi.item_type = 'THIRD_PARTY'",
+            [$itemId]
+        );
+        if (!$item) {
+            Response::json(['success' => false, 'message' => 'Item not found.'], 404);
+            return;
+        }
+
+        $mappedAttributes = [];
+        if (!empty($item['mapped_attributes'])) {
+            $mappedAttributes = json_decode($item['mapped_attributes'], true) ?: [];
+        }
+        $item['parsed_attributes'] = $mappedAttributes;
+
+        Response::json(['success' => true, 'item' => $item]);
     }
 
     public function deleteSellerRoll(string $id): void {
@@ -4029,7 +4560,7 @@ class ProductionController {
             'resolutionType' => $resolutionType,
             'damageReasons'  => $damageReasons,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Damages'],
             ],
         ]);
@@ -4791,7 +5322,7 @@ class ProductionController {
             }
             $successMessage = "Damage record #{$damage['damage_number']} updated successfully. Status: {$status}";
             if ($isReplacement) {
-                $successMessage .= " Replacement roll {$replacementRollNumber} is available in Production Purchases ({$purchaseNumber}).";
+                $successMessage .= " Replacement roll {$replacementRollNumber} is available in Purchases ({$purchaseNumber}).";
             }
             Session::flash('success', $successMessage);
             Response::redirect(url($isReplacement ? 'production/purchases' : 'production/damages'));
@@ -5285,7 +5816,7 @@ class ProductionController {
             'categoryId'     => $categoryId,
             'subcategoryId'  => $subcategoryId,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Catalog'],
             ],
         ]);
@@ -5313,7 +5844,7 @@ class ProductionController {
             'hsnCodes'      => $hsnCodes,
             'suggestedCode' => $suggestedCode,
             'breadcrumb'    => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Catalog', 'url' => url('production/catalog')],
                 ['label' => 'Add Style Form'],
             ],
@@ -5600,7 +6131,7 @@ class ProductionController {
             'variants'     => $variants,
             'programs'     => $programs,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Catalog', 'url' => url('production/catalog')],
                 ['label' => $product['code']],
             ],
@@ -5676,7 +6207,7 @@ class ProductionController {
             'colors'           => $colors,
             'hsnCodes'         => Database::fetchAll("SELECT * FROM hsn_codes ORDER BY hsn_code ASC"),
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Catalog', 'url' => url('production/catalog')],
                 ['label' => 'Edit ' . $product['code']],
             ],
@@ -6982,7 +7513,7 @@ class ProductionController {
             'filters'          => $filters,
             'scopedUnitId'     => $scopedUnitId,
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Programs'],
             ],
         ]);
@@ -7239,7 +7770,7 @@ class ProductionController {
             'scopedUnitId'           => $scopedUnitId,
             'suggestedProgramNumber' => $suggestedProgramNumber,
             'breadcrumb'             => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Programs', 'url' => url('production/programs')],
                 ['label' => 'Create Program'],
             ],
@@ -7559,7 +8090,7 @@ class ProductionController {
             'users'               => $users,
             'scopedUnitId'        => $scopedUnitId,
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Programs', 'url' => url('production/programs')],
                 ['label' => $program['program_number'], 'url' => url('production/programs/view/' . $id)],
                 ['label' => 'Edit'],
@@ -7792,7 +8323,7 @@ class ProductionController {
             'activeMenu'   => 'programs',
             'programRolls' => $programRolls,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Programs', 'url' => url('production/programs')],
                 ['label' => $timeline['program']['program_number']],
             ],
@@ -7880,7 +8411,7 @@ class ProductionController {
             'filters'         => $filters,
             'scopedUnitId'    => $scopedUnitId,
             'breadcrumb'      => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Cutting'],
             ],
         ]);
@@ -7985,11 +8516,13 @@ class ProductionController {
 
         if ($product) {
             $pvRows = Database::fetchAll(
-                "SELECT pv.*, s.name as size_name, s.code as size_code, c.name as color_name, c.hex_code as color_hex
+                "SELECT pv.*, s.name as size_name, s.code as size_code, c.name as color_name, c.hex_code as color_hex, d.name as design_name, d.code as design_code
                  FROM product_variants pv
                  LEFT JOIN sizes s ON pv.size_id = s.id
                  LEFT JOIN colors c ON pv.color_id = c.id
-                 WHERE pv.product_id = ? AND pv.is_active = 1",
+                 LEFT JOIN designs d ON pv.design_id = d.id
+                 WHERE pv.product_id = ? AND pv.is_active = 1
+                 ORDER BY pv.id ASC",
                 [$product['id']]
             );
 
@@ -8411,15 +8944,19 @@ class ProductionController {
     }
 
     public function ajaxCatalogVariants(): void {
+        $productId = !empty($_GET['product_id']) ? (int)$_GET['product_id'] : null;
         $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : null;
         $subcategoryId = !empty($_GET['subcategory_id']) ? (int)$_GET['subcategory_id'] : null;
         $subSubcategoryId = !empty($_GET['sub_subcategory_id']) ? (int)$_GET['sub_subcategory_id'] : null;
         $rollId = !empty($_GET['roll_id']) ? (int)$_GET['roll_id'] : null;
         $programId = !empty($_GET['program_id']) ? (int)$_GET['program_id'] : null;
 
-        // Resolve product matching hierarchy
+        // Resolve product matching ID or hierarchy
         $product = null;
-        if ($subSubcategoryId) {
+        if ($productId) {
+            $product = Database::fetchOne("SELECT * FROM products WHERE id = ?", [$productId]);
+        }
+        if (!$product && $subSubcategoryId) {
             $product = Database::fetchOne("SELECT * FROM products WHERE sub_subcategory_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1", [$subSubcategoryId]);
         }
         if (!$product && $subcategoryId) {
@@ -8510,11 +9047,13 @@ class ProductionController {
 
         if ($product) {
             $pvRows = Database::fetchAll(
-                "SELECT pv.*, s.name as size_name, s.code as size_code, c.name as color_name, c.hex_code as color_hex
+                "SELECT pv.*, s.name as size_name, s.code as size_code, c.name as color_name, c.hex_code as color_hex, d.name as design_name, d.code as design_code
                  FROM product_variants pv
                  LEFT JOIN sizes s ON pv.size_id = s.id
                  LEFT JOIN colors c ON pv.color_id = c.id
-                 WHERE pv.product_id = ? AND pv.is_active = 1",
+                 LEFT JOIN designs d ON pv.design_id = d.id
+                 WHERE pv.product_id = ? AND pv.is_active = 1
+                 ORDER BY pv.id ASC",
                 [$product['id']]
             );
 
@@ -8599,12 +9138,23 @@ class ProductionController {
             }
         }
 
+        if ($productId && !empty($pvRows)) {
+            $variants = $pvRows;
+        }
+
         Response::json([
             'success'     => true,
+            'status'      => 'success',
             'product'     => $product,
             'sizes'       => $parsedSizes,
             'colors'      => $parsedColors,
             'variants'    => $variants,
+            'data'        => [
+                'product'  => $product,
+                'variants' => $variants,
+                'sizes'    => $parsedSizes,
+                'colors'   => $parsedColors,
+            ],
             'seller_name' => $sellerName,
         ]);
     }
@@ -8679,7 +9229,7 @@ class ProductionController {
             'scopedUnitId'         => $scopedUnitId,
             'suggestedBatchNumber' => $suggestedBatchNumber,
             'breadcrumb'           => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Cutting', 'url' => url('production/cutting')],
                 ['label' => 'New Cutting Batch'],
             ],
@@ -8952,7 +9502,7 @@ class ProductionController {
             'users'        => $users,
             'units'        => $units,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Cutting', 'url' => url('production/cutting')],
                 ['label' => $batch['batch_number']],
                 ['label' => 'Edit'],
@@ -9196,7 +9746,7 @@ class ProductionController {
             'filters'      => $filters,
             'scopedUnitId' => $scopedUnitId,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stitching'],
             ],
         ]);
@@ -9283,7 +9833,7 @@ class ProductionController {
             'items'                => $items,
             'users'                => $users,
             'breadcrumb'           => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stitching', 'url' => url('production/stitching')],
                 ['label' => 'New Stitching Batch'],
             ],
@@ -9571,7 +10121,7 @@ class ProductionController {
             'items'               => $items,
             'users'               => $users,
             'breadcrumb'          => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stitching', 'url' => url('production/stitching')],
                 ['label' => $batch['batch_number'] ?: ('Batch #' . $batch['id'])],
                 ['label' => 'Edit'],
@@ -9762,7 +10312,7 @@ class ProductionController {
             'batches'      => $batches,
             'filters'      => $filters,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Labels'],
             ],
         ]);
@@ -10467,7 +11017,7 @@ class ProductionController {
             'catalogSequences'     => $catalogSequences,
             'catalogHierarchy'     => $catalogHierarchy,
             'breadcrumb'           => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Labels', 'url' => url('production/labels')],
                 ['label' => 'New Label Batch'],
             ],
@@ -10669,7 +11219,7 @@ class ProductionController {
             'distinctCatalogs' => array_values($distinctCatalogs),
             'catalogSequences' => $catalogSequences,
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Labels', 'url' => url('production/labels')],
                 ['label' => $batch['batch_number']],
             ],
@@ -10778,7 +11328,7 @@ class ProductionController {
             'filters'      => $filters,
             'scopedUnitId' => $scopedUnitId,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Finished Batches'],
             ],
         ]);
@@ -11118,7 +11668,7 @@ class ProductionController {
             'includeRework'             => $includeRework ?? false,
             'totalQCRework'             => $totalQCRework ?? 0,
             'breadcrumb'                => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Batches', 'url' => url('production/batches')],
                 ['label' => 'Pack Batch'],
             ],
@@ -11463,7 +12013,7 @@ class ProductionController {
             'bill'         => $bill,
             'billItems'    => $billItems,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Batches', 'url' => url('production/batches')],
                 ['label' => $batch['batch_number'] ?? ('#' . $batchId)],
             ],
@@ -11599,7 +12149,7 @@ class ProductionController {
             'search'          => $search,
             'scopedUnitId'    => $scopedUnitId,
             'breadcrumb'      => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Outward Dispatch'],
             ],
         ]);
@@ -12109,7 +12659,7 @@ class ProductionController {
             ],
             'scopedUnitId'      => $scopedUnitId,
             'breadcrumb'        => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Rework from Warehouse'],
             ],
         ]);
@@ -12364,7 +12914,7 @@ class ProductionController {
             'filters'      => ['status' => $status, 'search' => $search],
             'scopedUnitId' => $scopedUnitId,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QC Inspections'],
             ],
         ]);
@@ -12539,7 +13089,7 @@ class ProductionController {
             'catalogHierarchy'  => $catalogHierarchy,
             'distinctCatalogs'  => array_values($distinctCatalogs),
             'breadcrumb'        => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QC Inspections', 'url' => url('production/qc')],
                 ['label' => 'New QC Inspection Batch'],
             ],
@@ -12866,7 +13416,7 @@ class ProductionController {
             'catalogHierarchy' => $catalogHierarchy,
             'distinctCatalogs' => array_values($distinctCatalogs),
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QC Inspections', 'url' => url('production/qc')],
                 ['label' => 'Inspect Batch #' . $batchId],
             ],
@@ -13667,7 +14217,7 @@ class ProductionController {
             'search'         => $search,
             'categoryFilter' => $categoryFilter,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QC Inspections', 'url' => url('production/qc')],
                 ['label' => 'Inventory'],
             ],
@@ -13960,7 +14510,7 @@ class ProductionController {
             'remainingValue'      => $remainingValue,
             'outwards'            => $outwards,
             'breadcrumb'          => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Inventory', 'url' => url('production/inventory')],
                 ['label' => 'QC Batch #' . $id],
             ],
@@ -14199,7 +14749,7 @@ class ProductionController {
             'outwards'            => $outwards,
             'mode'                => $mode,
             'breadcrumb'          => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Inventory', 'url' => url('production/inventory')],
                 ['label' => 'Supply Inward #' . $supplyItemId],
             ],
@@ -14250,7 +14800,7 @@ class ProductionController {
             'unitStats'     => $unitStats,
             'stageCounts'   => $stageCounts,
             'breadcrumb'    => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Analytics & Reports'],
             ],
         ]);
@@ -14379,7 +14929,7 @@ class ProductionController {
             'dateFrom'       => $dateFrom,
             'dateTo'         => $dateTo,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Wastage Selling'],
             ],
         ]);
@@ -15059,7 +15609,7 @@ class ProductionController {
             'dateFrom'         => $dateFrom,
             'dateTo'           => $dateTo,
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stitching Wastage'],
             ],
         ]);
@@ -15767,7 +16317,7 @@ class ProductionController {
             'dateFrom'       => $dateFrom,
             'dateTo'         => $dateTo,
             'breadcrumb'     => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Expenses'],
             ],
         ]);
@@ -16744,7 +17294,7 @@ class ProductionController {
             'activeModule' => 'production',
             'activeMenu'   => $activeMenu,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => $sectionTitle, 'url' => $backUrl],
                 ['label' => 'Details'],
             ],

@@ -698,6 +698,8 @@ class Role {
                     'production_purchases'      => ['name' => 'Purchases', 'icon' => 'bi-cart-check', 'desc' => 'Production fabric, yarn, raw material purchases and supplier invoices', 'department' => 'PRODUCTION'],
                     'damages'                   => ['name' => 'Damages', 'icon' => 'bi-exclamation-octagon', 'desc' => 'Defective fabric, floor damages, and scrap recovery logs', 'department' => 'PRODUCTION'],
                     'catalog'                   => ['name' => 'Catalog', 'icon' => 'bi-journal-bookmark', 'desc' => 'Design catalogs, style codes, and Bill of Materials (BOM)', 'department' => 'PRODUCTION'],
+                    'variants'                  => ['name' => 'Product Variants', 'icon' => 'bi-tags', 'desc' => 'Manage sellable variants, collision-safe Variant IDs, and SKUs', 'department' => 'PRODUCTION'],
+                    'qr_generation'             => ['name' => 'QR Generations', 'icon' => 'bi-qr-code', 'desc' => 'Generate bulk scannable thermal QR label batches', 'department' => 'PRODUCTION'],
                     'programs'                  => ['name' => 'Programs', 'icon' => 'bi-calendar-check', 'desc' => 'Cutting programs, size breakdowns, and work order releases', 'department' => 'PRODUCTION'],
                     'cutting'                   => ['name' => 'Cutting', 'icon' => 'bi-scissors', 'desc' => 'Roll laying, table cuts, cut piece counts, and bundle creation', 'department' => 'PRODUCTION'],
                     'wastage'                   => ['name' => 'Wastage Selling', 'icon' => 'bi-recycle', 'desc' => 'Fabric scrap selling tickets, scrap weights, and scrap invoices', 'department' => 'PRODUCTION'],
@@ -706,6 +708,8 @@ class Role {
                     'labels'                    => ['name' => 'Labels', 'icon' => 'bi-tag', 'desc' => 'Brand tags, care labels, barcode sticker print batches', 'department' => 'PRODUCTION'],
                     'qc'                        => ['name' => 'QC', 'icon' => 'bi-shield-check', 'desc' => 'AQL inspections, passed/failed piece audits, and rework queues', 'department' => 'PRODUCTION'],
                     'inventory'                 => ['name' => 'Inventory', 'icon' => 'bi-boxes', 'desc' => 'Unassigned lot staging bays and finished goods floor storage', 'department' => 'PRODUCTION'],
+                    'inward'                    => ['name' => 'Goods Inward (GRN)', 'icon' => 'bi-box-arrow-in-down', 'desc' => 'Inward finished goods from production units and suppliers', 'department' => 'PRODUCTION'],
+                    'stock_adjustments'         => ['name' => 'Stock Adjustments (QR)', 'icon' => 'bi-arrow-left-right', 'desc' => 'Scan QR to reconcile physical vs system stock balances', 'department' => 'PRODUCTION'],
                     'production_expenses'       => ['name' => 'Expenses', 'icon' => 'bi-currency-rupee', 'desc' => 'Machine maintenance, repair costs, threads, needles, and daily floor expenses', 'department' => 'PRODUCTION'],
                     'production_billing'        => ['name' => 'Billing', 'icon' => 'bi-receipt-cutoff', 'desc' => 'Production client orders, sales bills, GST invoicing, and payment receipts', 'department' => 'PRODUCTION'],
                     'production_returns'        => ['name' => 'Returns & Exchanges', 'icon' => 'bi-arrow-left-right', 'desc' => 'Production client customer returns, piece exchanges, and credit notes', 'department' => 'PRODUCTION'],
@@ -713,6 +717,8 @@ class Role {
                     'outward'                   => ['name' => 'Outward', 'icon' => 'bi-truck', 'desc' => 'Delivery challans and outward dispatch to Central Warehouses', 'department' => 'PRODUCTION'],
                     'production_stock_requests' => ['name' => 'Stock Requests', 'icon' => 'bi-inbox', 'desc' => 'Warehouse stock requisitions and production fulfillment requests', 'department' => 'PRODUCTION'],
                     'warehouse_rework'          => ['name' => 'Warehouse Rework', 'icon' => 'bi-tools', 'desc' => 'Repair and dispatch damaged warehouse goods', 'department' => 'PRODUCTION'],
+                    'asset_register'            => ['name' => 'Asset Register', 'icon' => 'bi-cpu', 'desc' => 'Plant machinery, stitching machines, cutters, and equipment records', 'department' => 'PRODUCTION'],
+                    'asset_maintenance'         => ['name' => 'Asset Maintenance', 'icon' => 'bi-wrench-adjustable-circle', 'desc' => 'Machinery service logs, technician repairs, and downtime tracking', 'department' => 'PRODUCTION'],
                 ]
             ],
                         'staff' => [

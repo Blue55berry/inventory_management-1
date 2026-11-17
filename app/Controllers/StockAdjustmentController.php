@@ -32,7 +32,7 @@ class StockAdjustmentController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-stock-adjustments',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stock Adjustments'],
             ],
             'adjustments'  => $adjustments,
@@ -58,7 +58,7 @@ class StockAdjustmentController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-stock-adjustments',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stock Adjustments', 'url' => url('production/stock-adjustments')],
                 ['label' => 'New Adjustment'],
             ],
@@ -185,7 +185,7 @@ class StockAdjustmentController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-stock-adjustments',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Stock Adjustments', 'url' => url('production/stock-adjustments')],
                 ['label' => $adjustment['adjustment_number']],
             ],

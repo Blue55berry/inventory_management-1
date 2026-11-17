@@ -4,37 +4,43 @@
  * Seeds all required module and submodule granular permissions into the database.
  */
 
-define('BASE_PATH', dirname(__DIR__));
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', dirname(__DIR__));
+}
 require_once BASE_PATH . '/config/app.php';
 require_once BASE_PATH . '/app/Helpers/Database.php';
 
-$seedSqlPath = BASE_PATH . '/database/seed.sql';
-$seedSql = file_get_contents($seedSqlPath);
-if ($seedSql === false) {
-    throw new RuntimeException("Unable to read the permission seed source: {$seedSqlPath}");
-}
-
-preg_match_all("/INSERT INTO `permissions`[^;]*?VALUES\\s*(.*?);/is", $seedSql, $permissionBlocks);
-if (empty($permissionBlocks[1])) {
-    throw new RuntimeException('No permission records were found in database/seed.sql.');
-}
-
 $definitions = [];
-foreach ($permissionBlocks[1] as $permissionBlock) {
-    preg_match_all(
-        "/\\(\\s*'\\d+'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,/s",
-        $permissionBlock,
-        $permissionRows,
-        PREG_SET_ORDER
-    );
-    foreach ($permissionRows as $permissionRow) {
-        $definitions[] = [
-            'module' => stripslashes($permissionRow[1]),
-            'action' => stripslashes($permissionRow[2]),
-            'desc' => stripslashes($permissionRow[3]),
-        ];
+
+$seedSqlPath = BASE_PATH . '/database/seed.sql';
+if (!file_exists($seedSqlPath) || strpos(file_get_contents($seedSqlPath), '`permissions`') === false) {
+    if (file_exists('C:/xampp/htdocs/testing/database/seed.sql')) {
+        $seedSqlPath = 'C:/xampp/htdocs/testing/database/seed.sql';
     }
 }
+
+if (file_exists($seedSqlPath)) {
+    $seedSql = file_get_contents($seedSqlPath);
+    preg_match_all("/INSERT INTO `permissions`[^;]*?VALUES\\s*(.*?);/is", $seedSql, $permissionBlocks);
+    if (!empty($permissionBlocks[1])) {
+        foreach ($permissionBlocks[1] as $permissionBlock) {
+            preg_match_all(
+                "/\\(\\s*'\\d+'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,\\s*'((?:\\\\\\\\.|[^'])*)'\\s*,/s",
+                $permissionBlock,
+                $permissionRows,
+                PREG_SET_ORDER
+            );
+            foreach ($permissionRows as $permissionRow) {
+                $definitions[] = [
+                    'module' => stripslashes($permissionRow[1]),
+                    'action' => stripslashes($permissionRow[2]),
+                    'desc' => stripslashes($permissionRow[3]),
+                ];
+            }
+        }
+    }
+}
+
 
 $definitions = array_merge($definitions, [
     ['module' => 'inventory', 'action' => 'delete', 'desc' => 'Delete an available Production inventory QR piece'],

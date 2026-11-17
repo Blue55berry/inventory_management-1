@@ -36,7 +36,7 @@ class QrGenerationController {
             'brands'       => $brands,
             'totalQrs'     => $totalQrs,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Code Generations'],
             ],
         ]);
@@ -68,7 +68,7 @@ class QrGenerationController {
             'designs'          => $designs,
             'sizes'            => $sizes,
             'breadcrumb'       => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Generations', 'url' => url('production/qr-generations')],
                 ['label' => 'Generate QR Labels'],
             ],
@@ -121,7 +121,7 @@ class QrGenerationController {
             'activeMenu'   => 'prod-qr-generation',
             'batch'        => $batch,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Generations', 'url' => url('production/qr-generations')],
                 ['label' => $batch['batch_code']],
             ],

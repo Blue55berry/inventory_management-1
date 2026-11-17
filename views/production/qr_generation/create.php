@@ -388,11 +388,17 @@ function onCatalogModeSelected() {
     fetch('<?= url("api/catalog/variants?product_id=") ?>' + prodId)
     .then(r => r.json())
     .then(res => {
-        if (res.status === 'success' && res.data && res.data.variants) {
-            res.data.variants.forEach(v => {
+        const variants = (res.data && res.data.variants) ? res.data.variants : (res.variants || []);
+        if (variants && variants.length > 0) {
+            variants.forEach(v => {
+                if (!v.id) return;
                 const opt = document.createElement('option');
                 opt.value = v.id;
-                opt.text = (v.sku || ('Variant #' + v.id)) + (v.size_name ? ' (' + v.size_name + ')' : '');
+                const vAttrs = [v.color_name, v.design_name, v.size_name].filter(Boolean).join(' · ');
+                const vCode = v.variant_code ? `[${v.variant_code}] ` : '';
+                opt.text = `${vCode}${v.sku || ('Variant #' + v.id)}${vAttrs ? ' (' + vAttrs + ')' : ''}`;
+                opt.dataset.sku = v.sku || '';
+                opt.dataset.variantCode = v.variant_code || '';
                 varSelect.appendChild(opt);
             });
         }

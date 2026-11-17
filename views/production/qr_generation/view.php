@@ -51,6 +51,15 @@
                     <strong class="text-success ms-2 fs-6">₹<?= number_format((float)$batch['selling_price'], 2) ?></strong>
                 </div>
             </div>
+            <?php if (!empty($batch['variant_id']) || !empty($batch['variant_code']) || !empty($batch['variant_sku'])): ?>
+            <div class="col-12 pt-3 border-top d-flex gap-3 flex-wrap align-items-center">
+                <span class="badge bg-primary fs-6 font-monospace">Variant ID: <?= e($batch['variant_code'] ?? ('V' . $batch['variant_id'])) ?></span>
+                <span class="badge bg-dark-subtle text-dark border font-monospace">SKU: <?= e($batch['variant_sku'] ?? '—') ?></span>
+                <?php if (!empty($batch['color_name'])): ?><span class="badge bg-light text-dark border">Color: <?= e($batch['color_name']) ?></span><?php endif; ?>
+                <?php if (!empty($batch['design_name'])): ?><span class="badge bg-light text-dark border">Design: <?= e($batch['design_name']) ?></span><?php endif; ?>
+                <?php if (!empty($batch['size_name'])): ?><span class="badge bg-light text-dark border">Size: <?= e($batch['size_name']) ?></span><?php endif; ?>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

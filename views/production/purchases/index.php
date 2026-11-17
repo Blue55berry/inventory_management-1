@@ -1,13 +1,41 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
-        <h2 class="mb-1"><i class="bi bi-bag-check me-2 text-primary"></i>Production Purchases</h2>
+        <h2 class="mb-1"><i class="bi bi-bag-check me-2 text-primary"></i>Purchases &amp; Procurement</h2>
+        <p class="text-muted small mb-0">Unified management for Fabric Rolls, Third-Party Goods, and Own Production finished goods inward.</p>
     </div>
-    <?php if (hasPermission('production_purchases', 'create') || hasPermission('sellers', 'create')): ?>
-        <a href="<?= url('production/purchases/create') ?>" class="btn btn-primary shadow-sm">
-            <i class="bi bi-plus-circle me-1"></i> Record Purchase
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-warning text-dark fw-semibold shadow-sm position-relative">
+            <i class="bi bi-diagram-3-fill me-1 text-warning"></i> Third-Party Mapping
+            <?php if (($unmappedThirdPartyCount ?? 0) > 0): ?>
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                    <?= number_format($unmappedThirdPartyCount) ?>
+                </span>
+            <?php endif; ?>
         </a>
-    <?php endif; ?>
+        <?php if (hasPermission('production_purchases', 'create') || hasPermission('sellers', 'create')): ?>
+            <a href="<?= url('purchases/create') ?>" class="btn btn-primary shadow-sm">
+                <i class="bi bi-plus-circle me-1"></i> Record Purchase
+            </a>
+        <?php endif; ?>
+    </div>
 </div>
+
+<?php if (($unmappedThirdPartyCount ?? 0) > 0): ?>
+    <div class="alert alert-warning border-warning-subtle d-flex align-items-center justify-content-between flex-wrap gap-3 p-3 mb-4 rounded-3 shadow-sm">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-2 bg-warning bg-opacity-25 rounded-circle text-warning fs-4">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+            </div>
+            <div>
+                <strong class="text-dark d-block"><?= number_format($unmappedThirdPartyCount) ?> Third-Party Product(s) Pending Category &amp; Attribute Mapping</strong>
+                <span class="small text-muted">Inwarded third-party products require taxonomy mapping to categories, subcategories, and custom attributes.</span>
+            </div>
+        </div>
+        <a href="<?= url('purchases/mapping') ?>" class="btn btn-warning text-dark fw-bold btn-sm shadow-sm">
+            <i class="bi bi-diagram-3 me-1"></i> Map Products Now
+        </a>
+    </div>
+<?php endif; ?>
 
 <?php
 $totalRollCount = count($fabricRollInventory);
@@ -19,36 +47,36 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Purchase Records</div>
-                <div class="fs-3 fw-bold text-dark"><?= number_format(count($purchases)) ?></div>
-                <div class="small text-muted">Inward purchase orders</div>
+                <div class="text-muted small text-uppercase fw-semibold">Total Purchases</div>
+                <div class="fs-3 fw-bold text-dark"><?= number_format((int)($metrics['total_count'] ?? count($purchases))) ?></div>
+                <div class="small text-muted">₹<?= number_format((float)$totalPurchaseValue, 2) ?> spend</div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Purchase Value</div>
-                <div class="fs-3 fw-bold text-success">₹<?= number_format((float)$totalPurchaseValue, 2) ?></div>
-                <div class="small text-muted">Total material spend</div>
+                <div class="text-muted small text-uppercase fw-semibold">Fabric Roll Purchases</div>
+                <div class="fs-3 fw-bold text-primary"><?= number_format((int)($metrics['fabric_roll_count'] ?? 0)) ?></div>
+                <div class="small text-muted"><?= number_format($totalRollCount) ?> rolls (<?= number_format($totalInwardQty) ?> Qty)</div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Inward Fabric Rolls</div>
-                <div class="fs-3 fw-bold text-primary"><?= number_format($totalRollCount) ?></div>
-                <div class="small text-muted"><?= number_format($totalInwardQty) ?> pieces / total qty</div>
+                <div class="text-muted small text-uppercase fw-semibold">Third-Party Purchases</div>
+                <div class="fs-3 fw-bold text-info"><?= number_format((int)($metrics['third_party_count'] ?? 0)) ?></div>
+                <div class="small text-muted"><?= number_format($unmappedThirdPartyCount ?? 0) ?> pending mapping</div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">General Supplies</div>
-                <div class="fs-3 fw-bold text-secondary"><?= number_format(count($supplyStock)) ?></div>
-                <div class="small text-muted">Non-fabric supply items</div>
+                <div class="text-muted small text-uppercase fw-semibold">Own Production Orders</div>
+                <div class="fs-3 fw-bold text-success"><?= number_format((int)($metrics['own_product_count'] ?? 0)) ?></div>
+                <div class="small text-muted">Internal finished goods</div>
             </div>
         </div>
     </div>
@@ -117,11 +145,17 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                     <i class="bi bi-receipt me-1 text-primary"></i> Purchase Orders &amp; Supplier Invoices
                 </h6>
                 <div class="small text-muted">
-                    Showing all recorded procurement orders in compact list format
+                    Showing all recorded procurement orders across all 3 inward types
                 </div>
             </div>
             <div class="d-flex gap-2 align-items-center">
-                <input type="text" id="purchasesSearchInput" class="form-control form-control-sm" placeholder="🔍 Search PO #, supplier, invoice..." style="width: 260px;" oninput="filterPurchasesTable(this.value)">
+                <div class="btn-group btn-group-sm me-2">
+                    <a href="<?= url('purchases') ?>" class="btn <?= empty($filterType) ? 'btn-primary' : 'btn-outline-secondary' ?>">All</a>
+                    <a href="<?= url('purchases?type=FABRIC_ROLL') ?>" class="btn <?= ($filterType === 'FABRIC_ROLL') ? 'btn-primary' : 'btn-outline-secondary' ?>">Rolls</a>
+                    <a href="<?= url('purchases?type=THIRD_PARTY') ?>" class="btn <?= ($filterType === 'THIRD_PARTY') ? 'btn-info text-white' : 'btn-outline-secondary' ?>">3rd-Party</a>
+                    <a href="<?= url('purchases?type=OWN_PRODUCT') ?>" class="btn <?= ($filterType === 'OWN_PRODUCT') ? 'btn-success' : 'btn-outline-secondary' ?>">Own Prod</a>
+                </div>
+                <input type="text" id="purchasesSearchInput" class="form-control form-control-sm" placeholder="🔍 Search PO #, supplier, invoice..." style="width: 240px;" oninput="filterPurchasesTable(this.value)">
             </div>
         </div>
 
@@ -131,9 +165,10 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                     <tr class="small text-uppercase text-secondary">
                         <th style="width: 45px;" class="text-center">#</th>
                         <th>Purchase / PO #</th>
+                        <th>Type</th>
                         <th>Date</th>
-                        <th>Supplier / Mill</th>
-                        <th>Inward Items &amp; Rolls</th>
+                        <th>Supplier / Vendor</th>
+                        <th>Inward Items &amp; Summary</th>
                         <th>Invoice #</th>
                         <th class="text-end">Total Amount (₹)</th>
                         <th class="text-center" style="width: 170px;">Actions</th>
@@ -141,19 +176,37 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                 </thead>
                 <tbody id="purchasesTableBody">
                 <?php if (empty($purchases)): ?>
-                    <tr><td colspan="8" class="text-center text-muted py-5">No purchases recorded yet.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted py-5">No purchases recorded yet.</td></tr>
                 <?php else: foreach ($purchases as $idx => $purchase): 
+                    $pType = $purchase['purchase_type'] ?? 'FABRIC_ROLL';
                     $rollItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'FABRIC_ROLL');
+                    $thirdPartyItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'THIRD_PARTY');
+                    $ownProductItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'OWN_PRODUCT');
                     $supplyItems = array_filter($purchase['items'] ?? [], fn($it) => ($it['item_type'] ?? '') === 'GENERAL_SUPPLY');
                     $rollItemCount = count($rollItems);
                     $rollQtySum = (int)array_sum(array_map(fn($it) => max(1, (int)($it['quantity'] ?? 1)), $rollItems));
                     $supplyCount = count($supplyItems);
                     $totalWeight = array_sum(array_column($rollItems, 'weight_kg'));
                 ?>
-                    <tr class="purchase-row" data-search="<?= strtolower(e($purchase['purchase_number'] . ' ' . ($purchase['company'] ?? '') . ' ' . ($purchase['seller_name'] ?? '') . ' ' . ($purchase['invoice_number'] ?? ''))) ?>">
+                    <tr class="purchase-row" data-search="<?= strtolower(e($purchase['purchase_number'] . ' ' . $pType . ' ' . ($purchase['company'] ?? '') . ' ' . ($purchase['seller_name'] ?? '') . ' ' . ($purchase['invoice_number'] ?? ''))) ?>">
                         <td class="text-center text-muted small fw-semibold"><?= $idx + 1 ?></td>
                         <td>
                             <strong class="font-monospace text-primary"><?= e($purchase['purchase_number']) ?></strong>
+                        </td>
+                        <td>
+                            <?php if ($pType === 'THIRD_PARTY'): ?>
+                                <span class="badge bg-info-subtle text-info border">
+                                    <i class="bi bi-box-seam me-1"></i>Third-Party
+                                </span>
+                            <?php elseif ($pType === 'OWN_PRODUCT'): ?>
+                                <span class="badge bg-success-subtle text-success border">
+                                    <i class="bi bi-building-check me-1"></i>Own Production
+                                </span>
+                            <?php else: ?>
+                                <span class="badge bg-primary-subtle text-primary border">
+                                    <i class="bi bi-layers-half me-1"></i>Fabric Roll
+                                </span>
+                            <?php endif; ?>
                         </td>
                         <td class="text-nowrap small text-dark">
                             <i class="bi bi-calendar3 me-1 text-muted"></i><?= e(formatDate($purchase['purchase_date'])) ?>
@@ -163,39 +216,71 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                             <small class="text-muted"><i class="bi bi-person me-1"></i><?= e($purchase['seller_name']) ?></small>
                         </td>
                         <td>
-                            <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
-                                <?php if ($rollItemCount > 0): ?>
-                                    <span class="badge bg-primary-subtle text-primary border fw-semibold">
-                                        <i class="bi bi-layers me-1"></i><?= $rollItemCount ?> <?= $rollItemCount === 1 ? 'Roll' : 'Rolls' ?><?php if ($rollQtySum > $rollItemCount): ?> (<?= $rollQtySum ?> Qty)<?php endif; ?>
+                            <?php if ($pType === 'THIRD_PARTY'): 
+                                $tpQtySum = (float)array_sum(array_column($thirdPartyItems, 'quantity'));
+                                $unmappedInThis = count(array_filter($thirdPartyItems, fn($it) => empty($it['is_mapped'])));
+                            ?>
+                                <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                    <span class="badge bg-info-subtle text-info border fw-semibold">
+                                        <i class="bi bi-box-seam me-1"></i><?= count($thirdPartyItems) ?> Product(s) (<?= number_format($tpQtySum) ?> Pcs)
                                     </span>
-                                    <span class="badge bg-light text-dark border">
-                                        <?= number_format($totalWeight, 2) ?> kg
-                                    </span>
-                                <?php endif; ?>
-                                <?php if ($supplyCount > 0): ?>
-                                    <span class="badge bg-secondary-subtle text-secondary border">
-                                        <i class="bi bi-box me-1"></i><?= $supplyCount ?> <?= $supplyCount === 1 ? 'Supply' : 'Supplies' ?>
-                                    </span>
-                                    <?php if (!empty($purchase['is_inwarded'])): ?>
-                                        <span class="badge bg-success-subtle text-success border border-success" title="Inwarded to inventory">
-                                            <i class="bi bi-check2-circle me-1"></i>Inwarded
+                                    <?php if ($unmappedInThis > 0): ?>
+                                        <a href="<?= url('purchases/mapping?search=' . urlencode($purchase['purchase_number'])) ?>" class="badge bg-warning-subtle text-warning border text-decoration-none" title="Map categories and attributes">
+                                            <i class="bi bi-exclamation-circle me-1"></i><?= $unmappedInThis ?> Unmapped
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="badge bg-success-subtle text-success border">
+                                            <i class="bi bi-check2-circle me-1"></i>Mapped
                                         </span>
                                     <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                            <?php if ($rollItemCount > 0): 
-                                $rollSummaryLabels = array_map(function($r) {
-                                    $name = $r['roll_number'] ?: ('Roll #' . $r['id']);
-                                    $qty = (int)($r['quantity'] ?? 1);
-                                    return $qty > 1 ? "{$name} ({$qty})" : $name;
-                                }, $rollItems);
-                            ?>
-                                <div class="small text-muted font-monospace text-truncate" style="max-width: 320px;" title="<?= e(implode(', ', $rollSummaryLabels)) ?>">
-                                    <?= e(implode(', ', array_slice($rollSummaryLabels, 0, 3))) ?>
-                                    <?php if (count($rollItems) > 3): ?>
-                                        <span class="text-secondary fw-normal font-sans">+<?= count($rollItems) - 3 ?> more</span>
+                                </div>
+                                <div class="small text-muted text-truncate" style="max-width: 320px;">
+                                    <?= e(implode(', ', array_slice(array_column($thirdPartyItems, 'item_name'), 0, 3))) ?>
+                                    <?php if (count($thirdPartyItems) > 3): ?>
+                                        <span class="text-secondary fw-normal">+<?= count($thirdPartyItems) - 3 ?> more</span>
                                     <?php endif; ?>
                                 </div>
+                            <?php elseif ($pType === 'OWN_PRODUCT'): 
+                                $opQtySum = (float)array_sum(array_column($ownProductItems, 'quantity'));
+                            ?>
+                                <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                    <span class="badge bg-success-subtle text-success border fw-semibold">
+                                        <i class="bi bi-building-check me-1"></i><?= count($ownProductItems) ?> Inward Line(s) (<?= number_format($opQtySum) ?> Pcs)
+                                    </span>
+                                </div>
+                                <div class="small text-muted text-truncate" style="max-width: 320px;">
+                                    <?= e(implode(', ', array_slice(array_column($ownProductItems, 'item_name'), 0, 3))) ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="d-flex align-items-center gap-1 flex-wrap mb-1">
+                                    <?php if ($rollItemCount > 0): ?>
+                                        <span class="badge bg-primary-subtle text-primary border fw-semibold">
+                                            <i class="bi bi-layers me-1"></i><?= $rollItemCount ?> <?= $rollItemCount === 1 ? 'Roll' : 'Rolls' ?><?php if ($rollQtySum > $rollItemCount): ?> (<?= $rollQtySum ?> Qty)<?php endif; ?>
+                                        </span>
+                                        <span class="badge bg-light text-dark border">
+                                            <?= number_format($totalWeight, 2) ?> kg
+                                        </span>
+                                    <?php endif; ?>
+                                    <?php if ($supplyCount > 0): ?>
+                                        <span class="badge bg-secondary-subtle text-secondary border">
+                                            <i class="bi bi-box me-1"></i><?= $supplyCount ?> <?= $supplyCount === 1 ? 'Supply' : 'Supplies' ?>
+                                        </span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($rollItemCount > 0): 
+                                    $rollSummaryLabels = array_map(function($r) {
+                                        $name = $r['roll_number'] ?: ('Roll #' . $r['id']);
+                                        $qty = (int)($r['quantity'] ?? 1);
+                                        return $qty > 1 ? "{$name} ({$qty})" : $name;
+                                    }, $rollItems);
+                                ?>
+                                    <div class="small text-muted font-monospace text-truncate" style="max-width: 320px;" title="<?= e(implode(', ', $rollSummaryLabels)) ?>">
+                                        <?= e(implode(', ', array_slice($rollSummaryLabels, 0, 3))) ?>
+                                        <?php if (count($rollItems) > 3): ?>
+                                            <span class="text-secondary fw-normal font-sans">+<?= count($rollItems) - 3 ?> more</span>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -216,29 +301,15 @@ $totalInwardQty = (int)array_sum(array_map(fn($r) => max(1, (int)($r['quantity']
                         <td class="text-center">
                             <div class="action-btns-group justify-content-center">
                                 <?php if (hasPermission('production_purchases', 'view') || hasPermission('sellers', 'view')): ?>
-                                    <a class="btn btn-action-icon btn-outline-info" href="<?= url('production/purchases/view/' . $purchase['id']) ?>" title="View PO Details">
+                                    <a class="btn btn-action-icon btn-outline-info" href="<?= url('purchases/view/' . $purchase['id']) ?>" title="View Purchase Details">
                                         <i class="bi bi-eye"></i>
                                     </a>
-                                    <a class="btn btn-action-icon btn-outline-primary" href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print PO Invoice">
+                                    <a class="btn btn-action-icon btn-outline-primary" href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Purchase Invoice">
                                         <i class="bi bi-printer"></i>
                                     </a>
-                                    <a class="btn btn-action-icon btn-dark" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Roll QR Labels (Select &amp; Print)">
-                                        <i class="bi bi-qr-code text-warning"></i>
-                                    </a>
-                                    <?php
-                                    $pHasSupplies = false;
-                                    if (!empty($purchase['items'])) {
-                                        foreach ($purchase['items'] as $pi) {
-                                            if (($pi['item_type'] ?? '') === 'GENERAL_SUPPLY') {
-                                                $pHasSupplies = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    ?>
-                                    <?php if ($pHasSupplies): ?>
-                                        <a class="btn btn-action-icon btn-outline-success" href="<?= url('production/purchases/supply-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Other Garment Supplies QR Labels">
-                                            <i class="bi bi-tags-fill"></i>
+                                    <?php if ($pType === 'FABRIC_ROLL'): ?>
+                                        <a class="btn btn-action-icon btn-dark" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Roll QR Labels">
+                                            <i class="bi bi-qr-code text-warning"></i>
                                         </a>
                                     <?php endif; ?>
                                 <?php endif; ?>

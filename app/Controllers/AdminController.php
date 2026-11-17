@@ -21,7 +21,7 @@ class AdminController {
     public function dashboard(): void {
         if (!hasPermission('dashboard', 'view')) {
             if (hasPermission('production', 'view') || hasPermission('cutting', 'view') || hasPermission('programs', 'view')) {
-                Response::redirect(url('production/dashboard'));
+                Response::redirect(url('purchases'));
                 return;
             }
             if (hasPermission('staff', 'view')) {
@@ -240,6 +240,13 @@ class AdminController {
 
         try {
             $id = User::create($_POST);
+
+            // Save explicitly checked custom permissions for this staff member
+            if (isset($_POST['permissions'])) {
+                $rawPerms = is_array($_POST['permissions']) ? array_filter($_POST['permissions']) : [];
+                User::savePermissions($id, $rawPerms);
+            }
+
             $newSnapshot = $this->prepareStaffSnapshot($_POST);
             AuditService::log('staff', 'create', 'users', $id, null, $newSnapshot);
             Response::redirect(url('admin/staff'), 'success', 'Staff member created successfully.');
@@ -384,6 +391,13 @@ class AdminController {
             $oldSnapshot = $this->prepareStaffSnapshot([], $oldStaff);
             $newSnapshot = $this->prepareStaffSnapshot($_POST, $oldStaff);
             User::update($staffId, $_POST);
+
+            // Sync explicitly checked custom permissions for this staff member
+            if (isset($_POST['permissions'])) {
+                $rawPerms = is_array($_POST['permissions']) ? array_filter($_POST['permissions']) : [];
+                User::savePermissions($staffId, $rawPerms);
+            }
+
             AuditService::log('staff', 'update', 'users', $staffId, $oldSnapshot, $newSnapshot);
             Response::redirect(url('admin/staff'), 'success', 'Staff member updated successfully.');
         } catch (Exception $e) {

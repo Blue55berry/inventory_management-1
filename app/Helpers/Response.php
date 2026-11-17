@@ -188,6 +188,21 @@ function csrf_field(): string {
 }
 
 /**
+ * CSRF token name global helper.
+ */
+function csrf_token(): string {
+    return '_csrf_token';
+}
+
+/**
+ * CSRF token value / hash global helper.
+ */
+function csrf_hash(): string {
+    require_once BASE_PATH . '/app/Helpers/CSRF.php';
+    return CSRF::token();
+}
+
+/**
  * Generate uploaded file URL.
  */
 function uploadUrl(?string $path = ''): string {
@@ -378,18 +393,43 @@ function hasPermission(string $module, ?string $action = null): bool {
             return true;
         }
     }
+    if ($module === 'purchases' || $module === 'production_purchases' || $module === 'third_party_mapping') {
+        if (in_array('production_purchases.' . $action, $userPermissions, true) || in_array('purchases.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
     if ($module === 'production_returns') {
         if (in_array('production_returns.' . $action, $userPermissions, true)) {
             return true;
         }
     }
-    if ($module === 'production_stock_requests') {
-        if (in_array('production_stock_requests.' . $action, $userPermissions, true) || in_array('stock_requests.' . $action, $userPermissions, true)) {
+    if ($module === 'production_stock_requests' || $module === 'stock_requests' || $module === 'stock_requirements') {
+        if (in_array('production_stock_requests.' . $action, $userPermissions, true) || in_array('stock_requests.' . $action, $userPermissions, true) || in_array('stock_adjustments.' . $action, $userPermissions, true) || in_array('inventory.' . $action, $userPermissions, true)) {
             return true;
         }
     }
     if ($module === 'asset_register' || $module === 'asset_dashboard') {
         if (in_array('assets.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
+    if ($module === 'qr_generations' || $module === 'qr_generation') {
+        if (in_array('qr_generation.' . $action, $userPermissions, true) || in_array('qr_generations.' . $action, $userPermissions, true) || in_array('catalog.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
+    if ($module === 'variants' || $module === 'product_variants') {
+        if (in_array('variants.' . $action, $userPermissions, true) || in_array('product_variants.' . $action, $userPermissions, true) || in_array('catalog.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
+    if ($module === 'inward' || $module === 'inwards') {
+        if (in_array('inward.' . $action, $userPermissions, true) || in_array('inventory.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
+    if ($module === 'stock_adjustments') {
+        if (in_array('stock_adjustments.' . $action, $userPermissions, true) || in_array('inventory.' . $action, $userPermissions, true)) {
             return true;
         }
     }

@@ -57,7 +57,7 @@ class VariantController {
             'sizes'         => $sizes,
             'stats'         => $stats,
             'breadcrumb'    => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Variants & QR Identities'],
             ],
         ]);
@@ -88,7 +88,7 @@ class VariantController {
             'sizes'                => $sizes,
             'suggestedVariantCode' => $suggestedVariantCode,
             'breadcrumb'           => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Variants', 'url' => url('production/variants')],
                 ['label' => 'Create Variant'],
             ],
@@ -144,7 +144,7 @@ class VariantController {
             'stock'        => $stock,
             'hasHistory'   => $hasHistory,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Variants', 'url' => url('production/variants')],
                 ['label' => $variant['variant_code'] ?? $variant['sku']],
             ],
@@ -176,7 +176,7 @@ class VariantController {
             'sizes'        => $sizes,
             'hasHistory'   => $hasHistory,
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Variants', 'url' => url('production/variants')],
                 ['label' => 'Edit ' . ($variant['variant_code'] ?? $variant['sku'])],
             ],
@@ -601,7 +601,7 @@ class VariantController {
             'subcategorySales'  => $subcategorySales,
             'batchStockSales'   => $batchStockSales,
             'breadcrumb'        => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Variants', 'url' => url('production/variants')],
                 ['label' => 'Reports'],
             ],

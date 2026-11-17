@@ -104,7 +104,7 @@ class AuthController {
         $defaultLanding = url('admin/dashboard');
         if (!hasPermission('dashboard', 'view') && !hasPermission('admin', 'view')) {
             $routesMap = [
-                'production.view'         => url('production/dashboard'),
+                'production.view'         => url('purchases'),
                 'sellers.view'            => url('production/sellers'),
                 'catalog.view'            => url('production/catalog'),
                 'programs.view'           => url('production/programs'),

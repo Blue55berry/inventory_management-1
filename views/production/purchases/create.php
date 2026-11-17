@@ -1,18 +1,18 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
-        <h2 class="mb-1"><i class="bi bi-bag-plus me-2 text-primary"></i>Record Production Purchase</h2>
-        </div>
-    <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
+        <h2 class="mb-1"><i class="bi bi-bag-plus me-2 text-primary"></i>Record Purchase</h2>
+    </div>
+    <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
 </div>
 
-<form method="POST" action="<?= url('production/purchases/store') ?>" enctype="multipart/form-data" id="productionPurchaseForm">
+<form method="POST" action="<?= url('purchases/store') ?>" enctype="multipart/form-data" id="productionPurchaseForm">
     <?= CSRF::field() ?>
     <div class="card shadow-sm border mb-4">
         <div class="card-header bg-white py-3"><h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Purchase &amp; Supplier Details</h5></div>
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-5">
-                    <label class="form-label required" for="purchaseSeller">Supplier *</label>
+                    <label class="form-label required" for="purchaseSeller">Supplier / Vendor *</label>
                     <select class="d-none" name="seller_id" id="purchaseSeller" required>
                         <option value="">-- Select registered supplier --</option>
                         <?php foreach ($sellers as $seller): ?>
@@ -119,6 +119,59 @@
         </div>
     </div>
 
+    <!-- 3-Type Inward Selector -->
+    <div class="card shadow-sm border mb-4">
+        <div class="card-header bg-white py-3">
+            <h5 class="mb-0 fw-bold"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Select Inward &amp; Purchase Type *</h5>
+            <small class="text-muted">Choose product entry method based on what is being received on this supplier invoice.</small>
+        </div>
+        <div class="card-body p-3">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="p-3 border rounded-3 h-100 cursor-pointer type-card active" id="cardTypeFabricRoll" onclick="switchPurchaseType('FABRIC_ROLL')">
+                        <div class="form-check p-0">
+                            <div class="d-flex align-items-center mb-1">
+                                <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioFabricRoll" value="FABRIC_ROLL" checked>
+                                <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioFabricRoll">
+                                    <i class="bi bi-layers-half text-primary me-1"></i> 1. Fabric Rolls (Roll Method)
+                                </label>
+                            </div>
+                            <small class="text-muted d-block ps-4">Add raw fabric rolls with RQ, weight, color, design, and thermal scannable QR tags.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded-3 h-100 cursor-pointer type-card" id="cardTypeThirdParty" onclick="switchPurchaseType('THIRD_PARTY')">
+                        <div class="form-check p-0">
+                            <div class="d-flex align-items-center mb-1">
+                                <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioThirdParty" value="THIRD_PARTY">
+                                <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioThirdParty">
+                                    <i class="bi bi-box-seam text-info me-1"></i> 2. Third-Party Products
+                                </label>
+                            </div>
+                            <small class="text-muted d-block ps-4">External vendor ready-to-sell goods (SKU, Size, Cost, MRP). <em>Mapping deferred</em>.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="p-3 border rounded-3 h-100 cursor-pointer type-card" id="cardTypeOwnProduct" onclick="switchPurchaseType('OWN_PRODUCT')">
+                        <div class="form-check p-0">
+                            <div class="d-flex align-items-center mb-1">
+                                <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioOwnProduct" value="OWN_PRODUCT">
+                                <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioOwnProduct">
+                                    <i class="bi bi-building-check text-success me-1"></i> 3. Own Production Products
+                                </label>
+                            </div>
+                            <small class="text-muted d-block ps-4">Finished goods inwarded from internal factory lines linked to Master Product Catalog.</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. FABRIC ROLL SECTION -->
+    <div id="sectionFabricRoll">
     <div class="card shadow-sm border mb-4">
         <div class="card-header bg-white py-3">
             <div class="row g-3 align-items-center">
@@ -142,6 +195,47 @@
                         <option value="100% COTTON 2X2 RIB KNIT (220 GSM)">
                         <option value="DENIM TWILL 12OZ INDIGO">
                         <option value="RAYON / VISCOSE PRINTED FABRIC">
+                    </datalist>
+                    <datalist id="sizeDataList">
+                        <option value="XS">
+                        <option value="S">
+                        <option value="M">
+                        <option value="L">
+                        <option value="XL">
+                        <option value="XXL">
+                        <option value="3XL">
+                        <option value="28">
+                        <option value="30">
+                        <option value="32">
+                        <option value="34">
+                        <option value="36">
+                        <option value="38">
+                        <option value="40">
+                        <option value="42">
+                        <option value="FREE SIZE">
+                        <?php foreach (($sizes ?? []) as $sz): ?>
+                            <option value="<?= e($sz['name'] ?? '') ?>">
+                        <?php endforeach; ?>
+                    </datalist>
+                    <datalist id="colorDataList">
+                        <option value="BLACK">
+                        <option value="WHITE">
+                        <option value="NAVY BLUE">
+                        <option value="ROYAL BLUE">
+                        <option value="RED">
+                        <option value="MAROON">
+                        <option value="OLIVE GREEN">
+                        <option value="BOTTLE GREEN">
+                        <option value="GREY / HEATHER">
+                        <option value="CHARCOAL">
+                        <option value="BEIGE">
+                        <option value="YELLOW">
+                        <option value="ORANGE">
+                        <option value="PINK">
+                        <option value="LAVENDER">
+                        <?php foreach (($colors ?? []) as $cl): ?>
+                            <option value="<?= e($cl['name'] ?? '') ?>">
+                        <?php endforeach; ?>
                     </datalist>
                     <small class="text-muted">Select a standard grade or enter a custom fabric name and GSM.</small>
                 </div>
@@ -208,6 +302,136 @@
             </div>
         </div>
     </div>
+    </div> <!-- /#sectionFabricRoll -->
+
+    <!-- 2. THIRD-PARTY PRODUCTS SECTION -->
+    <div id="sectionThirdParty" class="d-none">
+        <div class="card shadow-sm border mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-info"></i>Third-Party Finished Products Inward</h5>
+                    <small class="text-muted">Enter items received from external brands/vendors with individual item GST and pricing. Category &amp; attribute mapping is handled separately.</small>
+                </div>
+                <button type="button" class="btn btn-sm btn-info text-white fw-semibold" id="btnAddThirdPartyItem">
+                    <i class="bi bi-plus-circle me-1"></i> Add Third-Party Product
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info border-info-subtle d-flex align-items-center gap-2 py-2 px-3 mb-3 small">
+                    <i class="bi bi-info-circle-fill fs-5 text-info flex-shrink-0"></i>
+                    <div>
+                        <strong>Deferred Category &amp; Attribute Mapping:</strong> Category, Subcategory, Sub-subcategory, and Custom Attributes are not required during purchase inward entry. Once this purchase is saved, you can map them in the <strong>Third-Party Product Mapping</strong> module.
+                    </div>
+                </div>
+
+                <!-- Individual Cards Container -->
+                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge">0</span>)</h6>
+                    <span class="text-muted small">Configure individual products with separate GST rates and vendor pricing.</span>
+                </div>
+                <div id="thirdPartyContainer" class="d-flex flex-column gap-3 mb-4"></div>
+
+                <!-- Live Details Table -->
+                <div class="card border shadow-sm mb-4" id="tpDetailsTableContainer">
+                    <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small"><i class="bi bi-table me-1 text-info"></i>Third-Party Products Inward &amp; Details Table</span>
+                        <span class="badge bg-secondary-subtle text-secondary border" id="tpTableCountBadge">0 Products</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
+                            <thead class="table-light small text-uppercase">
+                                <tr>
+                                    <th class="text-center" style="width: 35px;">#</th>
+                                    <th>Product / Item Name</th>
+                                    <th>Vendor SKU</th>
+                                    <th>Color</th>
+                                    <th>Size</th>
+                                    <th class="text-end">Qty (Pcs)</th>
+                                    <th class="text-end">Unit Cost</th>
+                                    <th class="text-end">Base Value</th>
+                                    <th>HSN</th>
+                                    <th>GST Type</th>
+                                    <th class="text-end">Tax</th>
+                                    <th class="text-end bg-success-subtle text-success">Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tpDetailsTableBody">
+                                <tr><td colspan="12" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
+                            </tbody>
+                            <tfoot id="tpDetailsTableFoot" class="table-light fw-bold"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Batch Metrics Summary -->
+                <div class="p-3 bg-info-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div>
+                        <strong class="text-info-emphasis"><i class="bi bi-calculator me-1"></i>Third-Party Inward Summary</strong>
+                        <small class="d-block text-muted">Totals calculated from individual products and their specific GST rates.</small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-4">
+                        <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
+                        <div><small class="text-muted d-block">Total Units</small><strong id="summaryTpUnits">0 Pcs</strong></div>
+                        <div><small class="text-muted d-block">Base Total</small><strong id="summaryTpBase">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Tax</small><strong id="summaryTpTax">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Inward Value</small><strong id="summaryTpTotal" class="text-success">₹0.00</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. OWN PRODUCTION PRODUCTS SECTION -->
+    <div id="sectionOwnProduct" class="d-none">
+        <div class="card shadow-sm border mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-building-check me-2 text-success"></i>Own Production Products Inward</h5>
+                    <small class="text-muted">Inward finished goods manufactured internally and directly linked to master styles and sellable variants.</small>
+                </div>
+                <button type="button" class="btn btn-sm btn-success fw-semibold" id="btnAddOwnProductItem">
+                    <i class="bi bi-plus-circle me-1"></i> Add Inward Item
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered align-middle mb-0" id="tableOwnProductItems" style="font-size:13px">
+                        <thead class="table-light small text-uppercase">
+                            <tr>
+                                <th class="text-center" style="width: 35px;">#</th>
+                                <th style="min-width: 200px;">Master Style / Product *</th>
+                                <th style="min-width: 220px;">Variant (Size • Color • SKU) *</th>
+                                <th class="text-end" style="width: 95px;">Qty (Pcs) *</th>
+                                <th class="text-end" style="width: 110px;">Unit Cost (₹) *</th>
+                                <th class="text-end" style="width: 100px;">MRP (₹)</th>
+                                <th class="text-end" style="width: 100px;">Selling (₹)</th>
+                                <th style="min-width: 120px;">GST %</th>
+                                <th class="text-end bg-success-subtle text-success" style="width: 120px;">Line Total (₹)</th>
+                                <th class="text-center" style="width: 45px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ownProductRowsContainer">
+                            <tr id="emptyOwnProductRow">
+                                <td colspan="10" class="text-center text-muted py-4">
+                                    <i class="bi bi-building-check fs-3 d-block mb-1 text-muted"></i>
+                                    Click <strong>Add Inward Item</strong> above to select products from the Master Catalog.
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot id="ownProductTableFoot" class="table-light fw-bold">
+                            <tr>
+                                <td colspan="3" class="text-end">Total Items / Units:</td>
+                                <td class="text-end" id="opTotalQty">0</td>
+                                <td colspan="4" class="text-end">Items Total incl. Tax:</td>
+                                <td class="text-end text-success" id="opTotalValue">₹0.00</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="card border shadow-sm mb-4">
         <div class="card-body">
@@ -224,7 +448,7 @@
         </div>
     </div>
     <div class="d-flex justify-content-end gap-2 mb-4">
-        <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary">Cancel</a>
+        <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary">Cancel</a>
         <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase</button>
     </div>
 </form>
@@ -571,6 +795,130 @@
     </div>
 </template>
 
+<template id="thirdPartyTemplate">
+    <div class="tp-card card border shadow-sm mb-3 tp-row" data-index="">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+            <div class="d-flex align-items-center gap-2">
+                <strong><i class="bi bi-box-seam text-info me-1"></i><span class="tp-title">PRODUCT #1</span></strong>
+                <span class="badge bg-secondary-subtle text-secondary border tp-name-badge d-none"></span>
+                <span class="badge bg-light text-dark border tp-sku-badge font-monospace d-none"></span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 tp-card-calc" style="font-size: 12px;">
+                    Base: <span class="tp-badge-base">₹0.00</span> | Tax: <span class="tp-badge-tax">₹0.00</span> | Total: <strong class="tp-badge-total">₹0.00</strong>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-tp"><i class="bi bi-trash me-1"></i>Delete</button>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <div class="row g-3">
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label required">Product / Item Name *</label>
+                    <input class="form-control tp-name text-uppercase" maxlength="255" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Vendor SKU / Code</label>
+                    <input class="form-control tp-sku font-monospace text-uppercase" maxlength="50" placeholder="E.G. ZARA-001">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Color / Shade</label>
+                    <input class="form-control tp-color text-uppercase" maxlength="100" placeholder="E.G. NAVY BLUE" list="colorDataList">
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label">Size</label>
+                    <input class="form-control tp-size text-uppercase" maxlength="30" placeholder="E.G. M / 38" list="sizeDataList">
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label required">Qty (Pcs) *</label>
+                    <input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label required">Cost (₹) *</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-cost numeric-text-input fw-semibold text-end" value="0.00" required>
+                    </div>
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label">MRP (₹)</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-mrp numeric-text-input text-end" placeholder="0.00">
+                    </div>
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label">Selling (₹)</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-selling numeric-text-input text-end" placeholder="0.00">
+                    </div>
+                </div>
+
+                <!-- Individual GST & Tax options directly near product fields! -->
+                <div class="col-12 mt-2 pt-2 border-top">
+                    <div class="p-2.5 rounded border bg-light-subtle d-flex flex-wrap align-items-center gap-3">
+                        <div class="me-2">
+                            <span class="fw-bold small text-primary d-flex align-items-center gap-1">
+                                <i class="bi bi-percent fs-6"></i> Product GST &amp; Tax:
+                            </span>
+                        </div>
+                        <div style="min-width: 200px; max-width: 260px;" class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label mb-0 small fw-semibold">HSN Code</label>
+                                <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
+                                    <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
+                                </button>
+                            </div>
+                            <div class="dropdown hsn-dropdown w-100 position-relative">
+                                <input type="hidden" class="tp-hsn">
+                                <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 35px;">
+                                    <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
+                                </button>
+                                <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
+                                    <div class="input-group input-group-sm mb-2">
+                                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                        <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
+                                    </div>
+                                    <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="min-width: 170px;">
+                            <label class="form-label mb-1 small fw-semibold">GST Type</label>
+                            <select class="form-select form-select-sm item-gst-type">
+                                <option value="BOTH" selected>Both (CGST and SGST)</option>
+                                <option value="IGST">IGST</option>
+                                <option value="CGST">CGST</option>
+                                <option value="SGST">SGST</option>
+                                <option value="EXEMPTED">Exempted</option>
+                            </select>
+                        </div>
+                        <div class="tax-mode-field" style="min-width: 130px;">
+                            <label class="form-label mb-1 small fw-semibold">Tax Input Type</label>
+                            <select class="form-select form-select-sm item-tax-mode">
+                                <option value="PERCENT" selected>Percentage (%)</option>
+                                <option value="AMOUNT">Amount (₹)</option>
+                            </select>
+                        </div>
+                        <div class="tax-value-field" style="min-width: 100px;">
+                            <label class="form-label mb-1 small fw-semibold item-tax-label">SGST (%)</label>
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold" value="2.50">
+                        </div>
+                        <div class="tax-cgst-field" style="min-width: 100px;">
+                            <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold" value="2.50">
+                        </div>
+                        <div class="ms-auto text-end">
+                            <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
+                            <strong class="text-success fs-6 tp-line-total">₹0.00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
 <script src="<?= asset('js/qrcode.min.js') ?>"></script>
 <script>
 (() => {
@@ -586,6 +934,11 @@
     let nextSequence = 1;
     let sequencePrefix = 'FB<?= date('my') ?>';
     window.hsnCodesList = <?= json_encode($hsnCodes ?? []) ?>;
+    window.MASTER_PRODUCTS = <?= json_encode($masterProducts ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    window.MASTER_VARIANTS = <?= json_encode($masterVariants ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    window.MASTER_SIZES = <?= json_encode($sizes ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    window.MASTER_COLORS = <?= json_encode($colors ?? [], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
+    let currentPurchaseType = 'FABRIC_ROLL';
     const money = value => '₹' + (Number(value) || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
     const safe = value => String(value || '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
     const numericTextPattern = /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/;
@@ -1130,7 +1483,400 @@
         updateTotal();
     }
 
+    window.switchPurchaseType = function(type) {
+        currentPurchaseType = type;
+        const radios = document.querySelectorAll('input[name="purchase_type"]');
+        radios.forEach(r => {
+            r.checked = (r.value === type);
+        });
+
+        const cRoll = document.getElementById('cardTypeFabricRoll');
+        const cTp = document.getElementById('cardTypeThirdParty');
+        const cOp = document.getElementById('cardTypeOwnProduct');
+        if (cRoll) cRoll.classList.toggle('active', type === 'FABRIC_ROLL');
+        if (cTp) cTp.classList.toggle('active', type === 'THIRD_PARTY');
+        if (cOp) cOp.classList.toggle('active', type === 'OWN_PRODUCT');
+
+        const sRoll = document.getElementById('sectionFabricRoll');
+        const sTp = document.getElementById('sectionThirdParty');
+        const sOp = document.getElementById('sectionOwnProduct');
+        if (sRoll) sRoll.classList.toggle('d-none', type !== 'FABRIC_ROLL');
+        if (sTp) sTp.classList.toggle('d-none', type !== 'THIRD_PARTY');
+        if (sOp) sOp.classList.toggle('d-none', type !== 'OWN_PRODUCT');
+
+        if (type === 'THIRD_PARTY') {
+            const tpCards = document.querySelectorAll('#thirdPartyContainer .tp-card');
+            if (tpCards.length === 0) {
+                addThirdPartyItem();
+            }
+        } else if (type === 'OWN_PRODUCT') {
+            const opRows = document.querySelectorAll('#ownProductRowsContainer .op-row');
+            if (opRows.length === 0) {
+                addOwnProductRow();
+            }
+        }
+        updateTotal();
+    };
+
+    let tpItemIndex = 0;
+    function addThirdPartyItem() {
+        const container = document.getElementById('thirdPartyContainer');
+        const template = document.getElementById('thirdPartyTemplate');
+        if (!container || !template) return;
+
+        const index = tpItemIndex++;
+        const card = template.content.firstElementChild.cloneNode(true);
+        card.dataset.index = index;
+        const title = 'PRODUCT #' + (container.children.length + 1);
+        card.querySelector('.tp-title').textContent = title;
+
+        initHsnDropdown(card, '.tp-hsn');
+
+        card.querySelector('.remove-tp').addEventListener('click', () => {
+            card.remove();
+            Array.from(container.children).forEach((item, i) => {
+                item.querySelector('.tp-title').textContent = 'PRODUCT #' + (i + 1);
+            });
+            updateThirdPartySummary();
+        });
+
+        const nameInput = card.querySelector('.tp-name');
+        const skuInput = card.querySelector('.tp-sku');
+        nameInput.addEventListener('input', (e) => {
+            const badge = card.querySelector('.tp-name-badge');
+            if (badge) {
+                const val = e.target.value.trim().toUpperCase();
+                badge.textContent = val;
+                badge.classList.toggle('d-none', !val);
+            }
+        });
+        skuInput.addEventListener('input', (e) => {
+            const badge = card.querySelector('.tp-sku-badge');
+            if (badge) {
+                const val = e.target.value.trim().toUpperCase();
+                badge.textContent = val;
+                badge.classList.toggle('d-none', !val);
+            }
+        });
+
+        card.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateThirdPartySummary);
+            input.addEventListener('change', () => {
+                updateTaxInputs(card);
+                updateThirdPartySummary();
+            });
+            input.addEventListener('keyup', updateThirdPartySummary);
+        });
+
+        const hsnHidden = card.querySelector('.tp-hsn');
+        if (hsnHidden) {
+            hsnHidden.addEventListener('change', () => {
+                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
+                if (found && found.gst_rate) {
+                    const rate = parseFloat(found.gst_rate);
+                    const gstTypeSelect = card.querySelector('.item-gst-type');
+                    if (gstTypeSelect && rate > 0) {
+                        gstTypeSelect.value = 'BOTH';
+                        updateTaxInputs(card);
+                        const half = (rate / 2).toFixed(2);
+                        const taxVal = card.querySelector('.item-tax-value');
+                        const cgstVal = card.querySelector('.item-cgst-value');
+                        if (taxVal) taxVal.value = half;
+                        if (cgstVal) cgstVal.value = half;
+                        updateThirdPartySummary();
+                    }
+                }
+            });
+        }
+
+        updateTaxInputs(card);
+        container.appendChild(card);
+        updateThirdPartySummary();
+    }
+
+    function updateThirdPartySummary() {
+        const container = document.getElementById('thirdPartyContainer');
+        if (!container) return;
+        const cards = Array.from(container.querySelectorAll('.tp-card'));
+        const countBadge = document.getElementById('tpCountBadge');
+        if (countBadge) countBadge.textContent = cards.length;
+        const tblCountBadge = document.getElementById('tpTableCountBadge');
+        if (tblCountBadge) tblCountBadge.textContent = cards.length + (cards.length === 1 ? ' Product' : ' Products');
+
+        let subtotal = 0;
+        let totalTax = 0;
+        let totalQty = 0;
+
+        const tableBody = document.getElementById('tpDetailsTableBody');
+        const tableFoot = document.getElementById('tpDetailsTableFoot');
+
+        if (!cards.length) {
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
+            if (tableFoot) tableFoot.innerHTML = '';
+        } else {
+            let rowsHtml = '';
+            cards.forEach((card, index) => {
+                const name = card.querySelector('.tp-name')?.value?.trim() || ('PRODUCT #' + (index + 1));
+                const sku = card.querySelector('.tp-sku')?.value?.trim() || '—';
+                const color = card.querySelector('.tp-color')?.value?.trim() || '—';
+                const size = card.querySelector('.tp-size')?.value?.trim() || '—';
+                const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
+                const base = qty * cost;
+                const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '—';
+                const tax = calculateItemTax(card, base);
+                const lineTotal = base + tax.amount;
+
+                subtotal += base;
+                totalTax += tax.amount;
+                totalQty += qty;
+
+                const baseSpan = card.querySelector('.tp-badge-base');
+                if (baseSpan) baseSpan.textContent = money(base);
+                const taxSpan = card.querySelector('.tp-badge-tax');
+                if (taxSpan) taxSpan.textContent = money(tax.amount);
+                const totalSpan = card.querySelector('.tp-badge-total');
+                if (totalSpan) totalSpan.textContent = money(lineTotal);
+                const lineTotalEl = card.querySelector('.tp-line-total');
+                if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
+
+                const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : (tax.type === 'EXEMPTED' ? 'Exempt' : tax.type);
+
+                rowsHtml += `<tr>
+                    <td class="text-center fw-bold">${index + 1}</td>
+                    <td><strong>${safe(name)}</strong></td>
+                    <td><span class="badge bg-light text-dark border font-monospace">${safe(sku)}</span></td>
+                    <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
+                    <td><span class="badge bg-light text-dark border">${safe(size)}</span></td>
+                    <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')}</td>
+                    <td class="text-end">${money(cost)}</td>
+                    <td class="text-end">${money(base)}</td>
+                    <td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td>
+                    <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
+                    <td class="text-end">${money(tax.amount)}</td>
+                    <td class="text-end fw-bold text-success">${money(lineTotal)}</td>
+                </tr>`;
+            });
+
+            if (tableBody) tableBody.innerHTML = rowsHtml;
+            if (tableFoot) {
+                tableFoot.innerHTML = `<tr>
+                    <td colspan="5" class="text-end">Totals:</td>
+                    <td class="text-end">${totalQty.toLocaleString('en-IN')}</td>
+                    <td class="text-end"></td>
+                    <td class="text-end">${money(subtotal)}</td>
+                    <td colspan="2"></td>
+                    <td class="text-end">${money(totalTax)}</td>
+                    <td class="text-end text-success">${money(subtotal + totalTax)}</td>
+                </tr>`;
+            }
+        }
+
+        const sProd = document.getElementById('summaryTpProducts');
+        if (sProd) sProd.textContent = cards.length + (cards.length === 1 ? ' Product' : ' Products');
+        const sUnits = document.getElementById('summaryTpUnits');
+        if (sUnits) sUnits.textContent = totalQty.toLocaleString('en-IN') + ' Pcs';
+        const sBase = document.getElementById('summaryTpBase');
+        if (sBase) sBase.textContent = money(subtotal);
+        const sTax = document.getElementById('summaryTpTax');
+        if (sTax) sTax.textContent = money(totalTax);
+        const sTotal = document.getElementById('summaryTpTotal');
+        if (sTotal) sTotal.textContent = money(subtotal + totalTax);
+
+        document.getElementById('purchaseSubtotal').textContent = money(subtotal);
+        document.getElementById('purchaseTaxes').textContent = money(totalTax);
+        document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+    }
+
+    let opRowIndex = 0;
+    function addOwnProductRow() {
+        const tbody = document.getElementById('ownProductRowsContainer');
+        const emptyRow = document.getElementById('emptyOwnProductRow');
+        if (emptyRow) emptyRow.classList.add('d-none');
+
+        opRowIndex++;
+        const row = document.createElement('tr');
+        row.className = 'op-row';
+        row.dataset.index = opRowIndex;
+
+        const productOptions = (window.MASTER_PRODUCTS || []).map(p => 
+            `<option value="${p.id}" data-name="${safe(p.name)}" data-code="${safe(p.code || '')}">${safe(p.name)} (${safe(p.code || p.catalog_code || ('#' + p.id))})</option>`
+        ).join('');
+
+        row.innerHTML = `
+            <td class="text-center fw-bold op-num">${tbody.querySelectorAll('.op-row').length + 1}</td>
+            <td>
+                <select class="form-select form-select-sm op-product fw-semibold" required>
+                    <option value="">-- Select Master Style / Product --</option>
+                    ${productOptions}
+                </select>
+            </td>
+            <td>
+                <select class="form-select form-select-sm op-variant" disabled required>
+                    <option value="">-- Select Variant --</option>
+                </select>
+            </td>
+            <td>
+                <input type="number" min="1" step="1" class="form-control form-control-sm text-end op-qty fw-bold" value="1" required>
+            </td>
+            <td>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text p-1">₹</span>
+                    <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-cost fw-semibold" placeholder="0.00" value="0.00" required>
+                </div>
+            </td>
+            <td>
+                <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-mrp" placeholder="0.00">
+            </td>
+            <td>
+                <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-selling" placeholder="0.00">
+            </td>
+            <td>
+                <select class="form-select form-select-sm op-gst">
+                    <option value="0">0% (Exempt)</option>
+                    <option value="5" selected>5% GST</option>
+                    <option value="12">12% GST</option>
+                    <option value="18">18% GST</option>
+                </select>
+            </td>
+            <td class="text-end fw-bold text-success op-line-total">₹0.00</td>
+            <td class="text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm p-1 op-remove" title="Remove Row">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+
+        const productSelect = row.querySelector('.op-product');
+        const variantSelect = row.querySelector('.op-variant');
+
+        productSelect.addEventListener('change', function() {
+            const prodId = parseInt(this.value, 10) || 0;
+            variantSelect.innerHTML = '<option value="">-- Select Variant --</option>';
+            if (prodId <= 0) {
+                variantSelect.disabled = true;
+                updateTotal();
+                return;
+            }
+
+            const matchingVariants = (window.MASTER_VARIANTS || []).filter(v => parseInt(v.product_id, 10) === prodId);
+            if (matchingVariants.length === 0) {
+                variantSelect.disabled = true;
+                variantSelect.innerHTML = '<option value="">-- No variants defined for this style --</option>';
+            } else {
+                variantSelect.disabled = false;
+                matchingVariants.forEach(v => {
+                    const opt = document.createElement('option');
+                    opt.value = v.id;
+                    const parts = [];
+                    if (v.size_name) parts.push('Size: ' + v.size_name);
+                    if (v.color_name) parts.push('Color: ' + v.color_name);
+                    if (v.sku) parts.push('SKU: ' + v.sku);
+                    if (Number(v.mrp) > 0) parts.push('MRP: ₹' + v.mrp);
+                    opt.textContent = parts.join(' • ') || ('Variant #' + v.id);
+                    opt.dataset.size = v.size_name || '';
+                    opt.dataset.color = v.color_name || '';
+                    opt.dataset.sku = v.sku || '';
+                    opt.dataset.cost = v.production_cost || v.purchase_price || '0';
+                    opt.dataset.mrp = v.mrp || '0';
+                    opt.dataset.selling = v.selling_price || '0';
+                    variantSelect.appendChild(opt);
+                });
+            }
+            updateTotal();
+        });
+
+        variantSelect.addEventListener('change', function() {
+            const opt = this.selectedOptions[0];
+            if (opt && opt.value) {
+                if (opt.dataset.cost && Number(opt.dataset.cost) > 0) {
+                    row.querySelector('.op-cost').value = parseFloat(opt.dataset.cost).toFixed(2);
+                }
+                if (opt.dataset.mrp && Number(opt.dataset.mrp) > 0) {
+                    row.querySelector('.op-mrp').value = parseFloat(opt.dataset.mrp).toFixed(2);
+                }
+                if (opt.dataset.selling && Number(opt.dataset.selling) > 0) {
+                    row.querySelector('.op-selling').value = parseFloat(opt.dataset.selling).toFixed(2);
+                }
+            }
+            updateTotal();
+        });
+
+        row.querySelectorAll('input, select').forEach(el => {
+            el.addEventListener('input', updateTotal);
+            el.addEventListener('change', updateTotal);
+        });
+
+        row.querySelector('.op-remove').addEventListener('click', function() {
+            row.remove();
+            renumberOpRows();
+            updateTotal();
+        });
+
+        tbody.appendChild(row);
+        updateTotal();
+    }
+
+    function renumberOpRows() {
+        const rows = document.querySelectorAll('#ownProductRowsContainer .op-row');
+        rows.forEach((r, idx) => {
+            r.querySelector('.op-num').textContent = idx + 1;
+        });
+        const emptyRow = document.getElementById('emptyOwnProductRow');
+        if (emptyRow) emptyRow.classList.toggle('d-none', rows.length > 0);
+    }
+
+    const btnAddThirdParty = document.getElementById('btnAddThirdPartyItem');
+    if (btnAddThirdParty) {
+        btnAddThirdParty.addEventListener('click', addThirdPartyItem);
+    }
+
+    const btnAddOwnProduct = document.getElementById('btnAddOwnProductItem');
+    if (btnAddOwnProduct) {
+        btnAddOwnProduct.addEventListener('click', addOwnProductRow);
+    }
+
     function updateTotal() {
+        if (currentPurchaseType === 'THIRD_PARTY') {
+            updateThirdPartySummary();
+            return;
+        }
+
+        if (currentPurchaseType === 'OWN_PRODUCT') {
+            const opRows = Array.from(document.querySelectorAll('#ownProductRowsContainer .op-row'));
+            let subtotal = 0;
+            let totalTax = 0;
+            let totalQty = 0;
+
+            opRows.forEach(row => {
+                const qty = Number(row.querySelector('.op-qty')?.value) || 0;
+                const cost = Number(row.querySelector('.op-cost')?.value) || 0;
+                const base = qty * cost;
+                const gstRate = Number(row.querySelector('.op-gst')?.value) || 0;
+                const tax = Math.round(base * gstRate) / 100;
+                const lineTotal = base + tax;
+
+                const lineTotalEl = row.querySelector('.op-line-total');
+                if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
+                subtotal += base;
+                totalTax += tax;
+                totalQty += qty;
+            });
+
+            const emptyRow = document.getElementById('emptyOwnProductRow');
+            if (emptyRow) emptyRow.classList.toggle('d-none', opRows.length > 0);
+
+            const qEl = document.getElementById('opTotalQty');
+            if (qEl) qEl.textContent = totalQty.toLocaleString('en-IN');
+            const vEl = document.getElementById('opTotalValue');
+            if (vEl) vEl.textContent = money(subtotal + totalTax);
+
+            document.getElementById('purchaseSubtotal').textContent = money(subtotal);
+            document.getElementById('purchaseTaxes').textContent = money(totalTax);
+            document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+            return;
+        }
+
         const rollTotals = Array.from(rollsContainer.querySelectorAll('.roll-card')).reduce((totals, card) => {
             const base = Number(card.querySelector('.roll-price').value) || 0;
             const tax = calculateItemTax(card, base).amount;
@@ -1462,6 +2208,130 @@
         .catch(error => { console.error(error); alert('Could not load the next fabric roll code. Refresh the page before recording the purchase.'); });
 
     form.addEventListener('submit', event => {
+        const itemsPayload = [];
+
+        if (currentPurchaseType === 'THIRD_PARTY') {
+            const tpCards = Array.from(document.querySelectorAll('#thirdPartyContainer .tp-card'));
+            if (tpCards.length === 0) {
+                event.preventDefault();
+                alert('Add at least one third-party product before saving.');
+                return;
+            }
+
+            let hasError = false;
+            tpCards.forEach((card, idx) => {
+                const name = card.querySelector('.tp-name')?.value?.trim();
+                const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
+                if (!name || qty <= 0 || cost < 0) {
+                    hasError = true;
+                }
+
+                const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+                const taxMode = card.querySelector('.item-tax-mode')?.value || 'PERCENT';
+                const taxVal = Number(card.querySelector('.item-tax-value')?.value) || 0;
+                const cgstVal = Number(card.querySelector('.item-cgst-value')?.value) || 0;
+
+                itemsPayload.push({
+                    item_type: 'THIRD_PARTY',
+                    item_name: name,
+                    vendor_sku: card.querySelector('.tp-sku')?.value?.trim() || '',
+                    color: card.querySelector('.tp-color')?.value?.trim() || '',
+                    size: card.querySelector('.tp-size')?.value?.trim() || '',
+                    quantity: qty,
+                    unit_price: cost,
+                    mrp: Number(card.querySelector('.tp-mrp')?.value) || 0,
+                    selling_price: Number(card.querySelector('.tp-selling')?.value) || 0,
+                    hsn_code: card.querySelector('.tp-hsn')?.value?.trim() || '',
+                    gst_type: gstType,
+                    tax_mode: taxMode,
+                    tax_value: taxVal,
+                    cgst_tax_value: cgstVal,
+                    form_index: String(idx)
+                });
+            });
+
+            if (hasError) {
+                event.preventDefault();
+                alert('Ensure every third-party product has an item name, positive quantity, and non-negative cost.');
+                return;
+            }
+
+            let payloadInput = document.getElementById('itemsPayloadInput');
+            if (!payloadInput) {
+                payloadInput = document.createElement('input');
+                payloadInput.type = 'hidden';
+                payloadInput.name = 'items_payload';
+                payloadInput.id = 'itemsPayloadInput';
+                form.appendChild(payloadInput);
+            }
+            payloadInput.value = JSON.stringify(itemsPayload);
+            return;
+        }
+
+        if (currentPurchaseType === 'OWN_PRODUCT') {
+            const opRows = document.querySelectorAll('#ownProductRowsContainer .op-row');
+            if (opRows.length === 0) {
+                event.preventDefault();
+                alert('Add at least one own production product before saving.');
+                return;
+            }
+
+            let hasError = false;
+            opRows.forEach((r, idx) => {
+                const prodSel = r.querySelector('.op-product');
+                const varSel = r.querySelector('.op-variant');
+                const prodId = parseInt(prodSel?.value, 10) || 0;
+                const varId = parseInt(varSel?.value, 10) || 0;
+                const prodName = prodSel?.selectedOptions[0]?.dataset?.name || prodSel?.selectedOptions[0]?.textContent || '';
+                const qty = Number(r.querySelector('.op-qty')?.value) || 0;
+                const cost = Number(r.querySelector('.op-cost')?.value) || 0;
+
+                if (prodId <= 0 || qty <= 0 || cost < 0) {
+                    hasError = true;
+                }
+                const gstRate = Number(r.querySelector('.op-gst')?.value) || 0;
+
+                itemsPayload.push({
+                    item_type: 'OWN_PRODUCT',
+                    product_id: prodId,
+                    variant_id: varId > 0 ? varId : null,
+                    item_name: prodName,
+                    product_code: varSel?.selectedOptions[0]?.dataset?.sku || '',
+                    color: varSel?.selectedOptions[0]?.dataset?.color || '',
+                    size: varSel?.selectedOptions[0]?.dataset?.size || '',
+                    quantity: qty,
+                    unit_price: cost,
+                    mrp: Number(r.querySelector('.op-mrp')?.value) || 0,
+                    selling_price: Number(r.querySelector('.op-selling')?.value) || 0,
+                    hsn_code: '',
+                    gst_type: gstRate > 0 ? 'BOTH' : 'EXEMPTED',
+                    tax_mode: 'PERCENT',
+                    tax_value: gstRate > 0 ? (gstRate / 2) : 0,
+                    cgst_tax_value: gstRate > 0 ? (gstRate / 2) : 0,
+                    form_index: String(idx)
+                });
+            });
+
+            if (hasError) {
+                event.preventDefault();
+                alert('Ensure every own production row has a style selected, positive quantity, and non-negative unit cost.');
+                return;
+            }
+
+            let payloadInput = document.getElementById('itemsPayloadInput');
+            if (!payloadInput) {
+                payloadInput = document.createElement('input');
+                payloadInput.type = 'hidden';
+                payloadInput.name = 'items_payload';
+                payloadInput.id = 'itemsPayloadInput';
+                form.appendChild(payloadInput);
+            }
+            payloadInput.value = JSON.stringify(itemsPayload);
+            return;
+        }
+
+        // Default: FABRIC_ROLL
         const hasRoll = rollsContainer.querySelector('.roll-card');
         const hasSupply = suppliesContainer.querySelector('.supply-row');
         if (!hasRoll && !hasSupply) {
@@ -1475,8 +2345,6 @@
             return;
         }
 
-        // Pack items into items_payload JSON to completely avoid PHP max_input_vars limit!
-        const itemsPayload = [];
         rollsContainer.querySelectorAll('.roll-card').forEach((card, idx) => {
             const photoInput = card.querySelector('.roll-photo');
             let formIdx = String(idx);

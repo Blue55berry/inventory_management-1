@@ -395,7 +395,14 @@ class QrGenerationService {
      * Get a generation batch with items.
      */
     public static function getBatch(int $id): ?array {
-        $gen = Database::fetchOne("SELECT * FROM qr_generations WHERE id = ?", [$id]);
+        $gen = Database::fetchOne(
+            "SELECT qrg.*, pv.variant_code, pv.sku as variant_sku, p.name as product_name, p.code as product_code
+             FROM qr_generations qrg
+             LEFT JOIN product_variants pv ON pv.id = qrg.variant_id
+             LEFT JOIN products p ON p.id = qrg.product_id
+             WHERE qrg.id = ?",
+            [$id]
+        );
         if (!$gen) return null;
 
         $items = Database::fetchAll("SELECT * FROM qr_generation_items WHERE generation_id = ? ORDER BY sequence_num ASC", [$id]);

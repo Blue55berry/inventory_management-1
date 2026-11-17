@@ -384,6 +384,8 @@ class User {
      * Delete user by ID.
      */
     public static function delete(int $id): void {
+        Database::execute("DELETE FROM user_permissions WHERE user_id = ?", [$id]);
+        Database::execute("DELETE FROM user_permission_overrides WHERE user_id = ?", [$id]);
         Database::execute("DELETE FROM users WHERE id = ?", [$id]);
     }
 

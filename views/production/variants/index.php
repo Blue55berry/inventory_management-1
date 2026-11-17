@@ -531,7 +531,7 @@ function submitQuickAddDesign() {
     formData.append('name', name);
     formData.append('code', code);
     formData.append('description', desc);
-    formData.append('<?= csrf_token() ?>', '<?= csrf_hash() ?>');
+    formData.append('_csrf_token', '<?= CSRF::token() ?>');
 
     fetch('<?= url("api/designs/quick-add") ?>', {
         method: 'POST',

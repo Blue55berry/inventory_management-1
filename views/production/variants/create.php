@@ -334,7 +334,7 @@ function triggerSkuPreview() {
     fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
     .then(r => r.json())
     .then(res => {
-        if (res.status === 'success') {
+        if (res.status === 'success' || res.success) {
             const data = res.data;
             document.getElementById('varSku').value = data.sku;
             document.getElementById('varQrCode').value = data.qr_code;

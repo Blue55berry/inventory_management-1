@@ -30,7 +30,7 @@ class InwardController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-inwards',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Goods Inward (GRN)'],
             ],
             'inwards'      => $inwards,
@@ -57,7 +57,7 @@ class InwardController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-inwards',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Goods Inward', 'url' => url('production/inwards')],
                 ['label' => 'Create GRN'],
             ],
@@ -201,7 +201,7 @@ class InwardController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-inwards',
             'breadcrumb'   => [
-                ['label' => 'Production', 'url' => url('production/dashboard')],
+                ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'Goods Inward', 'url' => url('production/inwards')],
                 ['label' => $inward['grn_number']],
             ],
