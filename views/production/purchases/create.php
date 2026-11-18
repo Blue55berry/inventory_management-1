@@ -141,28 +141,28 @@
                     </div>
                 </div>
                 <div class="col-md-4">
+                    <div class="p-3 border rounded-3 h-100 cursor-pointer type-card" id="cardTypeRawMaterial" onclick="switchPurchaseType('RAW_MATERIAL')">
+                        <div class="form-check p-0">
+                            <div class="d-flex align-items-center mb-1">
+                                <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioRawMaterial" value="RAW_MATERIAL">
+                                <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioRawMaterial">
+                                    <i class="bi bi-boxes text-warning me-1"></i> 2. Raw Materials
+                                </label>
+                            </div>
+                            <small class="text-muted d-block ps-4">Manage buying counts for yarn, sewing threads, trims, accessories, and production raw materials.</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
                     <div class="p-3 border rounded-3 h-100 cursor-pointer type-card" id="cardTypeThirdParty" onclick="switchPurchaseType('THIRD_PARTY')">
                         <div class="form-check p-0">
                             <div class="d-flex align-items-center mb-1">
                                 <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioThirdParty" value="THIRD_PARTY">
                                 <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioThirdParty">
-                                    <i class="bi bi-box-seam text-info me-1"></i> 2. Third-Party Products
+                                    <i class="bi bi-box-seam text-info me-1"></i> 3. Third-Party Products
                                 </label>
                             </div>
-                            <small class="text-muted d-block ps-4">External vendor ready-to-sell goods (SKU, Size, Cost, MRP). <em>Mapping deferred</em>.</small>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="p-3 border rounded-3 h-100 cursor-pointer type-card" id="cardTypeOwnProduct" onclick="switchPurchaseType('OWN_PRODUCT')">
-                        <div class="form-check p-0">
-                            <div class="d-flex align-items-center mb-1">
-                                <input class="form-check-input me-2 mt-0" type="radio" name="purchase_type" id="typeRadioOwnProduct" value="OWN_PRODUCT">
-                                <label class="form-check-label fw-bold text-dark cursor-pointer" for="typeRadioOwnProduct">
-                                    <i class="bi bi-building-check text-success me-1"></i> 3. Own Production Products
-                                </label>
-                            </div>
-                            <small class="text-muted d-block ps-4">Finished goods inwarded from internal factory lines linked to Master Product Catalog.</small>
+                            <small class="text-muted d-block ps-4">External vendor ready-to-sell goods (SKU, Size, Unit, Cost).</small>
                         </div>
                     </div>
                 </div>
@@ -237,6 +237,49 @@
                             <option value="<?= e($cl['name'] ?? '') ?>">
                         <?php endforeach; ?>
                     </datalist>
+                    <datalist id="yarnSuggestions">
+                        <option value="30S COMBED COTTON YARN">
+                        <option value="40S COMBED COTTON YARN">
+                        <option value="24S CARDED COTTON YARN">
+                        <option value="34S COMBED COTTON YARN">
+                        <option value="POLYESTER SEWING THREAD 40/2">
+                        <option value="SPUN POLYESTER THREAD 20/2">
+                        <option value="OVERLOCK LOOPER THREAD">
+                        <option value="HIGH TENACITY EMBROIDERY THREAD">
+                        <option value="ELASTIC TAPE 1 INCH">
+                        <option value="ELASTIC TAPE 1.5 INCH">
+                        <option value="COTTON DRAWCORD / ROPE">
+                        <option value="TWILL NECK TAPE 12MM">
+                        <option value="BUTTONS 18L 4-HOLE POLYESTER">
+                        <option value="BUTTONS 24L 2-HOLE">
+                        <option value="ZIPPERS #5 NYLON COIL">
+                        <option value="ZIPPERS #3 CONCEALED">
+                        <option value="WOVEN MAIN LABELS">
+                        <option value="PRINTED CARE &amp; WASH LABELS">
+                        <option value="FUSIBLE INTERLINING (WHITE)">
+                    </datalist>
+                    <datalist id="countSizeSuggestions">
+                        <option value="20s">
+                        <option value="24s">
+                        <option value="30s">
+                        <option value="34s">
+                        <option value="40s">
+                        <option value="2/40">
+                        <option value="2/30">
+                        <option value="1/20">
+                        <option value="1 inch">
+                        <option value="1.25 inch">
+                        <option value="1.5 inch">
+                        <option value="2 inch">
+                        <option value="12mm">
+                        <option value="18L">
+                        <option value="24L">
+                        <option value="32L">
+                        <option value="#3">
+                        <option value="#5">
+                        <option value="1000m">
+                        <option value="5000m">
+                    </datalist>
                     <small class="text-muted">Select a standard grade or enter a custom fabric name and GSM.</small>
                 </div>
             </div>
@@ -255,7 +298,7 @@
                 <div class="table-responsive">
                     <table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
                         <thead class="table-light small text-uppercase">
-                            <tr><th class="text-center">#</th><th>Photo</th><th>Roll Code</th><th>HSN</th><th>Color / Shade</th><th>Design / Pattern</th><th class="text-center">Designs</th><th class="text-end">Total RQ</th><th class="text-end">Weight</th><th class="text-end">Price</th><th>GST Type</th><th class="text-end">Tax</th><th class="text-end bg-success-subtle text-success">Total Value</th><th class="text-center">Status</th></tr>
+                            <tr><th class="text-center">#</th><th>Photo</th><th>Roll Code</th><th>HSN</th><th>Color / Shade</th><th>Design / Pattern</th><th class="text-center">Designs</th><th class="text-end">Total RQ</th><th class="text-end">Weight</th><th class="text-end">Purchase Price (₹)</th><th>GST Type</th><th class="text-end">Tax</th><th class="text-end bg-success-subtle text-success">Total Value</th><th class="text-center">Status</th></tr>
                         </thead>
                         <tbody id="rollDetailsTableBody"><tr><td colspan="14" class="text-center text-muted py-4">Add fabric rolls to see their inventory details.</td></tr></tbody>
                         <tfoot id="rollDetailsTableFoot" class="table-light fw-bold"></tfoot>
@@ -276,13 +319,83 @@
     </div>
     </div> <!-- /#sectionFabricRoll -->
 
-    <!-- 2. THIRD-PARTY PRODUCTS SECTION -->
+    <!-- 2. RAW MATERIALS SECTION -->
+    <div id="sectionRawMaterial" class="d-none">
+        <div class="card shadow-sm border mb-4">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-boxes me-2 text-warning"></i>Raw Materials Procurement (Yarn, Thread &amp; Accessories)</h5>
+                    <small class="text-muted">Enter yarn counts, sewing threads, trims, accessories, and raw materials inwarded for the production unit with vendor purchase price and GST.</small>
+                </div>
+                <button type="button" class="btn btn-sm btn-warning text-dark fw-semibold" id="btnAddRawMaterialItem">
+                    <i class="bi bi-plus-circle me-1"></i> Add Raw Material
+                </button>
+            </div>
+            <div class="card-body">
+                <!-- Individual Cards Container -->
+                <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
+                    <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1 text-warning"></i>Individual Raw Materials (<span id="rmCountBadge">0</span>)</h6>
+                    <span class="text-muted small">Configure raw materials, yarn counts, units, and supplier procurement prices.</span>
+                </div>
+                <div id="rawMaterialContainer" class="d-flex flex-column gap-3 mb-4"></div>
+
+                <!-- Live Details Table -->
+                <div class="card border shadow-sm mb-4" id="rmDetailsTableContainer">
+                    <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small"><i class="bi bi-table me-1 text-warning"></i>Raw Materials Inward &amp; Details Table</span>
+                        <span class="badge bg-secondary-subtle text-secondary border" id="rmTableCountBadge">0 Items</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
+                            <thead class="table-light small text-uppercase">
+                                <tr>
+                                    <th class="text-center" style="width: 35px;">#</th>
+                                    <th>Material / Item Name</th>
+                                    <th>Color / Shade</th>
+                                    <th>Count / Size</th>
+                                    <th class="text-center">Unit</th>
+                                    <th class="text-end">Quantity</th>
+                                    <th class="text-end">Purchase Price (₹)</th>
+                                    <th class="text-end">Base Value</th>
+                                    <th>HSN</th>
+                                    <th>GST Type</th>
+                                    <th class="text-end">Tax</th>
+                                    <th class="text-end bg-success-subtle text-success">Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rmDetailsTableBody">
+                                <tr><td colspan="12" class="text-center text-muted py-4">Add raw materials to see their inward details.</td></tr>
+                            </tbody>
+                            <tfoot id="rmDetailsTableFoot" class="table-light fw-bold"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Batch Metrics Summary -->
+                <div class="p-3 bg-warning-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
+                    <div>
+                        <strong class="text-dark"><i class="bi bi-calculator me-1"></i>Raw Materials Procurement Summary</strong>
+                        <small class="d-block text-muted">Totals calculated from individual raw materials and their specific GST rates.</small>
+                    </div>
+                    <div class="d-flex flex-wrap gap-4 align-items-center">
+                        <div><small class="text-muted d-block">Total Items</small><strong id="summaryRmItems">0 Items</strong></div>
+                        <div><small class="text-muted d-block">Total Quantity</small><strong id="summaryRmQuantity">0</strong></div>
+                        <div><small class="text-muted d-block">Base Total</small><strong id="summaryRmBase" class="text-secondary">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Tax</small><strong id="summaryRmTax" class="text-secondary">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Purchase Cost</small><strong id="summaryRmTotal" class="text-success fs-5">₹0.00</strong></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. THIRD-PARTY PRODUCTS SECTION -->
     <div id="sectionThirdParty" class="d-none">
         <div class="card shadow-sm border mb-4">
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-info"></i>Third-Party Finished Products Inward</h5>
-                    <small class="text-muted">Enter items received from external brands/vendors with individual item GST and pricing. Category &amp; attribute mapping is handled separately.</small>
+                    <small class="text-muted">Enter items received from external brands/vendors with individual item GST and purchase price.</small>
                 </div>
                 <button type="button" class="btn btn-sm btn-info text-white fw-semibold" id="btnAddThirdPartyItem">
                     <i class="bi bi-plus-circle me-1"></i> Add Third-Party Product
@@ -292,7 +405,7 @@
                 <!-- Individual Cards Container -->
                 <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                     <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge">0</span>)</h6>
-                    <span class="text-muted small">Configure individual products with separate GST rates and vendor pricing.</span>
+                    <span class="text-muted small">Configure individual products with separate GST rates and vendor procurement pricing.</span>
                 </div>
                 <div id="thirdPartyContainer" class="d-flex flex-column gap-3 mb-4"></div>
 
@@ -311,11 +424,10 @@
                                     <th>Auto SKU</th>
                                     <th>Color</th>
                                     <th>Size</th>
-                                    <th class="text-end">Qty (Pcs)</th>
-                                    <th class="text-end">Buyed Price (₹)</th>
+                                    <th class="text-center">Unit</th>
+                                    <th class="text-end">Quantity</th>
+                                    <th class="text-end">Purchase Price (₹)</th>
                                     <th class="text-end">Base Value</th>
-                                    <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Price (₹)</th>
-                                    <th class="text-end bg-primary-subtle text-primary fw-bold">Selling Value</th>
                                     <th>HSN</th>
                                     <th>GST Type</th>
                                     <th class="text-end">Tax</th>
@@ -323,7 +435,7 @@
                                 </tr>
                             </thead>
                             <tbody id="tpDetailsTableBody">
-                                <tr><td colspan="14" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
+                                <tr><td colspan="13" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
                             </tbody>
                             <tfoot id="tpDetailsTableFoot" class="table-light fw-bold"></tfoot>
                         </table>
@@ -338,70 +450,11 @@
                     </div>
                     <div class="d-flex flex-wrap gap-4 align-items-center">
                         <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
-                        <div><small class="text-muted d-block">Buyed Product Counts</small><strong id="summaryTpUnits">0 Pcs</strong></div>
-                        <div><small class="text-muted d-block">Total Buyed Cost</small><strong id="summaryTpTotal" class="text-secondary">₹0.00</strong></div>
-                        <div class="border-start border-primary ps-3">
-                            <small class="text-primary fw-bold d-block"><i class="bi bi-tag-fill me-1"></i>Selling Product Counts</small>
-                            <strong id="summaryTpSellingUnits" class="text-primary fs-6">0 Pcs</strong>
-                        </div>
-                        <div>
-                            <small class="text-primary fw-bold d-block"><i class="bi bi-currency-rupee"></i>Total Selling Value</small>
-                            <strong id="summaryTpSellingTotal" class="text-primary fs-5">₹0.00</strong>
-                        </div>
+                        <div><small class="text-muted d-block">Total Quantity</small><strong id="summaryTpUnits">0 Pcs</strong></div>
+                        <div><small class="text-muted d-block">Base Total</small><strong id="summaryTpBase" class="text-secondary">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Tax</small><strong id="summaryTpTax" class="text-secondary">₹0.00</strong></div>
+                        <div><small class="text-muted d-block">Total Purchase Cost</small><strong id="summaryTpTotal" class="text-success fs-5">₹0.00</strong></div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 3. OWN PRODUCTION PRODUCTS SECTION -->
-    <div id="sectionOwnProduct" class="d-none">
-        <div class="card shadow-sm border mb-4">
-            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <div>
-                    <h5 class="mb-0 fw-bold"><i class="bi bi-building-check me-2 text-success"></i>Own Production Products Inward</h5>
-                    <small class="text-muted">Inward finished goods manufactured internally and directly linked to master styles and sellable variants.</small>
-                </div>
-                <button type="button" class="btn btn-sm btn-success fw-semibold" id="btnAddOwnProductItem">
-                    <i class="bi bi-plus-circle me-1"></i> Add Inward Item
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0" id="tableOwnProductItems" style="font-size:13px">
-                        <thead class="table-light small text-uppercase">
-                            <tr>
-                                <th class="text-center" style="width: 35px;">#</th>
-                                <th style="min-width: 200px;">Master Style / Product *</th>
-                                <th style="min-width: 220px;">Variant (Size • Color • SKU) *</th>
-                                <th class="text-end" style="width: 95px;">Qty (Pcs) *</th>
-                                <th class="text-end" style="width: 110px;">Buyed Price (₹) *</th>
-                                <th class="text-end" style="width: 100px;">MRP (₹)</th>
-                                <th class="text-end" style="width: 100px;">Selling (₹)</th>
-                                <th style="min-width: 120px;">GST %</th>
-                                <th style="min-width: 130px;">GST Mode</th>
-                                <th class="text-end bg-success-subtle text-success" style="width: 120px;">Line Total (₹)</th>
-                                <th class="text-center" style="width: 45px;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ownProductRowsContainer">
-                            <tr id="emptyOwnProductRow">
-                                <td colspan="11" class="text-center text-muted py-4">
-                                    <i class="bi bi-building-check fs-3 d-block mb-1 text-muted"></i>
-                                    Click <strong>Add Inward Item</strong> above to select products from the Master Catalog.
-                                </td>
-                            </tr>
-                        </tbody>
-                        <tfoot id="ownProductTableFoot" class="table-light fw-bold">
-                            <tr>
-                                <td colspan="3" class="text-end">Total Items / Units:</td>
-                                <td class="text-end" id="opTotalQty">0</td>
-                                <td colspan="5" class="text-end">Items Total incl. Tax:</td>
-                                <td class="text-end text-success" id="opTotalValue">₹0.00</td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
-                    </table>
                 </div>
             </div>
         </div>
@@ -445,7 +498,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div class="modal-header bg-primary text-white py-3 px-4">
                 <h5 class="modal-title fs-6 fw-bold" id="modalQuickAddHsnLabel">
-                    <i class="bi bi-plus-circle me-1"></i> Add New HSN Code &amp; GST Rate
+                    <i class="bi bi-plus-circle me-1"></i> Add New HSN Code
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -458,14 +511,6 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-dark">Commodity / Description <span class="text-danger">*</span></label>
                     <input type="text" id="quickHsnDescInput" class="form-control" placeholder="e.g. Cotton Woven Fabric / Sewing Thread / Buttons" maxlength="150" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-dark">Default GST Rate (%) <span class="text-danger">*</span></label>
-                    <div class="input-group">
-                        <input type="number" step="0.01" min="0" max="28" id="quickHsnGstInput" class="form-control fw-bold numeric-text-input" value="5.00" required>
-                        <span class="input-group-text">%</span>
-                    </div>
-                    <small class="text-muted" style="font-size:0.75rem;">Standard garment slab: 5.00%, 12.00%, 18.00%</small>
                 </div>
                 <div id="quickHsnAlert" class="alert alert-danger py-2 small d-none mb-0"></div>
             </div>
@@ -639,7 +684,7 @@
                 <div class="col-lg-1 col-md-3"><label class="form-label required">Designs *</label><input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control roll-design-count numeric-text-input" value="1" required></div>
                 <div class="col-lg-1 col-md-3"><label class="form-label required">RQ *</label><input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control roll-quantity numeric-text-input" value="1" required></div>
                 <div class="col-lg-2 col-md-3"><label class="form-label required">Weight (kg) *</label><div class="input-group"><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control roll-weight numeric-text-input" required><span class="input-group-text">kg</span></div></div>
-                <div class="col-lg-2 col-md-3"><label class="form-label required">Price (₹) *</label><div class="input-group"><span class="input-group-text">₹</span><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control roll-price numeric-text-input" required></div></div>
+                <div class="col-lg-2 col-md-3"><label class="form-label required">Purchase Price (₹) *</label><div class="input-group"><span class="input-group-text">₹</span><input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control roll-price numeric-text-input" required></div></div>
                 <div class="col-lg-2 col-md-3">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <label class="form-label mb-0">HSN Code</label>
@@ -673,6 +718,129 @@
     </div>
 </template>
 
+<template id="rawMaterialTemplate">
+    <div class="rm-card card border shadow-sm mb-3 rm-row" data-index="">
+        <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <strong><i class="bi bi-boxes text-warning me-1"></i><span class="rm-title">MATERIAL #1</span></strong>
+                <span class="badge bg-secondary-subtle text-secondary border rm-name-badge d-none"></span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 rm-card-calc" style="font-size: 12px;">
+                    Base: <span class="rm-badge-base">₹0.00</span> | Tax: <span class="rm-badge-tax">₹0.00</span> | Total: <strong class="rm-badge-total">₹0.00</strong>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-rm"><i class="bi bi-trash me-1"></i>Delete</button>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <div class="row g-3">
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label required">Material / Item Name *</label>
+                    <input class="form-control rm-name text-uppercase" maxlength="255" placeholder="E.G. 30S COMBED COTTON YARN / SEWING THREAD" list="yarnSuggestions" required>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Color / Shade</label>
+                    <input class="form-control rm-color text-uppercase" maxlength="100" placeholder="E.G. RAW WHITE / NAVY BLUE" list="colorDataList">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label">Count / Size</label>
+                    <input class="form-control rm-size text-uppercase" maxlength="50" placeholder="E.G. 30S / 40/2 / 1 INCH" list="countSizeSuggestions">
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Unit *</label>
+                    <select class="form-select rm-unit fw-semibold">
+                        <option value="Kilograms" selected>Kilograms</option>
+                        <option value="Pieces">Pieces</option>
+                        <option value="Metres">Metres</option>
+                        <option value="Litres">Litres</option>
+                        <option value="Boxes">Boxes</option>
+                        <option value="Packs">Packs</option>
+                        <option value="Pairs">Pairs</option>
+                        <option value="Sets">Sets</option>
+                        <option value="Bundles">Bundles</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm rm-custom-unit mt-1 d-none" placeholder="Enter custom unit">
+                </div>
+                <div class="col-lg-1 col-md-3">
+                    <label class="form-label required rm-qty-label">Qty (Kilograms) *</label>
+                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control rm-quantity numeric-text-input fw-bold text-end" value="1" required>
+                </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Purchase Price (₹) *</label>
+                    <div class="input-group">
+                        <span class="input-group-text p-1">₹</span>
+                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control rm-cost numeric-text-input fw-semibold text-end" value="0.00" required>
+                    </div>
+                </div>
+
+                <!-- Individual GST & Tax options -->
+                <div class="col-12 mt-2 pt-2 border-top">
+                    <div class="p-2.5 rounded border bg-light-subtle d-flex flex-wrap align-items-center gap-3">
+                        <div style="min-width: 200px; max-width: 260px;" class="flex-grow-1">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
+                                <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
+                                    <i class="bi bi-plus-circle me-0.5"></i>+ Add HSN
+                                </button>
+                            </div>
+                            <div class="dropdown hsn-dropdown w-100 position-relative">
+                                <input type="hidden" class="rm-hsn">
+                                <button type="button" class="form-select form-select-sm text-start d-flex justify-content-between align-items-center hsn-dropdown-btn font-monospace py-1.5 px-2" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" style="font-size: 0.82rem; height: 35px;">
+                                    <span class="hsn-btn-text text-truncate">-- Select HSN --</span>
+                                </button>
+                                <div class="dropdown-menu shadow-lg p-2 hsn-dropdown-menu" style="min-width: 280px; max-width: 340px; z-index: 1055;">
+                                    <div class="input-group input-group-sm mb-2">
+                                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                        <input type="text" class="form-control border-start-0 hsn-search-input" placeholder="Search HSN code or item..." autocomplete="off">
+                                    </div>
+                                    <div class="overflow-auto hsn-options-list" style="max-height: 200px;"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="min-width: 170px;">
+                            <label class="form-label mb-1 small fw-semibold">GST Type</label>
+                            <select class="form-select form-select-sm item-gst-type">
+                                <option value="BOTH" selected>Both (CGST and SGST)</option>
+                                <option value="IGST">IGST</option>
+                                <option value="CGST">CGST</option>
+                                <option value="SGST">SGST</option>
+                                <option value="EXEMPTED">Exempted</option>
+                            </select>
+                        </div>
+                        <div style="min-width: 170px;">
+                            <label class="form-label mb-1 small fw-semibold">GST Included / Excluded</label>
+                            <select class="form-select form-select-sm item-tax-treatment">
+                                <option value="INCLUDED" selected>GST Included</option>
+                                <option value="EXCLUDED">GST Excluded</option>
+                            </select>
+                        </div>
+                        <div class="tax-mode-field" style="min-width: 130px;">
+                            <label class="form-label mb-1 small fw-semibold">Tax Input Type</label>
+                            <select class="form-select form-select-sm item-tax-mode">
+                                <option value="PERCENT" selected>Percentage (%)</option>
+                                <option value="AMOUNT">Amount (₹)</option>
+                            </select>
+                        </div>
+                        <div class="tax-value-field" style="min-width: 100px;">
+                            <label class="form-label mb-1 small fw-semibold item-tax-label">SGST (%)</label>
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold" value="2.50">
+                        </div>
+                        <div class="tax-cgst-field" style="min-width: 100px;">
+                            <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold" value="2.50">
+                        </div>
+                        <div class="ms-auto text-end">
+                            <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
+                            <strong class="text-success fs-6 rm-line-total">₹0.00</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
 <template id="thirdPartyTemplate">
     <div class="tp-card card border shadow-sm mb-3 tp-row" data-index="">
         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
@@ -701,33 +869,35 @@
                     <label class="form-label">Color / Shade</label>
                     <input class="form-control tp-color text-uppercase" maxlength="100" placeholder="E.G. NAVY BLUE" list="colorDataList">
                 </div>
-                <div class="col-lg-1 col-md-3">
+                <div class="col-lg-2 col-md-3">
                     <label class="form-label">Size</label>
                     <input class="form-control tp-size text-uppercase" maxlength="30" placeholder="E.G. M / 38" list="sizeDataList">
                 </div>
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label required">Unit *</label>
+                    <select class="form-select tp-unit fw-semibold">
+                        <option value="Pieces" selected>Pieces</option>
+                        <option value="Kilograms">Kilograms</option>
+                        <option value="Metres">Metres</option>
+                        <option value="Litres">Litres</option>
+                        <option value="Boxes">Boxes</option>
+                        <option value="Packs">Packs</option>
+                        <option value="Pairs">Pairs</option>
+                        <option value="Sets">Sets</option>
+                        <option value="Bundles">Bundles</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm tp-custom-unit mt-1 d-none" placeholder="Enter custom unit">
+                </div>
                 <div class="col-lg-1 col-md-3">
-                    <label class="form-label required">Qty (Pcs) *</label>
-                    <input type="text" inputmode="numeric" pattern="[0-9]+" data-min="1" data-step="1" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
+                    <label class="form-label required tp-qty-label">Qty (Pieces) *</label>
+                    <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
                 </div>
                 <div class="col-lg-2 col-md-3">
-                    <label class="form-label required">Buyed (₹) *</label>
+                    <label class="form-label required">Purchase Price (₹) *</label>
                     <div class="input-group">
                         <span class="input-group-text p-1">₹</span>
                         <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-cost numeric-text-input fw-semibold text-end" value="0.00" required>
-                    </div>
-                </div>
-                <div class="col-lg-1 col-md-3">
-                    <label class="form-label">MRP (₹)</label>
-                    <div class="input-group">
-                        <span class="input-group-text p-1">₹</span>
-                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-mrp numeric-text-input text-end" placeholder="0.00">
-                    </div>
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Selling (₹)</label>
-                    <div class="input-group">
-                        <span class="input-group-text p-1">₹</span>
-                        <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-step="0.01" class="form-control tp-selling numeric-text-input text-end" placeholder="0.00">
                     </div>
                 </div>
 
@@ -998,7 +1168,6 @@
         const alertBox = document.getElementById('quickHsnAlert');
         if (codeInp) codeInp.value = presetCode || '';
         if (descInp) descInp.value = '';
-        if (gstInp) gstInp.value = '5.00';
         if (alertBox) alertBox.classList.add('d-none');
         const modalEl = document.getElementById('modalQuickAddHsn');
         if (modalEl) {
@@ -1017,12 +1186,6 @@
         btnSave.addEventListener('click', () => {
             const code = (document.getElementById('quickHsnCodeInput')?.value || '').trim().toUpperCase();
             const desc = (document.getElementById('quickHsnDescInput')?.value || '').trim();
-            const gstInput = document.getElementById('quickHsnGstInput');
-            if (gstInput && !validateNumericTextInput(gstInput)) {
-                gstInput.reportValidity();
-                return;
-            }
-            const gst = Number(gstInput?.value) || 0;
             const alertBox = document.getElementById('quickHsnAlert');
 
             if (!code || code.length < 2) {
@@ -1040,7 +1203,6 @@
             const fd = new FormData();
             fd.append('hsn_code', code);
             fd.append('description', desc);
-            fd.append('gst_rate', gst.toFixed(2));
             const csrf = document.querySelector('input[name="csrf_token"]');
             if (csrf) fd.append('csrf_token', csrf.value);
 
@@ -1140,26 +1302,33 @@
             let matchCount = 0;
             const currentVal = (hiddenInput ? hiddenInput.value : '').trim();
 
-            (window.hsnCodesList || []).forEach(h => {
+            const MAX_RESULTS = 50;
+            const list = window.hsnCodesList || [];
+            for (let i = 0; i < list.length; i++) {
+                const h = list[i];
                 const code = String(h.hsn_code || '').trim();
                 const desc = String(h.description || '').trim();
-                const gst = h.gst_rate ? Number(h.gst_rate) : null;
                 const searchStr = (code + ' ' + desc).toLowerCase();
                 if (q === '' || searchStr.includes(q)) {
                     matchCount++;
-                    const isSelected = currentVal && currentVal.toUpperCase() === code.toUpperCase();
-                    html += `
-                        <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item ${isSelected ? 'active' : ''}" 
-                                data-code="${safe(code)}" data-desc="${safe(desc)}" data-gst="${gst || 0}">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="font-monospace fw-bold text-primary">${safe(code)}</span>
-                                ${gst !== null ? `<span class="badge bg-light text-secondary border fs-8">${gst}% GST</span>` : ''}
-                            </div>
-                            <div class="text-truncate small text-muted" style="max-width: 250px;">${safe(desc)}</div>
-                        </button>
-                    `;
+                    if (matchCount <= MAX_RESULTS) {
+                        const isSelected = currentVal && currentVal.toUpperCase() === code.toUpperCase();
+                        html += `
+                            <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item ${isSelected ? 'active' : ''}" 
+                                    data-code="${safe(code)}" data-desc="${safe(desc)}">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="font-monospace fw-bold text-primary">${safe(code)}</span>
+                                </div>
+                                <div class="text-truncate small text-muted" style="max-width: 250px;" title="${safe(desc)}">${safe(desc)}</div>
+                            </button>
+                        `;
+                    }
                 }
-            });
+            }
+
+            if (matchCount > MAX_RESULTS) {
+                html += `<div class="p-1.5 text-center text-muted small bg-light" style="font-size: 11px;"><i class="bi bi-info-circle me-1"></i>Showing 50 of ${matchCount} matches. Type to refine...</div>`;
+            }
 
             if (q !== '' && !matchCount) {
                 html += `
@@ -1453,6 +1622,50 @@
         updateTotal();
     }
 
+    function bindUnitChangeHandler(card, unitSelectSelector, customUnitSelector, qtyLabelSelector) {
+        const unitSelect = card.querySelector(unitSelectSelector);
+        const customUnitInput = card.querySelector(customUnitSelector);
+        const qtyLabel = card.querySelector(qtyLabelSelector);
+        if (!unitSelect || !qtyLabel) return;
+
+        function refreshLabel() {
+            const val = unitSelect.value;
+            if (val === 'Other') {
+                if (customUnitInput) {
+                    customUnitInput.classList.remove('d-none');
+                    const customText = customUnitInput.value.trim();
+                    qtyLabel.textContent = `Qty (${customText || 'Other'}) *`;
+                } else {
+                    qtyLabel.textContent = 'Qty (Other) *';
+                }
+            } else {
+                if (customUnitInput) customUnitInput.classList.add('d-none');
+                qtyLabel.textContent = `Qty (${val}) *`;
+            }
+        }
+
+        unitSelect.addEventListener('change', () => {
+            refreshLabel();
+            if (unitSelect.value === 'Other' && customUnitInput) {
+                customUnitInput.focus();
+            }
+        });
+        if (customUnitInput) {
+            customUnitInput.addEventListener('input', refreshLabel);
+        }
+        refreshLabel();
+    }
+
+    function getSelectedUnitValue(card, unitSelectSelector, customUnitSelector) {
+        const unitSelect = card.querySelector(unitSelectSelector);
+        const customUnitInput = card.querySelector(customUnitSelector);
+        if (!unitSelect) return 'Pieces';
+        if (unitSelect.value === 'Other' && customUnitInput && customUnitInput.value.trim()) {
+            return customUnitInput.value.trim();
+        }
+        return unitSelect.value || 'Pieces';
+    }
+
     window.switchPurchaseType = function(type) {
         currentPurchaseType = type;
         const radios = document.querySelectorAll('input[name="purchase_type"]');
@@ -1461,19 +1674,19 @@
         });
 
         const cRoll = document.getElementById('cardTypeFabricRoll');
+        const cRm = document.getElementById('cardTypeRawMaterial');
         const cTp = document.getElementById('cardTypeThirdParty');
-        const cOp = document.getElementById('cardTypeOwnProduct');
         if (cRoll) cRoll.classList.toggle('active', type === 'FABRIC_ROLL');
+        if (cRm) cRm.classList.toggle('active', type === 'RAW_MATERIAL');
         if (cTp) cTp.classList.toggle('active', type === 'THIRD_PARTY');
-        if (cOp) cOp.classList.toggle('active', type === 'OWN_PRODUCT');
 
         const sRoll = document.getElementById('sectionFabricRoll');
+        const sRm = document.getElementById('sectionRawMaterial');
         const sTp = document.getElementById('sectionThirdParty');
-        const sOp = document.getElementById('sectionOwnProduct');
 
         const isRoll = (type === 'FABRIC_ROLL');
+        const isRm = (type === 'RAW_MATERIAL');
         const isTp = (type === 'THIRD_PARTY');
-        const isOp = (type === 'OWN_PRODUCT');
 
         const toggleSection = (sectionEl, isActive) => {
             if (!sectionEl) return;
@@ -1494,8 +1707,8 @@
         };
 
         toggleSection(sRoll, isRoll);
+        toggleSection(sRm, isRm);
         toggleSection(sTp, isTp);
-        toggleSection(sOp, isOp);
 
         const fabDesc = document.getElementById('fabricDescription');
         if (fabDesc) {
@@ -1507,19 +1720,189 @@
             }
         }
 
-        if (type === 'THIRD_PARTY') {
+        if (type === 'RAW_MATERIAL') {
+            const rmCards = document.querySelectorAll('#rawMaterialContainer .rm-card');
+            if (rmCards.length === 0) {
+                addRawMaterialItem();
+            }
+        } else if (type === 'THIRD_PARTY') {
             const tpCards = document.querySelectorAll('#thirdPartyContainer .tp-card');
             if (tpCards.length === 0) {
                 addThirdPartyItem();
             }
-        } else if (type === 'OWN_PRODUCT') {
-            const opRows = document.querySelectorAll('#ownProductRowsContainer .op-row');
-            if (opRows.length === 0) {
-                addOwnProductRow();
-            }
         }
         updateTotal();
     };
+
+    let rmItemIndex = 0;
+    function addRawMaterialItem() {
+        const container = document.getElementById('rawMaterialContainer');
+        const template = document.getElementById('rawMaterialTemplate');
+        if (!container || !template) return;
+
+        const index = rmItemIndex++;
+        const card = template.content.firstElementChild.cloneNode(true);
+        card.dataset.index = index;
+        const title = 'MATERIAL #' + (container.children.length + 1);
+        card.querySelector('.rm-title').textContent = title;
+
+        bindUnitChangeHandler(card, '.rm-unit', '.rm-custom-unit', '.rm-qty-label');
+        initHsnDropdown(card, '.rm-hsn');
+
+        card.querySelector('.remove-rm').addEventListener('click', () => {
+            card.remove();
+            Array.from(container.children).forEach((item, i) => {
+                item.querySelector('.rm-title').textContent = 'MATERIAL #' + (i + 1);
+            });
+            updateRawMaterialSummary();
+        });
+
+        const nameInput = card.querySelector('.rm-name');
+        nameInput.addEventListener('input', (e) => {
+            const badge = card.querySelector('.rm-name-badge');
+            if (badge) {
+                const val = e.target.value.trim().toUpperCase();
+                badge.textContent = val;
+                badge.classList.toggle('d-none', !val);
+            }
+        });
+
+        card.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateRawMaterialSummary);
+            input.addEventListener('change', () => {
+                updateTaxInputs(card);
+                updateRawMaterialSummary();
+            });
+            input.addEventListener('keyup', updateRawMaterialSummary);
+        });
+
+        const hsnHidden = card.querySelector('.rm-hsn');
+        if (hsnHidden) {
+            hsnHidden.addEventListener('change', () => {
+                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
+                if (found && found.gst_rate) {
+                    const rate = parseFloat(found.gst_rate);
+                    const gstTypeSelect = card.querySelector('.item-gst-type');
+                    if (gstTypeSelect && rate > 0) {
+                        gstTypeSelect.value = 'BOTH';
+                        updateTaxInputs(card);
+                        const half = (rate / 2).toFixed(2);
+                        const taxVal = card.querySelector('.item-tax-value');
+                        const cgstVal = card.querySelector('.item-cgst-value');
+                        if (taxVal) taxVal.value = half;
+                        if (cgstVal) cgstVal.value = half;
+                        updateRawMaterialSummary();
+                    }
+                }
+            });
+        }
+
+        updateTaxInputs(card);
+        card.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = (currentPurchaseType !== 'RAW_MATERIAL');
+        });
+        container.appendChild(card);
+        updateRawMaterialSummary();
+    }
+
+    function updateRawMaterialSummary() {
+        const container = document.getElementById('rawMaterialContainer');
+        if (!container) return;
+        const cards = Array.from(container.querySelectorAll('.rm-card'));
+        const countBadge = document.getElementById('rmCountBadge');
+        if (countBadge) countBadge.textContent = cards.length;
+        const tblCountBadge = document.getElementById('rmTableCountBadge');
+        if (tblCountBadge) tblCountBadge.textContent = cards.length + (cards.length === 1 ? ' Item' : ' Items');
+
+        let subtotal = 0;
+        let totalTax = 0;
+        let totalQty = 0;
+
+        const tableBody = document.getElementById('rmDetailsTableBody');
+        const tableFoot = document.getElementById('rmDetailsTableFoot');
+
+        if (!cards.length) {
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">Add raw materials to see their inward details.</td></tr>';
+            if (tableFoot) tableFoot.innerHTML = '';
+        } else {
+            let rowsHtml = '';
+            cards.forEach((card, index) => {
+                const name = card.querySelector('.rm-name')?.value?.trim() || ('MATERIAL #' + (index + 1));
+                const color = card.querySelector('.rm-color')?.value?.trim() || '—';
+                const size = card.querySelector('.rm-size')?.value?.trim() || '—';
+                const unit = getSelectedUnitValue(card, '.rm-unit', '.rm-custom-unit');
+                const qty = Number(card.querySelector('.rm-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.rm-cost')?.value) || 0;
+
+                const gross = qty * cost;
+                const hsn = card.querySelector('.rm-hsn')?.value?.trim() || '—';
+                const tax = calculateItemTax(card, gross);
+                const base = tax.base;
+                const lineTotal = tax.total;
+
+                subtotal += base;
+                totalTax += tax.tax;
+                totalQty += qty;
+
+                const baseSpan = card.querySelector('.rm-badge-base');
+                if (baseSpan) baseSpan.textContent = money(base);
+                const taxSpan = card.querySelector('.rm-badge-tax');
+                if (taxSpan) taxSpan.textContent = money(tax.tax);
+                const totalSpan = card.querySelector('.rm-badge-total');
+                if (totalSpan) totalSpan.textContent = money(lineTotal);
+                const lineTotalEl = card.querySelector('.rm-line-total');
+                if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
+
+                const taxLabel = tax.type === 'BOTH' ? 'SGST + CGST' : (tax.type === 'EXEMPTED' ? 'Exempt' : tax.type);
+                const treatmentLabel = tax.treatment === 'INCLUDED' ? '<small class="text-muted d-block" style="font-size:10px;">(Incl.)</small>' : '<small class="text-muted d-block" style="font-size:10px;">(Excl.)</small>';
+
+                rowsHtml += `<tr>
+                    <td class="text-center fw-bold">${index + 1}</td>
+                    <td><strong>${safe(name)}</strong></td>
+                    <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
+                    <td><span class="badge bg-light text-dark border font-monospace">${safe(size)}</span></td>
+                    <td class="text-center"><span class="badge bg-secondary-subtle text-secondary border">${safe(unit)}</span></td>
+                    <td class="text-end fw-semibold">${qty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3})}</td>
+                    <td class="text-end">${money(cost)} ${treatmentLabel}</td>
+                    <td class="text-end">${money(base)}</td>
+                    <td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td>
+                    <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
+                    <td class="text-end">${money(tax.tax)}</td>
+                    <td class="text-end fw-bold text-success">${money(lineTotal)}</td>
+                </tr>`;
+            });
+
+            if (tableBody) tableBody.innerHTML = rowsHtml;
+            if (tableFoot) {
+                tableFoot.innerHTML = `<tr>
+                    <td colspan="5" class="text-end">Totals:</td>
+                    <td class="text-end">${totalQty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3})}</td>
+                    <td class="text-end"></td>
+                    <td class="text-end">${money(subtotal)}</td>
+                    <td colspan="2"></td>
+                    <td class="text-end">${money(totalTax)}</td>
+                    <td class="text-end text-success">${money(subtotal + totalTax)}</td>
+                </tr>`;
+            }
+        }
+
+        const sItems = document.getElementById('summaryRmItems');
+        if (sItems) sItems.textContent = cards.length + (cards.length === 1 ? ' Item' : ' Items');
+        const sQty = document.getElementById('summaryRmQuantity');
+        if (sQty) sQty.textContent = totalQty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3});
+        const sBase = document.getElementById('summaryRmBase');
+        if (sBase) sBase.textContent = money(subtotal);
+        const sTax = document.getElementById('summaryRmTax');
+        if (sTax) sTax.textContent = money(totalTax);
+        const sTotal = document.getElementById('summaryRmTotal');
+        if (sTotal) sTotal.textContent = money(subtotal + totalTax);
+
+        if (currentPurchaseType === 'RAW_MATERIAL') {
+            document.getElementById('purchaseSubtotal').textContent = money(subtotal);
+            document.getElementById('purchaseTaxes').textContent = money(totalTax);
+            document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+        }
+    }
 
     function generateThirdPartySku(card, index) {
         const name = (card.querySelector('.tp-name')?.value || '').trim();
@@ -1567,6 +1950,7 @@
         const title = 'PRODUCT #' + (container.children.length + 1);
         card.querySelector('.tp-title').textContent = title;
 
+        bindUnitChangeHandler(card, '.tp-unit', '.tp-custom-unit', '.tp-qty-label');
         initHsnDropdown(card, '.tp-hsn');
 
         card.querySelector('.remove-tp').addEventListener('click', () => {
@@ -1637,13 +2021,12 @@
         let subtotal = 0;
         let totalTax = 0;
         let totalQty = 0;
-        let totalSellingValue = 0;
 
         const tableBody = document.getElementById('tpDetailsTableBody');
         const tableFoot = document.getElementById('tpDetailsTableFoot');
 
         if (!cards.length) {
-            if (tableBody) tableBody.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
             if (tableFoot) tableFoot.innerHTML = '';
         } else {
             let rowsHtml = '';
@@ -1657,31 +2040,11 @@
                 const name = card.querySelector('.tp-name')?.value?.trim() || ('PRODUCT #' + (index + 1));
                 const color = card.querySelector('.tp-color')?.value?.trim() || '—';
                 const size = card.querySelector('.tp-size')?.value?.trim() || '—';
+                const unit = getSelectedUnitValue(card, '.tp-unit', '.tp-custom-unit');
                 const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
                 const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
-                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
-                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
-                const sellingInput = card.querySelector('.tp-selling');
-                const mrpInput = card.querySelector('.tp-mrp');
-
-                if (cost > 0 && selling > 0 && selling < cost) {
-                    sellingInput?.classList.add('is-invalid', 'border-danger');
-                    sellingInput?.setAttribute('title', 'Selling price cannot be less than Buyed price (₹' + cost.toFixed(2) + ')');
-                } else {
-                    sellingInput?.classList.remove('is-invalid', 'border-danger');
-                    sellingInput?.removeAttribute('title');
-                }
-
-                if (mrp > 0 && selling > 0 && mrp < selling) {
-                    mrpInput?.classList.add('is-invalid', 'border-danger');
-                    mrpInput?.setAttribute('title', 'MRP cannot be less than Selling price (₹' + selling.toFixed(2) + ')');
-                } else {
-                    mrpInput?.classList.remove('is-invalid', 'border-danger');
-                    mrpInput?.removeAttribute('title');
-                }
 
                 const gross = qty * cost;
-                const lineSellingTotal = qty * selling;
                 const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '—';
                 const tax = calculateItemTax(card, gross);
                 const base = tax.base;
@@ -1690,7 +2053,6 @@
                 subtotal += base;
                 totalTax += tax.tax;
                 totalQty += qty;
-                totalSellingValue += lineSellingTotal;
 
                 const baseSpan = card.querySelector('.tp-badge-base');
                 if (baseSpan) baseSpan.textContent = money(base);
@@ -1710,11 +2072,10 @@
                     <td><span class="badge bg-light text-dark border font-monospace fw-semibold">${safe(autoSku)}</span></td>
                     <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
                     <td><span class="badge bg-light text-dark border">${safe(size)}</span></td>
-                    <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')}</td>
+                    <td class="text-center"><span class="badge bg-secondary-subtle text-secondary border">${safe(unit)}</span></td>
+                    <td class="text-end fw-semibold">${qty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3})}</td>
                     <td class="text-end">${money(cost)} ${treatmentLabel}</td>
                     <td class="text-end">${money(base)}</td>
-                    <td class="text-end fw-bold text-primary">${money(selling)}</td>
-                    <td class="text-end fw-bold text-primary">${money(lineSellingTotal)}</td>
                     <td><span class="badge bg-light text-dark border font-monospace">${safe(hsn)}</span></td>
                     <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
                     <td class="text-end">${money(tax.tax)}</td>
@@ -1725,12 +2086,10 @@
             if (tableBody) tableBody.innerHTML = rowsHtml;
             if (tableFoot) {
                 tableFoot.innerHTML = `<tr>
-                    <td colspan="5" class="text-end">Totals:</td>
-                    <td class="text-end">${totalQty.toLocaleString('en-IN')}</td>
+                    <td colspan="6" class="text-end">Totals:</td>
+                    <td class="text-end">${totalQty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3})}</td>
                     <td class="text-end"></td>
                     <td class="text-end">${money(subtotal)}</td>
-                    <td class="text-end"></td>
-                    <td class="text-end text-primary fw-bold">${money(totalSellingValue)}</td>
                     <td colspan="2"></td>
                     <td class="text-end">${money(totalTax)}</td>
                     <td class="text-end text-success">${money(subtotal + totalTax)}</td>
@@ -1741,7 +2100,7 @@
         const sProd = document.getElementById('summaryTpProducts');
         if (sProd) sProd.textContent = cards.length + (cards.length === 1 ? ' Product' : ' Products');
         const sUnits = document.getElementById('summaryTpUnits');
-        if (sUnits) sUnits.textContent = totalQty.toLocaleString('en-IN') + ' Pcs';
+        if (sUnits) sUnits.textContent = totalQty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3});
         const sBase = document.getElementById('summaryTpBase');
         if (sBase) sBase.textContent = money(subtotal);
         const sTax = document.getElementById('summaryTpTax');
@@ -1749,161 +2108,16 @@
         const sTotal = document.getElementById('summaryTpTotal');
         if (sTotal) sTotal.textContent = money(subtotal + totalTax);
 
-        const sSellingUnits = document.getElementById('summaryTpSellingUnits');
-        if (sSellingUnits) sSellingUnits.textContent = totalQty.toLocaleString('en-IN') + ' Pcs';
-        const sSellingTotal = document.getElementById('summaryTpSellingTotal');
-        if (sSellingTotal) sSellingTotal.textContent = money(totalSellingValue);
-
-        document.getElementById('purchaseSubtotal').textContent = money(subtotal);
-        document.getElementById('purchaseTaxes').textContent = money(totalTax);
-        document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+        if (currentPurchaseType === 'THIRD_PARTY') {
+            document.getElementById('purchaseSubtotal').textContent = money(subtotal);
+            document.getElementById('purchaseTaxes').textContent = money(totalTax);
+            document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+        }
     }
 
-    let opRowIndex = 0;
-    function addOwnProductRow() {
-        const tbody = document.getElementById('ownProductRowsContainer');
-        const emptyRow = document.getElementById('emptyOwnProductRow');
-        if (emptyRow) emptyRow.classList.add('d-none');
-
-        opRowIndex++;
-        const row = document.createElement('tr');
-        row.className = 'op-row';
-        row.dataset.index = opRowIndex;
-
-        const productOptions = (window.MASTER_PRODUCTS || []).map(p => 
-            `<option value="${p.id}" data-name="${safe(p.name)}" data-code="${safe(p.code || '')}">${safe(p.name)} (${safe(p.code || p.catalog_code || ('#' + p.id))})</option>`
-        ).join('');
-
-        row.innerHTML = `
-            <td class="text-center fw-bold op-num">${tbody.querySelectorAll('.op-row').length + 1}</td>
-            <td>
-                <select class="form-select form-select-sm op-product fw-semibold" required>
-                    <option value="">-- Select Master Style / Product --</option>
-                    ${productOptions}
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm op-variant" disabled required>
-                    <option value="">-- Select Variant --</option>
-                </select>
-            </td>
-            <td>
-                <input type="number" min="1" step="1" class="form-control form-control-sm text-end op-qty fw-bold" value="1" required>
-            </td>
-            <td>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text p-1">₹</span>
-                    <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-cost fw-semibold" placeholder="0.00" value="0.00" required>
-                </div>
-            </td>
-            <td>
-                <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-mrp" placeholder="0.00">
-            </td>
-            <td>
-                <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end op-selling" placeholder="0.00">
-            </td>
-            <td>
-                <select class="form-select form-select-sm op-gst">
-                    <option value="0">0% (Exempt)</option>
-                    <option value="5" selected>5% GST</option>
-                    <option value="12">12% GST</option>
-                    <option value="18">18% GST</option>
-                </select>
-            </td>
-            <td>
-                <select class="form-select form-select-sm op-gst-treatment">
-                    <option value="INCLUDED" selected>GST Included</option>
-                    <option value="EXCLUDED">GST Excluded</option>
-                </select>
-            </td>
-            <td class="text-end fw-bold text-success op-line-total">₹0.00</td>
-            <td class="text-center">
-                <button type="button" class="btn btn-outline-danger btn-sm p-1 op-remove" title="Remove Row">
-                    <i class="bi bi-trash"></i>
-                </button>
-            </td>
-        `;
-
-        const productSelect = row.querySelector('.op-product');
-        const variantSelect = row.querySelector('.op-variant');
-
-        productSelect.addEventListener('change', function() {
-            const prodId = parseInt(this.value, 10) || 0;
-            variantSelect.innerHTML = '<option value="">-- Select Variant --</option>';
-            if (prodId <= 0) {
-                variantSelect.disabled = true;
-                updateTotal();
-                return;
-            }
-
-            const matchingVariants = (window.MASTER_VARIANTS || []).filter(v => parseInt(v.product_id, 10) === prodId);
-            if (matchingVariants.length === 0) {
-                variantSelect.disabled = true;
-                variantSelect.innerHTML = '<option value="">-- No variants defined for this style --</option>';
-            } else {
-                variantSelect.disabled = false;
-                matchingVariants.forEach(v => {
-                    const opt = document.createElement('option');
-                    opt.value = v.id;
-                    const parts = [];
-                    if (v.size_name) parts.push('Size: ' + v.size_name);
-                    if (v.color_name) parts.push('Color: ' + v.color_name);
-                    if (v.sku) parts.push('SKU: ' + v.sku);
-                    if (Number(v.mrp) > 0) parts.push('MRP: ₹' + v.mrp);
-                    opt.textContent = parts.join(' • ') || ('Variant #' + v.id);
-                    opt.dataset.size = v.size_name || '';
-                    opt.dataset.color = v.color_name || '';
-                    opt.dataset.sku = v.sku || '';
-                    opt.dataset.cost = v.production_cost || v.purchase_price || '0';
-                    opt.dataset.mrp = v.mrp || '0';
-                    opt.dataset.selling = v.selling_price || '0';
-                    variantSelect.appendChild(opt);
-                });
-            }
-            updateTotal();
-        });
-
-        variantSelect.addEventListener('change', function() {
-            const opt = this.selectedOptions[0];
-            if (opt && opt.value) {
-                if (opt.dataset.cost && Number(opt.dataset.cost) > 0) {
-                    row.querySelector('.op-cost').value = parseFloat(opt.dataset.cost).toFixed(2);
-                }
-                if (opt.dataset.mrp && Number(opt.dataset.mrp) > 0) {
-                    row.querySelector('.op-mrp').value = parseFloat(opt.dataset.mrp).toFixed(2);
-                }
-                if (opt.dataset.selling && Number(opt.dataset.selling) > 0) {
-                    row.querySelector('.op-selling').value = parseFloat(opt.dataset.selling).toFixed(2);
-                }
-            }
-            updateTotal();
-        });
-
-        row.querySelectorAll('input, select').forEach(el => {
-            el.addEventListener('input', updateTotal);
-            el.addEventListener('change', updateTotal);
-        });
-
-        row.querySelector('.op-remove').addEventListener('click', function() {
-            row.remove();
-            renumberOpRows();
-            updateTotal();
-        });
-
-        row.querySelectorAll('input, select, textarea').forEach(el => {
-            el.disabled = (currentPurchaseType !== 'OWN_PRODUCT');
-        });
-        tbody.appendChild(row);
-        updateTotal();
-    }
-
-    function renumberOpRows() {
-        const rows = document.querySelectorAll('#ownProductRowsContainer .op-row');
-        rows.forEach((r, idx) => {
-            r.querySelector('.op-num').textContent = idx + 1;
-        });
-        const emptyRow = document.getElementById('emptyOwnProductRow');
-        if (emptyRow) emptyRow.classList.toggle('d-none', rows.length > 0);
+    const btnAddRawMaterial = document.getElementById('btnAddRawMaterialItem');
+    if (btnAddRawMaterial) {
+        btnAddRawMaterial.addEventListener('click', addRawMaterialItem);
     }
 
     const btnAddThirdParty = document.getElementById('btnAddThirdPartyItem');
@@ -1911,61 +2125,14 @@
         btnAddThirdParty.addEventListener('click', addThirdPartyItem);
     }
 
-    const btnAddOwnProduct = document.getElementById('btnAddOwnProductItem');
-    if (btnAddOwnProduct) {
-        btnAddOwnProduct.addEventListener('click', addOwnProductRow);
-    }
-
     function updateTotal() {
-        if (currentPurchaseType === 'THIRD_PARTY') {
-            updateThirdPartySummary();
+        if (currentPurchaseType === 'RAW_MATERIAL') {
+            updateRawMaterialSummary();
             return;
         }
 
-        if (currentPurchaseType === 'OWN_PRODUCT') {
-            const opRows = Array.from(document.querySelectorAll('#ownProductRowsContainer .op-row'));
-            let subtotal = 0;
-            let totalTax = 0;
-            let totalQty = 0;
-
-            opRows.forEach(row => {
-                const qty = Number(row.querySelector('.op-qty')?.value) || 0;
-                const cost = Number(row.querySelector('.op-cost')?.value) || 0;
-                const gross = qty * cost;
-                const gstRate = Number(row.querySelector('.op-gst')?.value) || 0;
-                const treatment = row.querySelector('.op-gst-treatment')?.value || 'INCLUDED';
-
-                let base = gross, tax = 0, lineTotal = gross;
-                if (gstRate > 0) {
-                    if (treatment === 'INCLUDED') {
-                        base = Math.round((gross / (1 + (gstRate / 100))) * 100) / 100;
-                        tax = Math.round((gross - base) * 100) / 100;
-                        lineTotal = gross;
-                    } else {
-                        base = gross;
-                        tax = Math.round((gross * gstRate / 100) * 100) / 100;
-                        lineTotal = Math.round((gross + tax) * 100) / 100;
-                    }
-                }
-
-                const lineTotalEl = row.querySelector('.op-line-total');
-                if (lineTotalEl) lineTotalEl.textContent = money(lineTotal);
-                subtotal += base;
-                totalTax += tax;
-                totalQty += qty;
-            });
-
-            const emptyRow = document.getElementById('emptyOwnProductRow');
-            if (emptyRow) emptyRow.classList.toggle('d-none', opRows.length > 0);
-
-            const qEl = document.getElementById('opTotalQty');
-            if (qEl) qEl.textContent = totalQty.toLocaleString('en-IN');
-            const vEl = document.getElementById('opTotalValue');
-            if (vEl) vEl.textContent = money(subtotal + totalTax);
-
-            document.getElementById('purchaseSubtotal').textContent = money(subtotal);
-            document.getElementById('purchaseTaxes').textContent = money(totalTax);
-            document.getElementById('purchaseTotal').textContent = money(subtotal + totalTax);
+        if (currentPurchaseType === 'THIRD_PARTY') {
+            updateThirdPartySummary();
             return;
         }
 
@@ -2222,6 +2389,103 @@
 
         const itemsPayload = [];
 
+        if (currentPurchaseType === 'RAW_MATERIAL') {
+            const rmCards = Array.from(document.querySelectorAll('#rawMaterialContainer .rm-card'));
+            if (rmCards.length === 0) {
+                event.preventDefault();
+                alert('Add at least one raw material before saving.');
+                return;
+            }
+
+            let hasError = false;
+            let errorMessage = '';
+
+            rmCards.forEach((card, idx) => {
+                if (hasError) return;
+
+                const name = card.querySelector('.rm-name')?.value?.trim();
+                const qty = Number(card.querySelector('.rm-quantity')?.value) || 0;
+                const cost = Number(card.querySelector('.rm-cost')?.value) || 0;
+                const unit = getSelectedUnitValue(card, '.rm-unit', '.rm-custom-unit');
+                const hsn = card.querySelector('.rm-hsn')?.value?.trim() || '';
+                const hsnBtn = card.querySelector('.hsn-dropdown-btn');
+
+                if (!name) {
+                    hasError = true;
+                    errorMessage = `Raw Material #${idx + 1}: Material / Item name is required.`;
+                    card.querySelector('.rm-name')?.focus();
+                    return;
+                }
+
+                if (qty <= 0) {
+                    hasError = true;
+                    errorMessage = `Raw Material #${idx + 1} ("${name}"): Quantity must be at least 0.01.`;
+                    card.querySelector('.rm-quantity')?.focus();
+                    return;
+                }
+
+                if (cost <= 0) {
+                    hasError = true;
+                    errorMessage = `Raw Material #${idx + 1} ("${name}"): Purchase price must be greater than zero.`;
+                    card.querySelector('.rm-cost')?.focus();
+                    return;
+                }
+
+                if (!hsn) {
+                    hasError = true;
+                    errorMessage = `Raw Material #${idx + 1} ("${name}"): HSN code is mandatory. Please select or add an HSN code.`;
+                    if (hsnBtn) {
+                        hsnBtn.classList.add('border-danger', 'is-invalid');
+                        hsnBtn.focus();
+                    }
+                    return;
+                } else if (hsnBtn) {
+                    hsnBtn.classList.remove('border-danger', 'is-invalid');
+                }
+
+                const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
+                const taxMode = card.querySelector('.item-tax-mode')?.value || 'PERCENT';
+                const taxVal = Number(card.querySelector('.item-tax-value')?.value) || 0;
+                const cgstVal = Number(card.querySelector('.item-cgst-value')?.value) || 0;
+
+                itemsPayload.push({
+                    item_type: 'RAW_MATERIAL',
+                    item_name: name,
+                    color: card.querySelector('.rm-color')?.value?.trim() || '',
+                    size: card.querySelector('.rm-size')?.value?.trim() || '',
+                    unit: unit,
+                    quantity: qty,
+                    unit_price: cost,
+                    mrp: 0,
+                    selling_price: 0,
+                    hsn_code: hsn,
+                    tax_treatment: card.querySelector('.item-tax-treatment')?.value || 'INCLUDED',
+                    gst_type: gstType,
+                    tax_mode: taxMode,
+                    tax_value: taxVal,
+                    cgst_tax_value: cgstVal,
+                    form_index: String(idx)
+                });
+            });
+
+            if (hasError) {
+                event.preventDefault();
+                alert(errorMessage || 'Please check the raw material fields and correct any errors.');
+                return;
+            }
+
+            let payloadInput = document.getElementById('itemsPayloadInput');
+            if (!payloadInput) {
+                payloadInput = document.createElement('input');
+                payloadInput.type = 'hidden';
+                payloadInput.name = 'items_payload';
+                payloadInput.id = 'itemsPayloadInput';
+                form.appendChild(payloadInput);
+            }
+            payloadInput.value = JSON.stringify(itemsPayload);
+            return;
+        }
+
         if (currentPurchaseType === 'THIRD_PARTY') {
             const tpCards = Array.from(document.querySelectorAll('#thirdPartyContainer .tp-card'));
             if (tpCards.length === 0) {
@@ -2239,8 +2503,7 @@
                 const name = card.querySelector('.tp-name')?.value?.trim();
                 const qty = Number(card.querySelector('.tp-quantity')?.value) || 0;
                 const cost = Number(card.querySelector('.tp-cost')?.value) || 0;
-                const mrp = Number(card.querySelector('.tp-mrp')?.value) || 0;
-                const selling = Number(card.querySelector('.tp-selling')?.value) || 0;
+                const unit = getSelectedUnitValue(card, '.tp-unit', '.tp-custom-unit');
                 const hsn = card.querySelector('.tp-hsn')?.value?.trim() || '';
                 const hsnBtn = card.querySelector('.hsn-dropdown-btn');
 
@@ -2260,7 +2523,7 @@
 
                 if (cost <= 0) {
                     hasError = true;
-                    errorMessage = `Product #${idx + 1} ("${name}"): Buyed price must be greater than zero.`;
+                    errorMessage = `Product #${idx + 1} ("${name}"): Purchase price must be greater than zero.`;
                     card.querySelector('.tp-cost')?.focus();
                     return;
                 }
@@ -2277,27 +2540,6 @@
                     hsnBtn.classList.remove('border-danger', 'is-invalid');
                 }
 
-                if (selling <= 0) {
-                    hasError = true;
-                    errorMessage = `Product #${idx + 1} ("${name}"): Selling price is required and must be greater than zero.`;
-                    card.querySelector('.tp-selling')?.focus();
-                    return;
-                }
-
-                if (selling < cost) {
-                    hasError = true;
-                    errorMessage = `Product #${idx + 1} ("${name}"): Selling price (₹${selling.toFixed(2)}) cannot be less than Buyed price (₹${cost.toFixed(2)}).`;
-                    card.querySelector('.tp-selling')?.focus();
-                    return;
-                }
-
-                if (mrp > 0 && mrp < selling) {
-                    hasError = true;
-                    errorMessage = `Product #${idx + 1} ("${name}"): MRP (₹${mrp.toFixed(2)}) cannot be less than Selling price (₹${selling.toFixed(2)}).`;
-                    card.querySelector('.tp-mrp')?.focus();
-                    return;
-                }
-
                 const gstType = card.querySelector('.item-gst-type')?.value || 'EXEMPTED';
                 const taxMode = card.querySelector('.item-tax-mode')?.value || 'PERCENT';
                 const taxVal = Number(card.querySelector('.item-tax-value')?.value) || 0;
@@ -2309,10 +2551,11 @@
                     vendor_sku: card.querySelector('.tp-sku')?.value?.trim() || '',
                     color: card.querySelector('.tp-color')?.value?.trim() || '',
                     size: card.querySelector('.tp-size')?.value?.trim() || '',
+                    unit: unit,
                     quantity: qty,
                     unit_price: cost,
-                    mrp: mrp,
-                    selling_price: selling,
+                    mrp: 0,
+                    selling_price: 0,
                     hsn_code: hsn,
                     tax_treatment: card.querySelector('.item-tax-treatment')?.value || 'INCLUDED',
                     gst_type: gstType,
@@ -2326,107 +2569,6 @@
             if (hasError) {
                 event.preventDefault();
                 alert(errorMessage || 'Please check the third-party product fields and correct any errors.');
-                return;
-            }
-
-            let payloadInput = document.getElementById('itemsPayloadInput');
-            if (!payloadInput) {
-                payloadInput = document.createElement('input');
-                payloadInput.type = 'hidden';
-                payloadInput.name = 'items_payload';
-                payloadInput.id = 'itemsPayloadInput';
-                form.appendChild(payloadInput);
-            }
-            payloadInput.value = JSON.stringify(itemsPayload);
-            return;
-        }
-
-        if (currentPurchaseType === 'OWN_PRODUCT') {
-            const opRows = document.querySelectorAll('#ownProductRowsContainer .op-row');
-            if (opRows.length === 0) {
-                event.preventDefault();
-                alert('Add at least one own production product before saving.');
-                return;
-            }
-
-            let hasError = false;
-            let errorMessage = '';
-
-            opRows.forEach((r, idx) => {
-                if (hasError) return;
-
-                const prodSel = r.querySelector('.op-product');
-                const varSel = r.querySelector('.op-variant');
-                const prodId = parseInt(prodSel?.value, 10) || 0;
-                const varId = parseInt(varSel?.value, 10) || 0;
-                const prodName = prodSel?.selectedOptions[0]?.dataset?.name || prodSel?.selectedOptions[0]?.textContent || '';
-                const qty = Number(r.querySelector('.op-qty')?.value) || 0;
-                const cost = Number(r.querySelector('.op-cost')?.value) || 0;
-                const mrp = Number(r.querySelector('.op-mrp')?.value) || 0;
-                const selling = Number(r.querySelector('.op-selling')?.value) || 0;
-
-                if (prodId <= 0) {
-                    hasError = true;
-                    errorMessage = `Row #${idx + 1}: Select a Master Style / Product.`;
-                    prodSel?.focus();
-                    return;
-                }
-
-                if (qty <= 0) {
-                    hasError = true;
-                    errorMessage = `Row #${idx + 1}: Quantity must be greater than zero.`;
-                    r.querySelector('.op-qty')?.focus();
-                    return;
-                }
-
-                if (cost <= 0) {
-                    hasError = true;
-                    errorMessage = `Row #${idx + 1}: Buyed price must be greater than zero.`;
-                    r.querySelector('.op-cost')?.focus();
-                    return;
-                }
-
-                if (selling > 0 && selling < cost) {
-                    hasError = true;
-                    errorMessage = `Row #${idx + 1}: Selling price (₹${selling.toFixed(2)}) cannot be less than Buyed price (₹${cost.toFixed(2)}).`;
-                    r.querySelector('.op-selling')?.focus();
-                    return;
-                }
-
-                if (mrp > 0 && selling > 0 && mrp < selling) {
-                    hasError = true;
-                    errorMessage = `Row #${idx + 1}: MRP (₹${mrp.toFixed(2)}) cannot be less than Selling price (₹${selling.toFixed(2)}).`;
-                    r.querySelector('.op-mrp')?.focus();
-                    return;
-                }
-
-                const gstRate = Number(r.querySelector('.op-gst')?.value) || 0;
-
-                itemsPayload.push({
-                    item_type: 'OWN_PRODUCT',
-                    product_id: prodId,
-                    variant_id: varId > 0 ? varId : null,
-                    item_name: prodName,
-                    product_code: varSel?.selectedOptions[0]?.dataset?.sku || '',
-                    color: varSel?.selectedOptions[0]?.dataset?.color || '',
-                    size: varSel?.selectedOptions[0]?.dataset?.size || '',
-                    quantity: qty,
-                    unit_price: cost,
-                    mrp: mrp,
-                    selling_price: selling,
-                    hsn_code: '',
-                    tax_treatment: r.querySelector('.op-gst-treatment')?.value || 'INCLUDED',
-                    gst_type: gstRate > 0 ? 'BOTH' : 'EXEMPTED',
-                    tax_mode: 'PERCENT',
-                    tax_value: gstRate > 0 ? (gstRate / 2) : 0,
-                    cgst_tax_value: gstRate > 0 ? (gstRate / 2) : 0,
-                    form_index: String(idx)
-                });
-            });
-
-            if (hasError) {
-                event.preventDefault();
-                alert(errorMessage || 'Ensure every own production row has a style selected, positive quantity, valid buyed price, and correct pricing.');
                 return;
             }
 

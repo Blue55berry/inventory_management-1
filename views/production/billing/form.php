@@ -11,6 +11,7 @@ $existingItems = array_map(static function (array $item): array {
         'color_name' => (string)($item['color_name'] ?? ''),
         'mrp' => (float)$item['mrp'],
         'unit_price' => (float)$item['unit_price'],
+        'is_complementary' => (int)($item['is_complementary'] ?? 0),
         'gst_percentage' => (float)$item['gst_percentage'],
         'gst_type' => (string)($item['gst_type'] ?? ((float)$item['gst_percentage'] > 0 ? 'BOTH' : 'EXEMPTED')),
         'tax_input_type' => (string)($item['tax_input_type'] ?? 'PERCENT'),
@@ -234,6 +235,7 @@ $existingItems = array_map(static function (array $item): array {
             ...item,
             variant_id: Number(item.variant_id || 0),
             qc_item_id: Number(item.qc_item_id || 0),
+            is_complementary: Number(item.is_complementary || 0),
             tags: Array.isArray(item.tags) ? item.tags : [],
             unit_price: Number(item.unit_price),
             mrp: Number(item.mrp),
@@ -265,8 +267,16 @@ $existingItems = array_map(static function (array $item): array {
             const row = cartBody.insertRow();
             const productCell = row.insertCell();
             const name = document.createElement('div');
-            name.className = 'fw-semibold';
-            name.textContent = item.product_name;
+            name.className = 'fw-semibold d-flex align-items-center flex-wrap gap-1';
+            const nameText = document.createElement('span');
+            nameText.textContent = item.product_name;
+            name.append(nameText);
+            if (Number(item.is_complementary) === 1) {
+                const compBadge = document.createElement('span');
+                compBadge.className = 'badge bg-info-subtle text-info border';
+                compBadge.innerHTML = '<i class="bi bi-gift-fill me-1"></i>COMPLEMENTARY';
+                name.append(compBadge);
+            }
             productCell.append(name);
             const meta = document.createElement('div');
             meta.className = 'small text-muted';
@@ -314,12 +324,18 @@ $existingItems = array_map(static function (array $item): array {
             discountInput.max = '100';
             discountInput.step = '0.01';
             discountInput.className = 'form-control form-control-sm';
-            discountInput.value = item.mrp > 0 ? Math.max(0, (1 - item.unit_price / item.mrp) * 100).toFixed(2) : '0';
-            discountInput.addEventListener('input', () => {
-                item.unit_price = Math.round(item.mrp * (1 - Math.min(100, Math.max(0, Number(discountInput.value) || 0)) / 100) * 100) / 100;
-                priceInput.value = item.unit_price.toFixed(2);
-                updateTotals();
-            });
+            if (Number(item.is_complementary) === 1) {
+                discountInput.value = '100.00';
+                discountInput.readOnly = true;
+                discountInput.classList.add('bg-light', 'text-muted');
+            } else {
+                discountInput.value = item.mrp > 0 ? Math.max(0, (1 - item.unit_price / item.mrp) * 100).toFixed(2) : '0';
+                discountInput.addEventListener('input', () => {
+                    item.unit_price = Math.round(item.mrp * (1 - Math.min(100, Math.max(0, Number(discountInput.value) || 0)) / 100) * 100) / 100;
+                    priceInput.value = item.unit_price.toFixed(2);
+                    updateTotals();
+                });
+            }
             discountCell.append(discountInput);
 
             const priceCell = row.insertCell();
@@ -329,12 +345,18 @@ $existingItems = array_map(static function (array $item): array {
             priceInput.step = '0.01';
             priceInput.className = 'form-control form-control-sm';
             priceInput.name = `items[${index}][unit_price]`;
-            priceInput.value = Number(item.unit_price).toFixed(2);
-            priceInput.addEventListener('input', () => {
-                item.unit_price = Math.max(0, Number(priceInput.value) || 0);
-                discountInput.value = item.mrp > 0 ? Math.max(0, (1 - item.unit_price / item.mrp) * 100).toFixed(2) : '0';
-                updateTotals();
-            });
+            if (Number(item.is_complementary) === 1) {
+                priceInput.value = '0.00';
+                priceInput.readOnly = true;
+                priceInput.classList.add('bg-light', 'text-muted', 'fw-bold');
+            } else {
+                priceInput.value = Number(item.unit_price).toFixed(2);
+                priceInput.addEventListener('input', () => {
+                    item.unit_price = Math.max(0, Number(priceInput.value) || 0);
+                    discountInput.value = item.mrp > 0 ? Math.max(0, (1 - item.unit_price / item.mrp) * 100).toFixed(2) : '0';
+                    updateTotals();
+                });
+            }
             priceCell.append(priceInput);
 
             const gstCell = row.insertCell();
@@ -443,7 +465,7 @@ $existingItems = array_map(static function (array $item): array {
             });
             removeCell.append(removeButton);
 
-            [['qc_item_id', item.qc_item_id || 0], ['variant_id', item.variant_id || 0]].forEach(([key, value]) => {
+            [['qc_item_id', item.qc_item_id || 0], ['variant_id', item.variant_id || 0], ['is_complementary', item.is_complementary || 0]].forEach(([key, value]) => {
                 const input = document.createElement('input');
                 input.type = 'hidden';
                 input.name = `items[${index}][${key}]`;
@@ -531,16 +553,18 @@ $existingItems = array_map(static function (array $item): array {
         }
         const key = getItemKey(item);
         if (!cart.has(key)) {
+            const isComp = Number(item.is_complementary || 0) === 1;
             cart.set(key, {
                 qc_item_id: Number(item.qc_item_id || 0),
                 variant_id: Number(item.variant_id || 0),
+                is_complementary: isComp ? 1 : 0,
                 product_name: item.product_name,
                 sku: item.sku || '',
                 hsn_code: item.hsn_code || '6109',
                 size_name: item.size_name || '',
                 color_name: item.color_name || '',
                 mrp: Number(item.mrp || 0),
-                unit_price: Number(item.unit_price || item.mrp || 0),
+                unit_price: isComp ? 0 : Number(item.unit_price || item.mrp || 0),
                 gst_percentage: Number(item.gst_percentage || 0),
                 gst_type: Number(item.gst_percentage || 0) > 0 ? 'BOTH' : 'EXEMPTED',
                 tax_input_type: 'PERCENT',
@@ -729,6 +753,16 @@ $existingItems = array_map(static function (array $item): array {
         if (!cart.size || [...cart.values()].some(item => !item.tags.length)) {
             event.preventDefault();
             document.getElementById('cartMessage').textContent = 'Scan at least one available QR item before saving.';
+            return;
+        }
+
+        const cartItems = [...cart.values()];
+        const paidItems = cartItems.filter(it => (Number(it.is_complementary) !== 1) && (Number(it.unit_price) > 0));
+        const compItems = cartItems.filter(it => Number(it.is_complementary) === 1);
+
+        if (compItems.length > 0 && paidItems.length === 0) {
+            event.preventDefault();
+            document.getElementById('cartMessage').innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i> A complementary product cannot be billed alone. At least one paid product must be added to the bill to proceed.</span>';
             return;
         }
         if ([...cart.values()].some(item => item.unit_price < 0 || item.gst_percentage < 0 || item.gst_percentage > 100)) {

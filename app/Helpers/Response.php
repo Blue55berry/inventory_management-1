@@ -408,6 +408,11 @@ function hasPermission(string $module, ?string $action = null): bool {
             return true;
         }
     }
+    if ($module === 'hsn' || $module === 'hsn_codes') {
+        if (in_array('hsn.' . $action, $userPermissions, true) || in_array('catalog.' . $action, $userPermissions, true) || in_array('production_purchases.' . $action, $userPermissions, true) || in_array('purchases.' . $action, $userPermissions, true)) {
+            return true;
+        }
+    }
     if ($module === 'asset_register' || $module === 'asset_dashboard') {
         if (in_array('assets.' . $action, $userPermissions, true)) {
             return true;

@@ -407,6 +407,7 @@ class ProductionBillingController
         // Check if scanned input matches a Variant QR Code, Variant SKU, or Variant ID
         $variantMatch = Database::fetchOne(
             "SELECT pv.*, p.name as product_name, p.code as parent_sku, p.hsn_code as prod_hsn, p.gst_percentage as prod_gst,
+                    p.is_complementary as prod_is_comp,
                     c.name as category_name, sc.name as subcategory_name,
                     col.name as color_name, d.name as design_name, sz.name as size_name
              FROM product_variants pv
@@ -453,6 +454,11 @@ class ProductionBillingController
                     $sellingPrice = max(0.0, (float)$variantMatch['selling_price']);
                     if ($sellingPrice <= 0) $sellingPrice = $mrp;
 
+                    $isComp = (!empty($variantMatch['is_complementary']) || !empty($variantMatch['prod_is_comp']));
+                    if ($isComp) {
+                        $sellingPrice = 0.00;
+                    }
+
                     $vCode = $variantMatch['variant_code'] ?: $variantMatch['sku'];
                     $vTags = [];
                     for ($t = 1; $t <= (int)$availableQty; $t++) {
@@ -470,6 +476,7 @@ class ProductionBillingController
                         'color_name' => (string)($variantMatch['color_name'] ?? 'STD'),
                         'mrp' => $mrp,
                         'unit_price' => $sellingPrice,
+                        'is_complementary' => $isComp ? 1 : 0,
                         'gst_percentage' => max(0, (float)($variantMatch['gst_rate'] ?? $variantMatch['prod_gst'] ?? 0)),
                         'hsn_code' => (string)($variantMatch['hsn_code'] ?? $variantMatch['prod_hsn'] ?? '6109'),
                         'available_tags' => $vTags,
@@ -665,7 +672,9 @@ class ProductionBillingController
                     pp.program_number, pp.name AS program_name,
                     COALESCE(p.name, pp.name, 'Finished Product') AS product_name,
                     p.code AS product_code, p.gst_percentage, p.hsn_code,
-                    pv.sku, pv.mrp AS variant_mrp, pv.selling_price
+                    p.is_complementary AS prod_is_comp,
+                    pv.sku, pv.mrp AS variant_mrp, pv.selling_price,
+                    pv.is_complementary AS var_is_comp
              FROM qc_items qi
              JOIN qc_batches qb ON qb.id = qi.qc_batch_id
              JOIN production_programs pp ON pp.id = qb.program_id
@@ -711,6 +720,10 @@ class ProductionBillingController
 
             $mrp = (float)($r['variant_mrp'] ?: ($r['base_price'] ?: 0));
             $unitPrice = (float)($r['selling_price'] ?: ($r['discount_price'] ?: ($r['base_price'] ?: $mrp)));
+            $isComp = (!empty($r['prod_is_comp']) || !empty($r['var_is_comp']));
+            if ($isComp) {
+                $unitPrice = 0.00;
+            }
             $gstRate = (float)($r['gst_percentage'] ?: 5.0);
 
             $billItems[] = [
@@ -722,6 +735,7 @@ class ProductionBillingController
                 'color_name'     => $r['color_name'] ?? '',
                 'mrp'            => $mrp,
                 'unit_price'     => $unitPrice,
+                'is_complementary' => $isComp ? 1 : 0,
                 'gst_percentage' => $gstRate,
                 'gst_type'       => $gstRate > 0 ? 'BOTH' : 'EXEMPTED',
                 'tax_input_type' => 'PERCENT',
@@ -747,7 +761,9 @@ class ProductionBillingController
             "SELECT pbi.*,
                     COALESCE(p.name, pp.name, 'Finished Product') AS product_name,
                     p.code AS product_code, p.gst_percentage, p.hsn_code,
+                    p.is_complementary AS prod_is_comp,
                     pv.sku, pv.mrp AS variant_mrp, pv.selling_price,
+                    pv.is_complementary AS var_is_comp,
                     c.name AS color_name, sz.name AS size_name
              FROM production_batch_items pbi
              JOIN production_batches pb ON pb.id = pbi.production_batch_id
@@ -793,6 +809,10 @@ class ProductionBillingController
 
             $mrp = (float)($r['variant_mrp'] ?: 0);
             $unitPrice = (float)($r['selling_price'] ?: $mrp);
+            $isComp = (!empty($r['prod_is_comp']) || !empty($r['var_is_comp']));
+            if ($isComp) {
+                $unitPrice = 0.00;
+            }
             $gstRate = (float)($r['gst_percentage'] ?: 5.0);
 
             $billItems[] = [
@@ -804,6 +824,7 @@ class ProductionBillingController
                 'color_name'     => $r['color_name'] ?? '',
                 'mrp'            => $mrp,
                 'unit_price'     => $unitPrice,
+                'is_complementary' => $isComp ? 1 : 0,
                 'gst_percentage' => $gstRate,
                 'gst_type'       => $gstRate > 0 ? 'BOTH' : 'EXEMPTED',
                 'tax_input_type' => 'PERCENT',
@@ -856,6 +877,7 @@ class ProductionBillingController
         }
         foreach ($items as &$item) {
             $item['tags'] = $tagsByItem[(int)$item['id']] ?? [];
+            $item['is_complementary'] = (int)($item['is_complementary'] ?? 0);
         }
         unset($item);
         return $items;
@@ -869,7 +891,9 @@ class ProductionBillingController
                     pp.program_number, pp.name AS program_name,
                     COALESCE(p.name, pp.name, 'Finished Product') AS product_name,
                     p.code AS product_code, p.gst_percentage, p.hsn_code,
+                    p.is_complementary AS prod_is_comp,
                     pv.sku, pv.mrp AS variant_mrp, pv.selling_price,
+                    pv.is_complementary AS var_is_comp,
                     c.name AS color_from_variant, sz.name AS size_from_variant
              FROM qc_items qi
              JOIN qc_batches qb ON qb.id = qi.qc_batch_id
@@ -959,6 +983,11 @@ class ProductionBillingController
                 $defaultPrice = $mrp;
             }
 
+            $isComp = (!empty($row['prod_is_comp']) || !empty($row['var_is_comp']));
+            if ($isComp) {
+                $defaultPrice = 0.00;
+            }
+
             $available[] = [
                 'qc_item_id' => $qcItemId,
                 'qc_batch_id' => (int)$row['qc_batch_id'],
@@ -970,6 +999,7 @@ class ProductionBillingController
                 'color_name' => (string)(!empty($row['color_name']) ? $row['color_name'] : ($row['color_from_variant'] ?? '')),
                 'mrp' => $mrp,
                 'unit_price' => $defaultPrice,
+                'is_complementary' => $isComp ? 1 : 0,
                 'gst_percentage' => max(0, (float)($row['gst_percentage'] ?? 0)),
                 'hsn_code' => (string)($row['hsn_code'] ?? '6109'),
                 'available_tags' => $tags,
@@ -1099,6 +1129,7 @@ class ProductionBillingController
             if ($qcItemId === 0 && $variantId > 0) {
                 $varRow = Database::fetchOne(
                     "SELECT pv.*, p.name as product_name, p.code as parent_sku, p.hsn_code as prod_hsn, p.gst_percentage as prod_gst,
+                            p.is_complementary as prod_is_comp,
                             sz.name as size_name, col.name as color_name
                      FROM product_variants pv
                      JOIN products p ON p.id = pv.product_id
@@ -1116,6 +1147,7 @@ class ProductionBillingController
                     Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'Insufficient available stock for variant ' . ($varRow['sku'] ?? "ID $variantId") . '. Available: ' . $availableVariantQty);
                     return;
                 }
+                $isComp = (!empty($varRow['is_complementary']) || !empty($varRow['prod_is_comp']));
                 $stock = [
                     'qc_item_id' => 0,
                     'qc_batch_id' => 0,
@@ -1126,7 +1158,8 @@ class ProductionBillingController
                     'size_name' => $varRow['size_name'] ?? 'STD',
                     'color_name' => $varRow['color_name'] ?? 'STD',
                     'mrp' => (float)$varRow['mrp'],
-                    'unit_price' => (float)$varRow['selling_price'],
+                    'unit_price' => $isComp ? 0.00 : (float)$varRow['selling_price'],
+                    'is_complementary' => $isComp ? 1 : 0,
                     'gst_percentage' => (float)($varRow['gst_rate'] ?? $varRow['prod_gst'] ?? 0),
                     'hsn_code' => (string)($varRow['hsn_code'] ?? $varRow['prod_hsn'] ?? '6109'),
                     'available_tags' => $tags,
@@ -1236,11 +1269,17 @@ class ProductionBillingController
                 $igstRate = 0.0;
             }
 
+            $isComplementary = !empty($submitted['is_complementary']) || !empty($stock['is_complementary']);
+            if ($isComplementary) {
+                $unitPrice = 0.00;
+            }
+
             $itemPayload[] = [
                 'stock' => $stock,
                 'tags' => $tags,
                 'quantity' => count($tags),
                 'unit_price' => round((float)$unitPrice, 2),
+                'is_complementary' => $isComplementary ? 1 : 0,
                 'hsn_code' => $hsnCode,
                 'gst_type' => $gstType,
                 'tax_input_type' => $taxInputType,
@@ -1251,6 +1290,23 @@ class ProductionBillingController
         }
         if (!$itemPayload) {
             Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'Scan at least one available Production Inventory QR item.');
+            return;
+        }
+
+        // Business Rule: A complementary product can only be billed if at least one paid product is in the bill
+        $hasPaidProduct = false;
+        $hasComplementaryProduct = false;
+        foreach ($itemPayload as $ipItem) {
+            if (!empty($ipItem['is_complementary'])) {
+                $hasComplementaryProduct = true;
+            } else {
+                if ($ipItem['unit_price'] > 0) {
+                    $hasPaidProduct = true;
+                }
+            }
+        }
+        if ($hasComplementaryProduct && !$hasPaidProduct) {
+            Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'A complementary product cannot be billed alone. At least one paid product must be added to the bill to proceed.');
             return;
         }
 
@@ -1415,14 +1471,16 @@ class ProductionBillingController
                 Database::execute(
                     "INSERT INTO production_bill_items
                      (bill_id, qc_item_id, variant_id, product_name, sku, size_name, color_name, quantity, mrp,
-                      hsn_code, unit_price, discount_percentage, discount_amount, gst_percentage, gst_type, tax_input_type,
+                      unit_price, is_complementary, hsn_code, discount_percentage, discount_amount, gst_percentage, gst_type, tax_input_type,
                       sgst_rate, cgst_rate, igst_rate, taxable_amount, cgst_amount, sgst_amount, igst_amount,
                       tax_amount, total_amount)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [
                         $billId, $stock['qc_item_id'], $stock['variant_id'] ?: null,
                         $stock['product_name'], $stock['sku'], $stock['size_name'], $stock['color_name'],
-                        $item['quantity'], $amounts['mrp'], $item['hsn_code'], $item['unit_price'], $amounts['discount_percentage'],
+                        $item['quantity'], $amounts['mrp'], $item['unit_price'],
+                        $item['is_complementary'] ? 1 : 0, $item['hsn_code'],
+                        $amounts['discount_percentage'],
                         $amounts['discount_amount'], $item['gst_percentage'], $item['gst_type'], $item['tax_input_type'],
                         $item['sgst_rate'], $item['cgst_rate'], $item['igst_rate'], $amounts['taxable_amount'],
                         $amounts['cgst_amount'], $amounts['sgst_amount'], $amounts['igst_amount'],

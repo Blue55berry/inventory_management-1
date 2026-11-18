@@ -155,7 +155,7 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                 <td><?= $index + 1 ?></td>
                 <td>
                     <?= e($description) ?><br>
-                    <small style="color:#6b7280;"><?= $item['item_type'] === 'FABRIC_ROLL' ? 'Fabric Roll' : ($item['item_type'] === 'THIRD_PARTY' ? 'Third-Party Product' : 'Own Production Product') ?></small>
+                    <small style="color:#6b7280;"><?= $item['item_type'] === 'FABRIC_ROLL' ? 'Fabric Roll' : ($item['item_type'] === 'RAW_MATERIAL' ? 'Raw Material' : ($item['item_type'] === 'THIRD_PARTY' ? 'Third-Party Product' : 'Own Production Product')) ?></small>
                 </td>
                 <td><small style="font-family:monospace;"><?= e($item['hsn_code'] ?: '—') ?></small></td>
                 <td><?= number_format((float)$item['quantity'], 3) ?> <?= e($item['unit']) ?><?= !empty($item['weight_kg']) ? ' · ' . number_format((float)$item['weight_kg'], 2) . ' kg' : '' ?></td>

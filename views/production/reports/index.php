@@ -3,9 +3,14 @@
         <h2 class="mb-1"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Production Analytics & Reports</h2>
         <span class="text-muted">Efficiency metrics, cutting yield, wastage rate, and QC pass percentages</span>
     </div>
-    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">
-        <i class="bi bi-printer me-1"></i> Print Report
-    </button>
+    <div class="d-flex align-items-center gap-2">
+        <a href="<?= url('export') ?>" class="btn btn-primary btn-sm fw-semibold shadow-sm px-3 d-flex align-items-center gap-1.5" title="Open Data Export Center">
+            <i class="bi bi-file-earmark-arrow-down"></i> Export Center
+        </a>
+        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold shadow-sm px-3" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i> Print Report
+        </button>
+    </div>
 </div>
 
 <!-- Top Summary Cards -->

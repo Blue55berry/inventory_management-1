@@ -188,6 +188,52 @@ if (!empty($authUser['production_unit_name'])) {
 
                     <li class="nav-divider"></li>
 
+                    <!-- HSN Module -->
+                    <?php 
+                    $canViewHsn = hasPermission('hsn', 'view') 
+                        || hasPermission('catalog', 'view') 
+                        || hasPermission('production_purchases', 'view')
+                        || isSuperAdmin();
+                    ?>
+                    <?php if ($canViewHsn): ?>
+                    <li class="nav-item has-submenu">
+                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'hsn' ? 'active' : '' ?>">
+                            <i class="bi bi-upc-scan"></i>
+                            <span>HSN Module</span>
+                            <i class="bi bi-chevron-down submenu-arrow"></i>
+                        </a>
+                        <ul class="submenu <?= ($activeModule ?? '') === 'hsn' ? 'show' : '' ?>">
+                            <li><a href="<?= url('hsn') ?>" class="<?= in_array(($activeMenu ?? ''), ['hsn-list', 'hsn']) ? 'active' : '' ?>">HSN Code Catalog</a></li>
+                            <li><a href="<?= url('hsn/create') ?>" class="<?= ($activeMenu ?? '') === 'hsn-create' ? 'active' : '' ?>">Add New HSN</a></li>
+                        </ul>
+                    </li>
+                    <?php endif; ?>
+
+                    <li class="nav-divider"></li>
+
+                    <!-- Export -->
+                    <?php 
+                    $canViewExport = hasPermission('reports', 'view') 
+                        || hasPermission('reports', 'export') 
+                        || hasPermission('reports_production', 'export')
+                        || isSuperAdmin();
+                    ?>
+                    <?php if ($canViewExport): ?>
+                    <li class="nav-item has-submenu">
+                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'export' ? 'active' : '' ?>">
+                            <i class="bi bi-file-earmark-arrow-down"></i>
+                            <span>Export</span>
+                            <i class="bi bi-chevron-down submenu-arrow"></i>
+                        </a>
+                        <ul class="submenu <?= ($activeModule ?? '') === 'export' ? 'show' : '' ?>">
+                            <li><a href="<?= url('export') ?>" class="<?= in_array(($activeMenu ?? ''), ['export', 'export-hub']) ? 'active' : '' ?>">Data Export Center</a></li>
+                            <li><a href="<?= url('export/quick-csv') ?>" class="<?= ($activeMenu ?? '') === 'export-quick' ? 'active' : '' ?>">Current Month CSV</a></li>
+                        </ul>
+                    </li>
+                    <?php endif; ?>
+
+                    <li class="nav-divider"></li>
+
                     <!-- Staff -->
                     <?php 
                     $canViewStaff = hasPermission('staff', 'view') || hasPermission('roles', 'view') || hasPermission('staff', 'create');
@@ -212,6 +258,8 @@ if (!empty($authUser['production_unit_name'])) {
                         </ul>
                     </li>
                     <?php endif; ?>
+
+                    <li class="nav-divider"></li>
 
                     <!-- System -->
                     <?php 

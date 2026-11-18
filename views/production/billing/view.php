@@ -44,7 +44,13 @@
             <tbody>
                 <?php foreach ($billItems as $item): ?>
                     <tr>
-                        <td><div class="fw-semibold"><?= htmlspecialchars($item['product_name']) ?></div>
+                        <td>
+                            <div class="fw-semibold">
+                                <?= htmlspecialchars($item['product_name']) ?>
+                                <?php if (!empty($item['is_complementary'])): ?>
+                                    <span class="badge bg-info-subtle text-info border ms-1"><i class="bi bi-gift-fill me-1"></i>Complementary</span>
+                                <?php endif; ?>
+                            </div>
                             <div class="small text-muted"><?= htmlspecialchars(trim(($item['sku'] ?? '') . ' ' . ($item['size_name'] ?? '') . ' ' . ($item['color_name'] ?? ''))) ?></div>
                             <div class="small font-monospace text-muted"><?= htmlspecialchars(implode(', ', $item['tags'])) ?></div></td>
                         <td><span class="badge bg-light text-dark border font-monospace"><?= htmlspecialchars($item['hsn_code'] ?? '6109') ?></span></td><td class="text-center"><?= (int)$item['quantity'] ?></td>

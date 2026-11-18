@@ -4,8 +4,10 @@
             <h2 class="mb-0"><i class="bi bi-receipt me-2 text-primary"></i><?= e($purchase['purchase_number']) ?></h2>
             <?php
                 $pType = $purchase['purchase_type'] ?? 'FABRIC_ROLL';
-                if ($pType === 'THIRD_PARTY'):
+                if ($pType === 'RAW_MATERIAL'):
             ?>
+                <span class="badge bg-warning-subtle text-warning-emphasis border fs-6"><i class="bi bi-boxes me-1"></i>Raw Material</span>
+            <?php elseif ($pType === 'THIRD_PARTY'): ?>
                 <span class="badge bg-info-subtle text-info border fs-6"><i class="bi bi-box-seam me-1"></i>Third-Party</span>
             <?php elseif ($pType === 'OWN_PRODUCT'): ?>
                 <span class="badge bg-success-subtle text-success border fs-6"><i class="bi bi-building-check me-1"></i>Own Production</span>
@@ -192,13 +194,16 @@
                 <tr class="item-row" data-search="<?= htmlspecialchars($searchData, ENT_QUOTES) ?>">
                     <td><?= $index + 1 ?></td>
                     <td>
-                        <?php if ($item['item_type'] === 'THIRD_PARTY'): ?>
+                        <?php if ($item['item_type'] === 'RAW_MATERIAL'): ?>
+                            <span class="badge bg-warning-subtle text-warning-emphasis border mb-1"><i class="bi bi-boxes me-1"></i>Raw Material</span>
+                            <strong class="d-block text-dark"><?= e($item['item_name']) ?></strong>
+                            <div class="small text-muted">
+                                <?php if (!empty($item['vendor_sku'])): ?><span class="font-monospace me-2">SKU: <?= e($item['vendor_sku']) ?></span><?php endif; ?>
+                                <?php if (!empty($item['size'])): ?><span class="me-2">Count/Size: <?= e($item['size']) ?></span><?php endif; ?>
+                                <?php if (!empty($item['color'])): ?><span>Color/Shade: <?= e($item['color']) ?></span><?php endif; ?>
+                            </div>
+                        <?php elseif ($item['item_type'] === 'THIRD_PARTY'): ?>
                             <span class="badge bg-info-subtle text-info border mb-1"><i class="bi bi-box-seam me-1"></i>Third-Party</span>
-                            <?php if (!empty($item['is_mapped'])): ?>
-                                <span class="badge bg-success-subtle text-success border ms-1"><i class="bi bi-check2-circle me-1"></i>Mapped: <?= e($item['category_name']) ?><?= !empty($item['subcategory_name']) ? ' › ' . e($item['subcategory_name']) : '' ?></span>
-                            <?php else: ?>
-                                <a href="<?= url('purchases/mapping?search=' . urlencode($item['item_name'])) ?>" class="badge bg-warning-subtle text-warning border text-decoration-none ms-1"><i class="bi bi-diagram-3-fill me-1"></i>Needs Mapping</a>
-                            <?php endif; ?>
                             <strong class="d-block text-dark"><?= e($item['item_name']) ?></strong>
                             <div class="small text-muted">
                                 <?php if (!empty($item['vendor_sku'])): ?><span class="font-monospace me-2">SKU: <?= e($item['vendor_sku']) ?></span><?php endif; ?>
@@ -268,9 +273,6 @@
                         <?php elseif ($item['item_type'] === 'THIRD_PARTY'): ?>
                             <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
                                 <i class="bi bi-qr-code text-primary"></i>
-                            </a>
-                            <a class="btn btn-outline-warning btn-action-icon text-dark" href="<?= url('purchases/mapping?search=' . urlencode($item['item_name'])) ?>" title="Map Product Hierarchy &amp; Attributes">
-                                <i class="bi bi-diagram-3-fill"></i>
                             </a>
                         <?php else: ?>
                             <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">

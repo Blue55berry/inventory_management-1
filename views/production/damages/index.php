@@ -818,7 +818,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div class="modal-header bg-primary text-white py-3 px-4">
                 <h5 class="modal-title fs-6 fw-bold" id="modalQuickAddHsnLabel">
-                    <i class="bi bi-plus-circle me-1"></i> Add New HSN Code &amp; GST Rate
+                    <i class="bi bi-plus-circle me-1"></i> Add New HSN Code
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -831,14 +831,6 @@
                 <div class="mb-3">
                     <label class="form-label fw-bold small text-dark">Commodity / Description <span class="text-danger">*</span></label>
                     <input type="text" id="quickHsnDescInput" class="form-control" placeholder="e.g. Cotton Woven Fabric / Sewing Thread / Buttons" maxlength="150" required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-dark">Default GST Rate (%) <span class="text-danger">*</span></label>
-                    <div class="input-group">
-                        <input type="number" step="0.01" min="0" max="28" id="quickHsnGstInput" class="form-control fw-bold" value="5.00" required>
-                        <span class="input-group-text">%</span>
-                    </div>
-                    <small class="text-muted" style="font-size:0.75rem;">Standard garment slab: 5.00%, 12.00%, 18.00%</small>
                 </div>
                 <div id="quickHsnAlert" class="alert alert-danger py-2 small d-none mb-0"></div>
             </div>
@@ -1803,7 +1795,6 @@ function openQuickAddHsnModal(presetCode = '') {
     const alertBox = document.getElementById('quickHsnAlert');
     if (codeInp) codeInp.value = presetCode || '';
     if (descInp) descInp.value = '';
-    if (gstInp) gstInp.value = '5.00';
     if (alertBox) alertBox.classList.add('d-none');
     const modalEl = document.getElementById('modalQuickAddHsn');
     if (modalEl) {
@@ -1822,7 +1813,6 @@ function initQuickAddHsnModalHandler() {
     btnSave.addEventListener('click', () => {
         const code = (document.getElementById('quickHsnCodeInput')?.value || '').trim().toUpperCase();
         const desc = (document.getElementById('quickHsnDescInput')?.value || '').trim();
-        const gst = parseFloat(document.getElementById('quickHsnGstInput')?.value) || 0;
         const alertBox = document.getElementById('quickHsnAlert');
 
         if (!code || code.length < 2) {
@@ -1840,7 +1830,6 @@ function initQuickAddHsnModalHandler() {
         const fd = new FormData();
         fd.append('hsn_code', code);
         fd.append('description', desc);
-        fd.append('gst_rate', gst.toFixed(2));
         const csrf = document.querySelector('input[name="csrf_token"]');
         if (csrf) fd.append('csrf_token', csrf.value);
 

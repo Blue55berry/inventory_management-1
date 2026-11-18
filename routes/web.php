@@ -190,6 +190,7 @@ class Router {
         $this->get('api/catalog/check-qr-code', 'ProductionController', 'ajaxCheckQRCode', ['AuthMiddleware']);
         $this->get('api/hsn-codes', 'ProductionController', 'ajaxHsnCodesList', ['AuthMiddleware']);
         $this->post('api/hsn-codes/store', 'ProductionController', 'ajaxStoreHsnCode', ['AuthMiddleware']);
+        $this->post('production/hsn/store-ajax', 'ProductionController', 'ajaxStoreHsnCode', ['AuthMiddleware']);
         $this->post('api/operators/quick-add', 'ProductionController', 'ajaxQuickAddOperator', ['AuthMiddleware']);
         $this->post('api/tailors/quick-add', 'ProductionController', 'ajaxQuickAddTailor', ['AuthMiddleware']);
 
@@ -304,9 +305,9 @@ class Router {
         $this->post('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
         $this->get('api/stock-adjustments/resolve-item', 'StockAdjustmentController', 'apiResolveItem', ['AuthMiddleware']);
 
-        // Production Reports & CSV / Excel Export
-        $this->get('production/reports/export', 'ProductionController', 'exportReports', ['AuthMiddleware']);
-        $this->post('production/reports/export', 'ProductionController', 'exportReports', ['AuthMiddleware']);
+        // Production Reports & CSV / Excel Export (Legacy forward to ExportController)
+        $this->get('production/reports/export', 'ExportController', 'download', ['AuthMiddleware']);
+        $this->post('production/reports/export', 'ExportController', 'download', ['AuthMiddleware']);
 
         // Production Fabric & Roll Damages
         $this->get('production/damages', 'ProductionController', 'damageList', ['AuthMiddleware', ['PermissionMiddleware', 'damages', 'view']]);
@@ -498,7 +499,26 @@ class Router {
 
         // Production Reports
         $this->get('production/reports', 'ProductionController', 'reports', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
-        $this->get('production/reports/export', 'ProductionController', 'exportReports', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
+        $this->get('production/reports/export', 'ExportController', 'download', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
+
+        // ==========================================
+        // HSN CODE MANAGEMENT MODULE
+        // ==========================================
+        $this->get('hsn', 'HsnController', 'index', ['AuthMiddleware']);
+        $this->get('hsn/create', 'HsnController', 'create', ['AuthMiddleware']);
+        $this->post('hsn/store', 'HsnController', 'store', ['AuthMiddleware']);
+        $this->get('hsn/edit/{id}', 'HsnController', 'edit', ['AuthMiddleware']);
+        $this->post('hsn/update/{id}', 'HsnController', 'update', ['AuthMiddleware']);
+        $this->post('hsn/delete/{id}', 'HsnController', 'delete', ['AuthMiddleware']);
+        $this->get('api/hsn-codes/search', 'HsnController', 'apiSearch', ['AuthMiddleware']);
+
+        // ==========================================
+        // EXPORT MODULE (STANDALONE)
+        // ==========================================
+        $this->get('export', 'ExportController', 'index', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
+        $this->get('export/download', 'ExportController', 'download', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
+        $this->post('export/download', 'ExportController', 'download', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
+        $this->get('export/quick-csv', 'ExportController', 'quickCsv', ['AuthMiddleware', ['PermissionMiddleware', 'reports', 'view']]);
 
         // ==========================================
         // ASSETS MANAGEMENT

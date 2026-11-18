@@ -505,7 +505,12 @@ if (!empty($billItems[0])) {
                 <!-- Product Name Header Line -->
                 <tr>
                     <td colspan="6" style="padding-top: 5px; padding-bottom: 2px;">
-                        <div class="item-title"><?= htmlspecialchars($item['product_name']) ?></div>
+                        <div class="item-title">
+                            <?= htmlspecialchars($item['product_name']) ?>
+                            <?php if (!empty($item['is_complementary'])): ?>
+                                <span style="background: #e0f2fe; color: #0369a1; padding: 1px 6px; border-radius: 4px; font-size: 8pt; font-weight: bold; margin-left: 6px;">[COMPLEMENTARY / FREE]</span>
+                            <?php endif; ?>
+                        </div>
                     </td>
                 </tr>
 

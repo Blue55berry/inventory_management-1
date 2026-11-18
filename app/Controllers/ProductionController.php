@@ -13,6 +13,7 @@ require_once BASE_PATH . '/app/Services/ProductionService.php';
 require_once BASE_PATH . '/app/Services/AuditService.php';
 require_once BASE_PATH . '/app/Services/CloudinaryService.php';
 require_once BASE_PATH . '/app/Services/SettingsService.php';
+require_once BASE_PATH . '/app/Services/PurchaseMappingFulfillmentService.php';
 require_once BASE_PATH . '/app/Models/QCBatch.php';
 require_once BASE_PATH . '/app/Models/QCItem.php';
 require_once BASE_PATH . '/app/Models/LabelBatch.php';
@@ -139,51 +140,8 @@ class ProductionController {
      * Export Comprehensive Production Reports (CSV / Print).
      */
     public function exportReports(): void {
-        require_once BASE_PATH . '/app/Services/ProductionReportService.php';
-
-        $periodType = trim((string)($_REQUEST['period_type'] ?? 'MONTH'));
-        $format = strtoupper(trim((string)($_REQUEST['format'] ?? 'CSV')));
-
-        if ($periodType === 'MONTH') {
-            $month = (int)($_REQUEST['selected_month'] ?? date('n'));
-            $year = (int)($_REQUEST['selected_year'] ?? date('Y'));
-            $month = max(1, min(12, $month));
-            $year = max(2020, min(2035, $year));
-            $startDate = sprintf('%04d-%02d-01', $year, $month);
-            $endDate = date('Y-m-t', strtotime($startDate));
-            $periodLabel = date('F Y', strtotime($startDate));
-        } else {
-            $startDate = trim((string)($_REQUEST['date_from'] ?? date('Y-m-01')));
-            $endDate = trim((string)($_REQUEST['date_to'] ?? date('Y-m-d')));
-            $periodLabel = date('d M Y', strtotime($startDate)) . ' to ' . date('d M Y', strtotime($endDate));
-        }
-
-        $allModules = ['purchases', 'rolls', 'programs', 'cuttings', 'stitching', 'qc', 'batches', 'outward', 'billing', 'returns', 'stock_requests', 'wastage', 'expenses'];
-        $selectedModules = !empty($_REQUEST['modules']) && is_array($_REQUEST['modules'])
-            ? array_values(array_intersect($_REQUEST['modules'], $allModules))
-            : $allModules;
-
-        if (empty($selectedModules)) {
-            $selectedModules = $allModules;
-        }
-
-        $activeFacility = ProductionUnit::getActiveFacility();
-        $data = \App\Services\ProductionReportService::getReportData($startDate, $endDate, $selectedModules);
-
-        if ($format === 'PRINT') {
-            Response::viewOnly('production.reports.print', [
-                'periodLabel'     => $periodLabel,
-                'startDate'       => $startDate,
-                'endDate'         => $endDate,
-                'selectedModules' => $selectedModules,
-                'data'            => $data,
-                'prodUnit'        => $activeFacility,
-                'sellerCompany'   => SettingsService::getGroup('company'),
-            ]);
-            return;
-        }
-
-        \App\Services\ProductionReportService::streamCsv($periodLabel, $startDate, $endDate, $data, $activeFacility);
+        require_once BASE_PATH . '/app/Controllers/ExportController.php';
+        (new \ExportController())->download();
     }
 
     // =========================================================================
@@ -1328,7 +1286,7 @@ class ProductionController {
         $where = [];
         $params = [];
 
-        if (in_array($filterType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+        if (in_array($filterType, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
             $where[] = "pp.purchase_type = ?";
             $params[] = $filterType;
         }
@@ -1359,16 +1317,9 @@ class ProductionController {
             $purchaseIds = array_column($purchases, 'id');
             $placeholders = implode(',', array_fill(0, count($purchaseIds), '?'));
             $items = Database::fetchAll(
-                "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.product_code, ppi.vendor_sku,
-                        ppi.product_id, ppi.variant_id, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
-                        ppi.selling_price, ppi.total_price, ppi.roll_number, ppi.color, ppi.size,
-                        ppi.design_name, ppi.design_count, ppi.weight_kg, ppi.gst_type, ppi.tax_input_type,
-                        ppi.sgst_amount, ppi.cgst_amount, ppi.igst_amount, ppi.is_inwarded, ppi.is_mapped,
-                        ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.hsn_code, ppi.start_code,
-                        ppi.end_code, ppi.qr_code,
-                        sr.start_code AS sr_start_code, sr.end_code AS sr_end_code
+                "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.quantity,
+                        ppi.weight_kg, ppi.roll_number
                  FROM production_purchase_items ppi
-                 LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
                  WHERE ppi.purchase_id IN ($placeholders)
                  ORDER BY ppi.id ASC",
                 $purchaseIds
@@ -1389,46 +1340,12 @@ class ProductionController {
                 COUNT(*) AS total_count,
                 COALESCE(SUM(total_amount), 0) AS total_value,
                 COUNT(CASE WHEN purchase_type = 'FABRIC_ROLL' THEN 1 END) AS fabric_roll_count,
+                COUNT(CASE WHEN purchase_type = 'RAW_MATERIAL' THEN 1 END) AS raw_material_count,
                 COUNT(CASE WHEN purchase_type = 'THIRD_PARTY' THEN 1 END) AS third_party_count,
                 COUNT(CASE WHEN purchase_type = 'OWN_PRODUCT' THEN 1 END) AS own_product_count
              FROM production_purchases"
         );
         $totalPurchaseValue = (float)($metrics['total_value'] ?? 0);
-
-        // Count pending unmapped third-party products
-        $unmappedThirdPartyCount = (int)(Database::fetchOne(
-            "SELECT COUNT(*) AS c FROM production_purchase_items WHERE item_type = 'THIRD_PARTY' AND is_mapped = 0"
-        )['c'] ?? 0);
-
-        $supplyStock = [];
-
-        $fabricRollInventory = Database::fetchAll(
-            "SELECT sr.id, sr.seller_id, sr.roll_number, sr.color, sr.design_name, sr.design_count,
-                    sr.quantity, sr.weight, sr.price, sr.material_type, sr.photo_url, sr.start_code,
-                    sr.end_code, sr.qr_code, sr.hsn_code,
-                    s.name AS seller_name, s.company,
-                    COALESCE(sr.material_type, s.material_type, 'FABRIC') AS fabric_description,
-                    COALESCE(u.used_quantity, 0) AS used_quantity,
-                    COALESCE(dmg.damaged_quantity, 0) AS damaged_quantity,
-                    GREATEST(0, sr.quantity - COALESCE(u.used_quantity, 0) - COALESCE(dmg.damaged_quantity, 0)) AS available_quantity
-             FROM seller_rolls sr
-             JOIN sellers s ON s.id = sr.seller_id
-             LEFT JOIN (
-                 SELECT ppr.seller_roll_id, SUM(ppr.roll_qty) AS used_quantity
-                 FROM production_program_rolls ppr
-                 JOIN production_programs pp ON pp.id = ppr.production_program_id
-                 WHERE pp.is_active = 1 AND pp.status != 'CANCELLED'
-                 GROUP BY ppr.seller_roll_id
-             ) u ON u.seller_roll_id = sr.id
-             LEFT JOIN (
-                 SELECT rd.seller_roll_id, SUM(rd.damaged_quantity) AS damaged_quantity
-                 FROM roll_damages rd
-                 WHERE rd.status NOT IN ('CLOSED', 'CANCELLED')
-                 GROUP BY rd.seller_roll_id
-             ) dmg ON dmg.seller_roll_id = sr.id
-             WHERE s.seller_type = 'MATERIAL_SUPPLIER'
-             ORDER BY sr.id DESC"
-        );
 
         Response::view('production.purchases.index', [
             'pageTitle' => 'Purchases & Procurement',
@@ -1437,9 +1354,6 @@ class ProductionController {
             'purchases' => $purchases,
             'totalPurchaseValue' => $totalPurchaseValue,
             'metrics' => $metrics,
-            'unmappedThirdPartyCount' => $unmappedThirdPartyCount,
-            'supplyStock' => $supplyStock,
-            'fabricRollInventory' => $fabricRollInventory,
             'filterType' => $filterType,
             'search' => $search,
             'breadcrumb' => [
@@ -1572,6 +1486,8 @@ class ProductionController {
     }
 
     public function viewProductionPurchase(string $id): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
+
         $purchase = $this->getProductionPurchase((int)$id);
         if (!$purchase) {
             Response::error(404, 'Purchase record not found.');
@@ -1585,15 +1501,10 @@ class ProductionController {
                     ppi.sgst_amount, ppi.cgst_amount, ppi.igst_amount,
                     ppi.roll_number, ppi.color, ppi.size, ppi.design_name, ppi.design_count,
                     ppi.seller_roll_id, ppi.hsn_code, ppi.start_code, ppi.end_code, ppi.qr_code,
-                    ppi.is_inwarded, ppi.inwarded_at, ppi.is_mapped, ppi.mapped_category_id,
-                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
-                    sr.start_code AS sr_start_code, sr.end_code AS sr_end_code, sr.photo_url,
-                    c.name AS category_name, sub.name AS subcategory_name, subsub.name AS sub_subcategory_name
+                    ppi.is_inwarded, ppi.inwarded_at,
+                    sr.start_code AS sr_start_code, sr.end_code AS sr_end_code, sr.photo_url
              FROM production_purchase_items ppi
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
-             LEFT JOIN categories c ON c.id = ppi.mapped_category_id
-             LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
-             LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
              WHERE ppi.purchase_id = ?
              ORDER BY ppi.id ASC",
             [(int)$purchase['id']]
@@ -1818,14 +1729,15 @@ class ProductionController {
                 ? (float)$submitted['quantity']
                 : ($oldItem ? (float)$oldItem['quantity'] : 0);
             $unitPrice = is_numeric($submitted['unit_price'] ?? null) ? (float)$submitted['unit_price'] : -1;
-            $unit = strtoupper(trim((string)($submitted['unit'] ?? $oldItem['unit'] ?? '')));
-            if ($unit === 'OTHER') {
-                $unit = strtoupper(trim((string)($submitted['custom_unit'] ?? '')));
+            $unit = trim((string)($submitted['unit'] ?? $oldItem['unit'] ?? 'Pieces'));
+            if (strtoupper($unit) === 'OTHER') {
+                $unit = trim((string)($submitted['custom_unit'] ?? ''));
             }
-            $allowedUnits = ['PCS', 'KG', 'METRE', 'LITRE', 'BOX', 'PACK', 'PAIR', 'SET', 'BUNDLE'];
+            if ($unit === '') {
+                $unit = 'Pieces';
+            }
             if ($itemName === '' || mb_strlen($itemName) > 255 || $quantity <= 0 || $unitPrice < 0
-                || $unit === '' || mb_strlen($unit) > 30
-                || (!in_array($unit, $allowedUnits, true) && strtoupper(trim((string)($submitted['unit'] ?? ''))) !== 'OTHER')) {
+                || mb_strlen($unit) > 30) {
                 Session::flash('error', 'Each purchase item needs a valid description, quantity, unit, and non-negative price.');
                 Response::back();
                 return;
@@ -1870,9 +1782,6 @@ class ProductionController {
                 $hsnCode = trim((string)($submitted['hsn_code'] ?? $oldItem['hsn_code'] ?? ''));
                 $mrp = (float)($submitted['mrp'] ?? $oldItem['mrp'] ?? 0);
                 $sellingPrice = (float)($submitted['selling_price'] ?? $oldItem['selling_price'] ?? 0);
-                if ($sellingPrice <= 0 && $mrp > 0) {
-                    $sellingPrice = $mrp;
-                }
 
                 if ($itemName === '') {
                     Session::flash('error', 'Item name is required for third-party products.');
@@ -1885,27 +1794,12 @@ class ProductionController {
                     return;
                 }
                 if ($unitPrice <= 0) {
-                    Session::flash('error', "Buyed price must be greater than zero for ({$itemName}).");
+                    Session::flash('error', "Purchase price must be greater than zero for ({$itemName}).");
                     Response::back();
                     return;
                 }
                 if ($hsnCode === '') {
                     Session::flash('error', "HSN code is mandatory for ({$itemName}).");
-                    Response::back();
-                    return;
-                }
-                if ($sellingPrice <= 0) {
-                    Session::flash('error', "Selling price is required for ({$itemName}).");
-                    Response::back();
-                    return;
-                }
-                if ($sellingPrice < $unitPrice) {
-                    Session::flash('error', "Selling price (₹" . number_format($sellingPrice, 2) . ") cannot be less than Buyed price (₹" . number_format($unitPrice, 2) . ") for ({$itemName}).");
-                    Response::back();
-                    return;
-                }
-                if ($mrp > 0 && $mrp < $sellingPrice) {
-                    Session::flash('error', "MRP (₹" . number_format($mrp, 2) . ") cannot be less than Selling price (₹" . number_format($sellingPrice, 2) . ") for ({$itemName}).");
                     Response::back();
                     return;
                 }
@@ -1916,7 +1810,41 @@ class ProductionController {
                 $designCount = null;
                 $weight = null;
                 $photoUrl = null;
-                $unit = 'PCS';
+            } elseif ($itemType === 'RAW_MATERIAL') {
+                $vendorSku = trim((string)($submitted['vendor_sku'] ?? $oldItem['vendor_sku'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? $oldItem['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? ($submitted['count_size'] ?? ($oldItem['size'] ?? ''))));
+                $hsnCode = trim((string)($submitted['hsn_code'] ?? $oldItem['hsn_code'] ?? ''));
+                $mrp = 0.0;
+                $sellingPrice = 0.0;
+
+                if ($itemName === '') {
+                    Session::flash('error', 'Material name is required for raw materials.');
+                    Response::back();
+                    return;
+                }
+                if ($quantity <= 0) {
+                    Session::flash('error', "Quantity must be greater than zero for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($unitPrice <= 0) {
+                    Session::flash('error', "Purchase price must be greater than zero for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+                if ($hsnCode === '') {
+                    Session::flash('error', "HSN code is mandatory for ({$itemName}).");
+                    Response::back();
+                    return;
+                }
+
+                $productCode = $vendorSku !== '' ? $vendorSku : ($oldItem['product_code'] ?? null);
+                $rollNumber = null;
+                $design = null;
+                $designCount = null;
+                $weight = null;
+                $photoUrl = null;
             } else {
                 $productCode = trim((string)($submitted['product_code'] ?? $oldItem['product_code'] ?? ''));
                 $rollNumber = $productCode !== '' ? mb_strtoupper($productCode) : ($oldItem['roll_number'] ?? null);
@@ -2106,14 +2034,15 @@ class ProductionController {
                          (purchase_id, item_type, item_name, quantity, unit, weight_kg, unit_price, mrp, selling_price, vendor_sku, total_price,
                           gst_type, tax_input_type, tax_treatment, sgst_value, cgst_value, igst_value, sgst_amount, cgst_amount, igst_amount,
                           roll_number, color, size, design_name, design_count, hsn_code, product_code, is_mapped)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [$purchaseId, $item['type'], $item['item_name'], $item['quantity'], $item['unit'], $item['weight'],
                             $item['unit_price'], $item['mrp'] ?? 0, $item['selling_price'] ?? 0, $item['vendor_sku'] ?? null, $item['total'],
                             $item['gst_type'], $item['tax_mode'], $item['tax_treatment'], in_array($item['gst_type'], ['SGST', 'BOTH'], true) ? $item['tax_value'] : 0,
                             $item['gst_type'] === 'CGST' ? $item['tax_value'] : $item['cgst_tax_value'],
                             $item['gst_type'] === 'IGST' ? $item['tax_value'] : 0,
                             $item['sgst_amount'], $item['cgst_amount'], $item['igst_amount'], $item['roll_number'], $item['color'],
-                            $item['size'] ?? null, $item['design_name'], $item['design_count'], $item['hsn_code'], $item['product_code']]
+                            $item['size'] ?? null, $item['design_name'], $item['design_count'], $item['hsn_code'], $item['product_code'],
+                            ($item['type'] === 'RAW_MATERIAL') ? 1 : 0]
                     );
                 }
             }
@@ -2278,7 +2207,7 @@ class ProductionController {
         }
 
         $purchaseType = strtoupper(trim((string)($_POST['purchase_type'] ?? 'FABRIC_ROLL')));
-        if (!in_array($purchaseType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+        if (!in_array($purchaseType, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
             $purchaseType = 'FABRIC_ROLL';
         }
 
@@ -2372,7 +2301,7 @@ class ProductionController {
                 continue;
             }
             $itemType = strtoupper(trim((string)($submitted['item_type'] ?? $purchaseType)));
-            if (!in_array($itemType, ['FABRIC_ROLL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+            if (!in_array($itemType, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
                 $itemType = $purchaseType;
             }
 
@@ -2469,6 +2398,103 @@ class ProductionController {
                     'vendor_sku' => null,
                     'product_id' => null,
                     'variant_id' => null,
+                    'is_mapped' => 0,
+                    'form_index' => (string)$index,
+                    'photo_url' => null,
+                ];
+                continue;
+            }
+
+            // 2. RAW MATERIALS TYPE (Yarn, threads, trims, accessories for production unit)
+            if ($itemType === 'RAW_MATERIAL') {
+                $itemName = trim((string)($submitted['item_name'] ?? ''));
+                $vendorSku = trim((string)($submitted['vendor_sku'] ?? ''));
+                $color = trim((string)($submitted['color'] ?? ''));
+                $size = trim((string)($submitted['size'] ?? ($submitted['count_size'] ?? '')));
+                $unit = trim((string)($submitted['unit'] ?? 'Kilograms'));
+                if (strtoupper($unit) === 'OTHER') {
+                    $unit = trim((string)($submitted['custom_unit'] ?? ''));
+                }
+                if ($unit === '') {
+                    $unit = 'Kilograms';
+                }
+                $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
+
+                if ($itemName === '') {
+                    Session::flash('error', "Raw material line #" . ($index + 1) . " requires an item name.");
+                    Response::back();
+                    return;
+                }
+
+                if ($quantity <= 0) {
+                    Session::flash('error', "Raw material line #" . ($index + 1) . " requires a quantity greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($unitPrice <= 0) {
+                    Session::flash('error', "Raw material line #" . ($index + 1) . " requires a purchase price greater than zero.");
+                    Response::back();
+                    return;
+                }
+
+                if ($hsnCode === '') {
+                    Session::flash('error', "Raw material line #" . ($index + 1) . " (" . $itemName . "): HSN code is mandatory.");
+                    Response::back();
+                    return;
+                }
+
+                if ($vendorSku === '') {
+                    $cleanName = substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $itemName)), 0, 6);
+                    $cleanCol = $color !== '' ? substr(strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $color)), 0, 4) : '';
+                    $cleanSz = $size !== '' ? strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $size)) : '';
+                    $parts = ['RM', $cleanName ?: 'MAT'];
+                    if ($cleanCol !== '') $parts[] = $cleanCol;
+                    if ($cleanSz !== '') $parts[] = $cleanSz;
+                    $parts[] = sprintf('%02d', ((int)$index) + 1);
+                    $vendorSku = implode('-', $parts);
+                }
+
+                $grossTotal = round($quantity * $unitPrice, 2);
+                $lineTaxes = $calculateLineTaxes($grossTotal, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+                $sgstAmount = $lineTaxes['sgst'];
+                $cgstAmount = $lineTaxes['cgst'];
+                $igstAmount = $lineTaxes['igst'];
+                $taxAmount = $lineTaxes['tax'];
+                $baseTotal = $lineTaxes['base'];
+
+                $items[] = [
+                    'type' => 'RAW_MATERIAL',
+                    'item_name' => $itemName,
+                    'quantity' => $quantity,
+                    'unit' => $unit,
+                    'weight' => null,
+                    'unit_price' => $unitPrice,
+                    'tax_treatment' => $taxTreatment,
+                    'mrp' => 0.0,
+                    'selling_price' => 0.0,
+                    'hsn_code' => $hsnCode !== '' ? mb_strtoupper($hsnCode) : null,
+                    'gst_type' => $gstType,
+                    'tax_mode' => $taxMode,
+                    'tax_value' => $taxValue,
+                    'cgst_tax_value' => $cgstTaxValue,
+                    'tax_amount' => $taxAmount,
+                    'sgst_value' => in_array($gstType, ['SGST', 'BOTH'], true) ? $taxValue : 0,
+                    'cgst_value' => $gstType === 'CGST' ? $taxValue : $cgstTaxValue,
+                    'igst_value' => $gstType === 'IGST' ? $taxValue : 0,
+                    'sgst_amount' => $sgstAmount,
+                    'cgst_amount' => $cgstAmount,
+                    'igst_amount' => $igstAmount,
+                    'line_total' => $lineTaxes['total'],
+                    'roll_number' => null,
+                    'color' => $color !== '' ? $color : null,
+                    'size' => $size !== '' ? $size : null,
+                    'design_name' => null,
+                    'design_count' => null,
+                    'product_code' => $vendorSku !== '' ? $vendorSku : null,
+                    'vendor_sku' => $vendorSku !== '' ? $vendorSku : null,
+                    'product_id' => null,
+                    'variant_id' => null,
                     'is_mapped' => 1,
                     'form_index' => (string)$index,
                     'photo_url' => null,
@@ -2476,18 +2502,22 @@ class ProductionController {
                 continue;
             }
 
-            // 2. THIRD-PARTY PRODUCTS TYPE (NO Category/Attributes required on purchase entry)
+            // 3. THIRD-PARTY PRODUCTS TYPE (Procurement cost only, no MRP/Selling required)
             if ($itemType === 'THIRD_PARTY') {
                 $itemName = trim((string)($submitted['item_name'] ?? ''));
                 $vendorSku = trim((string)($submitted['vendor_sku'] ?? ''));
                 $color = trim((string)($submitted['color'] ?? ''));
                 $size = trim((string)($submitted['size'] ?? ''));
+                $unit = trim((string)($submitted['unit'] ?? 'Pieces'));
+                if (strtoupper($unit) === 'OTHER') {
+                    $unit = trim((string)($submitted['custom_unit'] ?? ''));
+                }
+                if ($unit === '') {
+                    $unit = 'Pieces';
+                }
                 $hsnCode = trim((string)($submitted['hsn_code'] ?? ''));
                 $mrp = (float)($submitted['mrp'] ?? 0);
                 $sellingPrice = (float)($submitted['selling_price'] ?? 0);
-                if ($sellingPrice <= 0 && $mrp > 0) {
-                    $sellingPrice = $mrp;
-                }
 
                 if ($itemName === '') {
                     Session::flash('error', "Product line #" . ($index + 1) . " requires a product/item name.");
@@ -2502,31 +2532,13 @@ class ProductionController {
                 }
 
                 if ($unitPrice <= 0) {
-                    Session::flash('error', "Product line #" . ($index + 1) . " requires a Buyed price greater than zero.");
+                    Session::flash('error', "Product line #" . ($index + 1) . " requires a purchase price greater than zero.");
                     Response::back();
                     return;
                 }
 
                 if ($hsnCode === '') {
                     Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): HSN code is mandatory.");
-                    Response::back();
-                    return;
-                }
-
-                if ($sellingPrice <= 0) {
-                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): Selling price is required and must be greater than zero.");
-                    Response::back();
-                    return;
-                }
-
-                if ($sellingPrice < $unitPrice) {
-                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): Selling price (₹" . number_format($sellingPrice, 2) . ") cannot be less than Buyed price (₹" . number_format($unitPrice, 2) . ").");
-                    Response::back();
-                    return;
-                }
-
-                if ($mrp > 0 && $mrp < $sellingPrice) {
-                    Session::flash('error', "Product line #" . ($index + 1) . " (" . $itemName . "): MRP (₹" . number_format($mrp, 2) . ") cannot be less than Selling price (₹" . number_format($sellingPrice, 2) . ").");
                     Response::back();
                     return;
                 }
@@ -2554,7 +2566,7 @@ class ProductionController {
                     'type' => 'THIRD_PARTY',
                     'item_name' => $itemName,
                     'quantity' => $quantity,
-                    'unit' => 'PCS',
+                    'unit' => $unit,
                     'weight' => null,
                     'unit_price' => $unitPrice,
                     'tax_treatment' => $taxTreatment,
@@ -2701,7 +2713,7 @@ class ProductionController {
                     'vendor_sku' => null,
                     'product_id' => $productId > 0 ? $productId : null,
                     'variant_id' => $variantId > 0 ? $variantId : null,
-                    'is_mapped' => 1,
+                    'is_mapped' => 0,
                     'form_index' => (string)$index,
                     'photo_url' => null,
                 ];
@@ -2870,7 +2882,17 @@ class ProductionController {
                     $itemStartCode = $vCode;
                     $itemEndCode = $vCode;
                     $itemQrCode = $vCode;
-                    $item['is_mapped'] = 1;
+                    // Taxonomy mapping happens in the mapping area; QR + GRN are produced there.
+                } elseif ($item['type'] === 'RAW_MATERIAL') {
+                    $supplySeqIndex++;
+                    $rmPrefix = 'RM' . date('my', strtotime($purchaseDate));
+                    $rmCode = sprintf('%s%02d', $rmPrefix, $supplySeqIndex);
+                    if (empty($itemProductCode)) {
+                        $itemProductCode = $rmCode;
+                    }
+                    $itemStartCode = $rmCode;
+                    $itemEndCode = $rmCode;
+                    $itemQrCode = $rmCode;
                 } elseif ($item['type'] === 'OWN_PRODUCT') {
                     if (empty($item['variant_id']) && !empty($item['product_id'])) {
                         $var = VariantService::findOrCreateVariantForInward((int)$item['product_id'], [
@@ -2898,7 +2920,6 @@ class ProductionController {
                             $itemQrCode = $vCode;
                         }
                     }
-                    $item['is_mapped'] = 1;
                 } else {
                     $supplySeqIndex++;
                     $spPrefix = 'SP' . date('my', strtotime($purchaseDate));
@@ -3001,7 +3022,9 @@ class ProductionController {
             }
 
             if ($purchaseType === 'THIRD_PARTY') {
-                Session::flash('success', "Purchase {$purchaseNumber} recorded successfully with " . count($items) . " third-party product(s). Map their categories and attributes in Third-Party Mapping.");
+                Session::flash('success', "Purchase {$purchaseNumber} recorded successfully with " . count($items) . " third-party product(s).");
+            } elseif ($purchaseType === 'RAW_MATERIAL') {
+                Session::flash('success', "Purchase {$purchaseNumber} recorded successfully with " . count($items) . " raw material(s).");
             } else {
                 Session::flash('success', "Purchase {$purchaseNumber} recorded successfully.");
             }
@@ -3020,25 +3043,35 @@ class ProductionController {
     }
 
     /**
-     * Third-Party Product Mapping: List inwarded third-party items and their taxonomy mapping status.
+     * Purchase Item Mapping: list every purchase line and its taxonomy / QR / GRN status.
      */
     public function thirdPartyMappingList(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
+
         $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'unmapped';
         $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
         $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
+        $itemType = !empty($_GET['item_type']) ? strtoupper(trim((string)$_GET['item_type'])) : '';
 
-        $where = ["ppi.item_type = 'THIRD_PARTY'"];
+        $where = [];
         $params = [];
 
         if ($status === 'unmapped') {
             $where[] = "ppi.is_mapped = 0";
         } elseif ($status === 'mapped') {
             $where[] = "ppi.is_mapped = 1";
+        } elseif ($status === 'complementary') {
+            $where[] = "ppi.is_complementary = 1";
+        } elseif ($status === 'qr') {
+            $where[] = "ppi.qr_generation_id IS NOT NULL";
+        } elseif ($status === 'grn') {
+            $where[] = "ppi.grn_id IS NOT NULL";
         }
 
         if ($search !== '') {
-            $where[] = "(ppi.item_name LIKE ? OR ppi.vendor_sku LIKE ? OR pp.purchase_number LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
+            $where[] = "(ppi.item_name LIKE ? OR ppi.vendor_sku LIKE ? OR ppi.product_code LIKE ? OR pp.purchase_number LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
             $term = '%' . $search . '%';
+            $params[] = $term;
             $params[] = $term;
             $params[] = $term;
             $params[] = $term;
@@ -3050,15 +3083,20 @@ class ProductionController {
             $where[] = "ppi.mapped_category_id = ?";
             $params[] = $categoryId;
         }
+        if (in_array($itemType, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
+            $where[] = "ppi.item_type = ?";
+            $params[] = $itemType;
+        }
 
-        $whereClause = implode(' AND ', $where);
+        $whereClause = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
         $items = Database::fetchAll(
-            "SELECT ppi.id, ppi.purchase_id, ppi.item_name, ppi.vendor_sku, ppi.product_code,
+            "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.vendor_sku, ppi.product_code,
                     ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
-                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.mapped_category_id,
-                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
-                    ppi.mapped_at, ppi.mapped_by, ppi.created_at,
+                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.is_complementary,
+                    ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id,
+                    ppi.mapped_attributes, ppi.mapped_at, ppi.mapped_by, ppi.created_at,
+                    ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
                     pp.purchase_number, pp.purchase_date, pp.invoice_number,
                     s.name AS seller_name, s.company AS seller_company,
                     c.name AS category_name, sub.name AS subcategory_name, subsub.name AS sub_subcategory_name,
@@ -3070,19 +3108,21 @@ class ProductionController {
              LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
              LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
              LEFT JOIN users u ON u.id = ppi.mapped_by
-             WHERE $whereClause
+             $whereClause
              ORDER BY ppi.is_mapped ASC, ppi.id DESC",
             $params
         );
 
         $metrics = Database::fetchOne(
-            "SELECT 
+            "SELECT
                 COUNT(*) AS total_items,
                 COUNT(CASE WHEN is_mapped = 0 THEN 1 END) AS unmapped_count,
                 COUNT(CASE WHEN is_mapped = 1 THEN 1 END) AS mapped_count,
+                COUNT(CASE WHEN is_complementary = 1 THEN 1 END) AS complementary_count,
+                COUNT(CASE WHEN qr_generation_id IS NOT NULL THEN 1 END) AS qr_count,
+                COUNT(CASE WHEN grn_id IS NOT NULL THEN 1 END) AS grn_count,
                 COALESCE(SUM(quantity), 0) AS total_quantity
-             FROM production_purchase_items
-             WHERE item_type = 'THIRD_PARTY'"
+             FROM production_purchase_items"
         );
 
         $categories = Database::fetchAll(
@@ -3090,7 +3130,7 @@ class ProductionController {
         );
 
         Response::view('production.purchases.mapping', [
-            'pageTitle' => 'Third-Party Product Mapping',
+            'pageTitle' => 'Purchase Item Mapping',
             'activeModule' => 'purchases',
             'activeMenu' => 'purchases-mapping',
             'items' => $items,
@@ -3099,9 +3139,10 @@ class ProductionController {
             'status' => $status,
             'search' => $search,
             'categoryId' => $categoryId,
+            'itemType' => $itemType,
             'breadcrumb' => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
-                ['label' => 'Third-Party Product Mapping'],
+                ['label' => 'Purchase Item Mapping'],
             ],
         ]);
     }
@@ -3110,6 +3151,8 @@ class ProductionController {
      * Third-Party Product Mapping: Save Category, Subcategory, Sub-subcategory, and Attributes.
      */
     public function saveThirdPartyMapping(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
+
         if (!CSRF::validateRequest()) {
             if (Request::isAjax()) {
                 Response::json(['success' => false, 'message' => 'Invalid security token.'], 403);
@@ -3138,11 +3181,11 @@ class ProductionController {
         }
 
         $item = Database::fetchOne(
-            "SELECT id, item_name, item_type FROM production_purchase_items WHERE id = ? AND item_type = 'THIRD_PARTY'",
+            "SELECT id, item_name, item_type, product_id, variant_id FROM production_purchase_items WHERE id = ?",
             [$itemId]
         );
         if (!$item) {
-            $msg = 'Third-party purchase item not found.';
+            $msg = 'Purchase item not found.';
             if (Request::isAjax()) {
                 Response::json(['success' => false, 'message' => $msg], 404);
                 return;
@@ -3164,61 +3207,66 @@ class ProductionController {
             return;
         }
 
-        $encodedAttributes = null;
-        if (!empty($rawAttributes)) {
-            $encodedAttributes = is_string($rawAttributes) ? $rawAttributes : json_encode($rawAttributes, JSON_UNESCAPED_UNICODE);
-        }
-
         $userId = (int)(Session::get('user_id') ?? 0);
 
-        Database::execute(
-            "UPDATE production_purchase_items 
-             SET mapped_category_id = ?, 
-                 mapped_subcategory_id = ?, 
-                 mapped_sub_subcategory_id = ?, 
-                 mapped_attributes = ?, 
-                 is_mapped = 1, 
-                 mapped_at = NOW(), 
-                 mapped_by = ? 
-             WHERE id = ?",
-            [$categoryId, $subcategoryId, $subSubcategoryId, $encodedAttributes, $userId ?: null, $itemId]
-        );
+        try {
+            $result = PurchaseMappingFulfillmentService::fulfill($itemId, [
+                'category_id'          => $categoryId,
+                'subcategory_id'       => $subcategoryId,
+                'sub_subcategory_id'   => $subSubcategoryId,
+                'attributes'           => $rawAttributes,
+                'is_complementary'     => !empty($_POST['is_complementary']) ? 1 : 0,
+            ], $userId);
+        } catch (Throwable $e) {
+            $msg = 'Mapping could not be completed: ' . $e->getMessage();
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 422);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
 
-        AuditService::log('purchases', 'UPDATE', 'production_purchase_items', $itemId, null, [
-            'action' => 'third_party_product_mapping',
-            'category_id' => $categoryId,
-            'subcategory_id' => $subcategoryId,
-            'sub_subcategory_id' => $subSubcategoryId,
-        ]);
+        $message = "Product '{$item['item_name']}' mapped to {$category['name']}. "
+            . "QR batch {$result['qr']['batch_code']} and GRN {$result['grn']['grn_number']} generated.";
 
         if (Request::isAjax()) {
             Response::json([
-                'success' => true,
-                'message' => "Product '{$item['item_name']}' successfully mapped to {$category['name']}.",
+                'success'       => true,
+                'message'       => $message,
+                'qr_batch_code' => $result['qr']['batch_code'],
+                'grn_number'    => $result['grn']['grn_number'],
+                'grn_id'        => $result['grn']['grn_id'],
+                'qr_reused'     => !empty($result['qr_reused']),
+                'grn_reused'    => !empty($result['grn_line_reused']),
             ]);
             return;
         }
 
-        Session::flash('success', "Product '{$item['item_name']}' successfully mapped to {$category['name']}.");
-        Response::redirect(url('purchases/mapping'));
+        Session::flash('success', $message);
+        Response::redirect(url('purchases/mapping?status=mapped'));
     }
 
     /**
      * AJAX endpoint: Get details and current mapping for a specific third-party item.
      */
     public function ajaxGetThirdPartyItem(string $id): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
+
         $itemId = (int)$id;
         $item = Database::fetchOne(
-            "SELECT ppi.id, ppi.purchase_id, ppi.item_name, ppi.vendor_sku, ppi.product_code,
+            "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.vendor_sku, ppi.product_code,
                     ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
-                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.mapped_category_id,
-                    ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id, ppi.mapped_attributes,
+                    ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.is_complementary,
+                    ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id,
+                    ppi.mapped_attributes, ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
                     pp.purchase_number, pp.purchase_date,
                     s.name AS seller_name, s.company AS seller_company
              FROM production_purchase_items ppi
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
              INNER JOIN sellers s ON s.id = pp.seller_id
-             WHERE ppi.id = ? AND ppi.item_type = 'THIRD_PARTY'",
+             WHERE ppi.id = ?",
             [$itemId]
         );
         if (!$item) {
@@ -17792,7 +17840,6 @@ class ProductionController {
 
         $hsnCode = mb_strtoupper(trim($_POST['hsn_code'] ?? $jsonData['hsn_code'] ?? ''));
         $description = trim($_POST['description'] ?? $jsonData['description'] ?? '');
-        $gstRate = max(0.0, (float)($_POST['gst_rate'] ?? $jsonData['gst_rate'] ?? 5.0));
 
         if (empty($hsnCode) || strlen($hsnCode) < 2 || strlen($hsnCode) > 15) {
             Response::json(['success' => false, 'message' => 'Please enter a valid HSN code (e.g. 6109 or 6205).'], 422);
@@ -17805,7 +17852,7 @@ class ProductionController {
 
         $existing = Database::fetchOne("SELECT * FROM hsn_codes WHERE hsn_code = ?", [$hsnCode]);
         if ($existing) {
-            Database::execute("UPDATE hsn_codes SET description = ?, gst_rate = ? WHERE id = ?", [$description, $gstRate, $existing['id']]);
+            Database::execute("UPDATE hsn_codes SET description = ? WHERE id = ?", [$description, $existing['id']]);
             Response::json([
                 'success' => true,
                 'message' => 'HSN Code updated successfully.',
@@ -17813,13 +17860,12 @@ class ProductionController {
                     'id'          => $existing['id'],
                     'hsn_code'    => $hsnCode,
                     'description' => $description,
-                    'gst_rate'    => number_format($gstRate, 2, '.', ''),
                 ]
             ]);
             return;
         }
 
-        Database::execute("INSERT INTO hsn_codes (hsn_code, description, gst_rate) VALUES (?, ?, ?)", [$hsnCode, $description, $gstRate]);
+        Database::execute("INSERT INTO hsn_codes (hsn_code, description) VALUES (?, ?)", [$hsnCode, $description]);
         $newId = Database::lastInsertId();
 
         Response::json([
@@ -17829,7 +17875,6 @@ class ProductionController {
                 'id'          => $newId,
                 'hsn_code'    => $hsnCode,
                 'description' => $description,
-                'gst_rate'    => number_format($gstRate, 2, '.', ''),
             ]
         ]);
     }

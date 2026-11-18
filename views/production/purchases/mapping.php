@@ -1,7 +1,7 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
-        <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Third-Party Product Mapping</h2>
-        <p class="text-muted small mb-0">Map inwarded third-party products to master categories, subcategories, and custom attributes.</p>
+        <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Purchase Item Mapping</h2>
+        <p class="text-muted small mb-0">Map every purchase line to master categories, subcategories and attributes. Saving a mapping auto-generates its QR batch and GRN.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
@@ -14,9 +14,9 @@
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Total 3rd-Party Items</div>
+                <div class="text-muted small text-uppercase fw-semibold">Total Purchase Items</div>
                 <div class="fs-3 fw-bold text-dark"><?= number_format((int)($metrics['total_items'] ?? 0)) ?></div>
-                <div class="small text-muted"><?= number_format((float)($metrics['total_quantity'] ?? 0)) ?> inward units (pcs)</div>
+                <div class="small text-muted"><?= number_format((float)($metrics['total_quantity'] ?? 0)) ?> purchased units (pcs)</div>
             </div>
         </div>
     </div>
@@ -51,6 +51,9 @@
                 <div class="progress mt-2" style="height: 6px;">
                     <div class="progress-bar bg-success" role="progressbar" style="width: <?= $pct ?>%" aria-valuenow="<?= $pct ?>" aria-valuemin="0" aria-valuemax="100"></div>
                 </div>
+                <div class="small text-muted mt-2">
+                    QR batches: <?= number_format((int)($metrics['qr_count'] ?? 0)) ?> &nbsp;·&nbsp; GRNs: <?= number_format((int)($metrics['grn_count'] ?? 0)) ?>
+                </div>
             </div>
         </div>
     </div>
@@ -70,6 +73,18 @@
                        class="btn btn-sm <?= ($status === 'mapped') ? 'btn-success fw-bold' : 'btn-outline-secondary' ?>">
                         <i class="bi bi-check-circle me-1"></i>Mapped (<?= number_format((int)($metrics['mapped_count'] ?? 0)) ?>)
                     </a>
+                    <a href="<?= url('purchases/mapping?status=complementary' . ($search ? '&search=' . urlencode($search) : '')) ?>" 
+                       class="btn btn-sm <?= ($status === 'complementary') ? 'btn-info text-dark fw-bold' : 'btn-outline-secondary' ?>">
+                        <i class="bi bi-gift me-1"></i>Complementary (<?= number_format((int)($metrics['complementary_count'] ?? 0)) ?>)
+                    </a>
+                    <a href="<?= url('purchases/mapping?status=qr' . ($search ? '&search=' . urlencode($search) : '')) ?>"
+                       class="btn btn-sm <?= ($status === 'qr') ? 'btn-dark fw-bold' : 'btn-outline-secondary' ?>">
+                        <i class="bi bi-qr-code me-1"></i>QR Ready (<?= number_format((int)($metrics['qr_count'] ?? 0)) ?>)
+                    </a>
+                    <a href="<?= url('purchases/mapping?status=grn' . ($search ? '&search=' . urlencode($search) : '')) ?>"
+                       class="btn btn-sm <?= ($status === 'grn') ? 'btn-primary fw-bold' : 'btn-outline-secondary' ?>">
+                        <i class="bi bi-truck me-1"></i>GRN Created (<?= number_format((int)($metrics['grn_count'] ?? 0)) ?>)
+                    </a>
                     <a href="<?= url('purchases/mapping?status=all' . ($search ? '&search=' . urlencode($search) : '')) ?>" 
                        class="btn btn-sm <?= ($status === 'all') ? 'btn-primary fw-bold' : 'btn-outline-secondary' ?>">
                         All Items (<?= number_format((int)($metrics['total_items'] ?? 0)) ?>)
@@ -86,7 +101,15 @@
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-4 ms-auto">
+            <div class="col-md-2">
+                <select name="item_type" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- All Item Types --</option>
+                    <?php foreach (['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'] as $type): ?>
+                        <option value="<?= e($type) ?>" <?= (($itemType ?? '') === $type) ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $type)) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3 ms-auto">
                 <div class="input-group input-group-sm">
                     <input type="hidden" name="status" value="<?= e($status) ?>">
                     <input type="text" name="search" class="form-control" placeholder="Search item, vendor SKU, purchase #, vendor..." value="<?= e($search) ?>">
@@ -103,7 +126,7 @@
 <!-- Items Table -->
 <div class="card border shadow-sm mb-4">
     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-table me-2 text-primary"></i>Third-Party Products Inward Roster</h5>
+        <h5 class="mb-0 fw-bold"><i class="bi bi-table me-2 text-primary"></i>Purchase Items Roster</h5>
         <span class="badge bg-secondary-subtle text-secondary border"><?= count($items) ?> Records</span>
     </div>
     <div class="table-responsive">
@@ -114,12 +137,14 @@
                     <th>Purchase # / Date</th>
                     <th>Vendor / Brand</th>
                     <th>Product / Item Name</th>
+                    <th>Type</th>
                     <th>Vendor SKU / Barcode</th>
                     <th>Size &amp; Color</th>
                     <th class="text-end">Inward Qty</th>
                     <th class="text-end">Cost / MRP</th>
                     <th class="text-center">Status</th>
                     <th>Mapped Hierarchy</th>
+                    <th>QR / GRN</th>
                     <th>Attributes</th>
                     <th class="text-center">Action</th>
                 </tr>
@@ -127,9 +152,9 @@
             <tbody>
                 <?php if (empty($items)): ?>
                     <tr>
-                        <td colspan="12" class="text-center text-muted py-5">
+                        <td colspan="14" class="text-center text-muted py-5">
                             <i class="bi bi-inbox fs-2 d-block mb-2 text-muted"></i>
-                            No third-party products found matching your current filter criteria.
+                            No purchase items found matching your current filter criteria.
                         </td>
                     </tr>
                 <?php else: ?>
@@ -155,7 +180,17 @@
                             </td>
                             <td>
                                 <strong class="text-dark d-block"><?= e($item['item_name']) ?></strong>
-                                <span class="badge bg-light text-dark border">TP #<?= (int)$item['id'] ?></span>
+                                <span class="badge bg-light text-dark border">Item #<?= (int)$item['id'] ?></span>
+                                <?php if (!empty($item['is_complementary'])): ?>
+                                    <span class="badge bg-info-subtle text-info border">
+                                        <i class="bi bi-gift-fill me-1"></i>Complementary
+                                    </span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary border small">
+                                    <?= e(str_replace('_', ' ', (string)($item['item_type'] ?? 'THIRD_PARTY'))) ?>
+                                </span>
                             </td>
                             <td>
                                 <?php if (!empty($item['vendor_sku'])): ?>
@@ -203,6 +238,26 @@
                                 <?php endif; ?>
                             </td>
                             <td>
+                                <?php if (!empty($item['qr_generation_id']) && !empty($item['qr_batch_code'])): ?>
+                                    <a href="<?= url('production/qr-generations/view/' . (int)$item['qr_generation_id']) ?>"
+                                       class="badge bg-dark-subtle text-dark border text-decoration-none mb-1 d-inline-block"
+                                       title="View generated QR batch">
+                                        <i class="bi bi-qr-code me-1"></i><?= e($item['qr_batch_code']) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="badge bg-light text-muted border mb-1 d-inline-block">QR pending</span>
+                                <?php endif; ?>
+                                <?php if (!empty($item['grn_id']) && !empty($item['grn_number'])): ?>
+                                    <a href="<?= url('production/inwards/view/' . (int)$item['grn_id']) ?>"
+                                       class="badge bg-success-subtle text-success border text-decoration-none d-inline-block"
+                                       title="View Goods Receipt Note">
+                                        <i class="bi bi-check2-circle me-1"></i><?= e($item['grn_number']) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="badge bg-light text-muted border d-inline-block">GRN pending</span>
+                                <?php endif; ?>
+                            </td>
+                            <td>
                                 <?php if (!empty($attrs) && is_array($attrs)): ?>
                                     <div class="d-flex flex-wrap gap-1" style="max-width: 220px;">
                                         <?php foreach ($attrs as $attrKey => $attrVal): ?>
@@ -223,6 +278,7 @@
                                         data-item-sku="<?= e($item['vendor_sku'] ?? '') ?>"
                                         data-item-size="<?= e($item['size'] ?? '') ?>"
                                         data-item-color="<?= e($item['color'] ?? '') ?>"
+                                        data-item-complementary="<?= (int)($item['is_complementary'] ?? 0) ?>"
                                         data-item-category="<?= (int)($item['mapped_category_id'] ?? 0) ?>"
                                         data-item-subcategory="<?= (int)($item['mapped_subcategory_id'] ?? 0) ?>"
                                         data-item-subsubcategory="<?= (int)($item['mapped_sub_subcategory_id'] ?? 0) ?>">
@@ -244,7 +300,7 @@
         <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div class="modal-header bg-primary text-white py-3 px-4">
                 <h5 class="modal-title fs-6 fw-bold" id="modalMapProductLabel">
-                    <i class="bi bi-diagram-3-fill me-2 text-warning"></i> Map Third-Party Product to Master Catalog
+                    <i class="bi bi-diagram-3-fill me-2 text-warning"></i> Map Purchase Item to Master Catalog
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -257,7 +313,7 @@
                     <div class="border rounded-3 p-3 bg-light mb-4">
                         <div class="row g-2 align-items-center">
                             <div class="col-md-7">
-                                <small class="text-muted text-uppercase fw-semibold d-block">Third-Party Product</small>
+                                <small class="text-muted text-uppercase fw-semibold d-block">Purchase Item</small>
                                 <h6 class="fw-bold mb-1 text-dark" id="mapItemNameDisplay">—</h6>
                                 <div class="small text-muted font-monospace" id="mapItemSkuDisplay">SKU: —</div>
                             </div>
@@ -265,6 +321,23 @@
                                 <span class="badge bg-secondary-subtle text-secondary border me-1" id="mapItemSizeBadge">Size: —</span>
                                 <span class="badge bg-secondary-subtle text-secondary border" id="mapItemColorBadge">Color: —</span>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info py-2 px-3 small mb-4">
+                        <i class="bi bi-info-circle me-1"></i> Saving this mapping will sync the catalog and automatically create the QR generation batch and GRN for this line.
+                    </div>
+
+                    <!-- Complementary Product Checkbox -->
+                    <div class="card border border-info-subtle bg-light p-3 mb-4 rounded-3">
+                        <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
+                            <input class="form-check-input fs-5 mt-0" type="checkbox" name="is_complementary" id="mapIsComplementary" value="1" role="switch">
+                            <label class="form-check-label fw-bold text-dark cursor-pointer mb-0 ms-2" for="mapIsComplementary">
+                                <i class="bi bi-gift text-info me-1"></i> Complementary Product
+                                <span class="d-block small text-muted fw-normal mt-1">
+                                    Check this box to classify this product as complementary / free promotional merchandise. In the billing area, it can only be billed when at least one paid product is purchased, and its unit price will be automatically set to ₹0.00.
+                                </span>
+                            </label>
                         </div>
                     </div>
 
@@ -342,6 +415,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const itemSku = this.dataset.itemSku;
             const itemSize = this.dataset.itemSize;
             const itemColor = this.dataset.itemColor;
+            const itemComplementary = parseInt(this.dataset.itemComplementary, 10) || 0;
             const catId = parseInt(this.dataset.itemCategory, 10) || 0;
             pendingSubcatId = parseInt(this.dataset.itemSubcategory, 10) || 0;
             pendingSubsubcatId = parseInt(this.dataset.itemSubsubcategory, 10) || 0;
@@ -351,6 +425,7 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('mapItemSkuDisplay').textContent = itemSku ? ('SKU: ' + itemSku) : 'SKU: None';
             document.getElementById('mapItemSizeBadge').textContent = 'Size: ' + (itemSize || 'None');
             document.getElementById('mapItemColorBadge').textContent = 'Color: ' + (itemColor || 'None');
+            document.getElementById('mapIsComplementary').checked = (itemComplementary === 1);
 
             // Reset dropdowns
             catSelect.value = catId > 0 ? catId : '';
@@ -370,6 +445,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 .then(res => {
                     if (res.success && res.item) {
                         currentItemData = res.item;
+                        if (res.item.is_complementary !== undefined) {
+                            document.getElementById('mapIsComplementary').checked = (parseInt(res.item.is_complementary, 10) === 1);
+                        }
                         if (catId > 0) {
                             catSelect.value = catId;
                             triggerCategoryChange(catId, pendingSubcatId, pendingSubsubcatId);
