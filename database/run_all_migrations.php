@@ -543,7 +543,7 @@ $keyTables = [
     'products', 'product_variants',
     'qr_generations', 'qr_generation_items', 'warehouse_qr_codes',
     'production_programs', 'cutting_batches', 'stitching_batches',
-    'qc_batches', 'label_batches', 'production_batches',
+    'qc_batches', 'production_batches',
     'sellers', 'seller_rolls', 'production_purchases',
     'stock_balances', 'stock_transactions', 'warehouse_allocations',
     'production_units', 'warehouses', 'shops'

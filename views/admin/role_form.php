@@ -80,6 +80,72 @@ foreach ($hierarchicalModules as $m) {
                         <label for="description" class="form-label fw-semibold">Role Description &amp; Scope</label>
                         <textarea id="description" name="description" class="form-control" rows="2" placeholder="Briefly describe the operational responsibilities and authority of this role..."><?= e($role['description'] ?? '') ?></textarea>
                     </div>
+
+                    <!-- 5. Business Concern Scope -->
+                    <div class="col-12 mt-3 pt-3 border-top">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <div>
+                                <label class="form-label fw-semibold mb-0 d-flex align-items-center gap-1.5">
+                                    <i class="bi bi-buildings text-primary"></i>
+                                    <span>Business Concern Scope &amp; Availability</span>
+                                </label>
+                                <div class="text-muted small">Specify whether this role can be assigned to staff across all concerns or is restricted to specific business entities.</div>
+                            </div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 rounded-pill">
+                                <i class="bi bi-shield-check me-1"></i>Multi-Entity Scoped
+                            </span>
+                        </div>
+                        <?php 
+                        $curScope = $role['concern_scope'] ?? 'ALL';
+                        $applicableCids = [];
+                        if (!empty($role['applicable_concerns'])) {
+                            $decoded = json_decode($role['applicable_concerns'], true);
+                            $applicableCids = is_array($decoded) ? $decoded : [];
+                        }
+                        ?>
+                        <div class="row g-3">
+                            <div class="col-md-5">
+                                <div class="p-3 border rounded-3 bg-light bg-opacity-50 h-100 cursor-pointer" onclick="document.getElementById('scope_all').click()">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="concern_scope" id="scope_all" value="ALL" <?= $curScope === 'ALL' ? 'checked' : '' ?> onchange="toggleConcernScope(this.value)">
+                                        <label class="form-check-label fw-bold d-block text-dark cursor-pointer" for="scope_all">
+                                            <i class="bi bi-globe me-1 text-primary"></i> Global / All Business Concerns
+                                        </label>
+                                    </div>
+                                    <small class="text-muted d-block mt-1 ps-4">Role is universal and can be assigned to staff operating in any registered sister firm.</small>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <div class="p-3 border rounded-3 bg-light bg-opacity-50 h-100 cursor-pointer" onclick="document.getElementById('scope_specific').click()">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="concern_scope" id="scope_specific" value="SPECIFIC" <?= $curScope === 'SPECIFIC' ? 'checked' : '' ?> onchange="toggleConcernScope(this.value)">
+                                        <label class="form-check-label fw-bold d-block text-dark cursor-pointer" for="scope_specific">
+                                            <i class="bi bi-building-lock me-1 text-info"></i> Specific Concerns Only
+                                        </label>
+                                    </div>
+                                    <small class="text-muted d-block mt-1 ps-4">Restrict this role to designated operating entities (e.g. Unit 2 processing staff only).</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="specificConcernsContainer" class="mt-3 p-3 border rounded-3 bg-white <?= $curScope === 'SPECIFIC' ? '' : 'd-none' ?>">
+                            <label class="form-label fw-semibold small text-uppercase text-secondary mb-2">Select Permitted Business Entities:</label>
+                            <div class="row g-2">
+                                <?php foreach (($concerns ?? []) as $c): 
+                                    $cid = (int)$c['id'];
+                                    $checked = in_array($cid, $applicableCids, true);
+                                ?>
+                                    <div class="col-12 col-md-6">
+                                        <label class="card h-100 border p-2.5 d-flex flex-row align-items-center gap-2 cursor-pointer mb-0">
+                                            <input class="form-check-input mt-0" type="checkbox" name="applicable_concerns[]" value="<?= $cid ?>" <?= $checked ? 'checked' : '' ?>>
+                                            <span class="badge bg-secondary-subtle text-primary border font-monospace"><?= e($c['code']) ?></span>
+                                            <span class="fw-semibold text-dark small flex-grow-1"><?= e($c['name']) ?></span>
+                                        </label>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -442,4 +508,14 @@ document.addEventListener('DOMContentLoaded', function () {
     // Initial sync
     syncState();
 });
+
+function toggleConcernScope(val) {
+    const container = document.getElementById('specificConcernsContainer');
+    if (!container) return;
+    if (val === 'SPECIFIC') {
+        container.classList.remove('d-none');
+    } else {
+        container.classList.add('d-none');
+    }
+}
 </script>

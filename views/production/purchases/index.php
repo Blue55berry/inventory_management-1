@@ -1,7 +1,7 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-bag-check me-2 text-primary"></i>Purchases &amp; Procurement</h2>
-        <p class="text-muted small mb-0">Unified management for Fabric Rolls, Third-Party Goods, and Own Production purchases.</p>
+        <p class="text-muted small mb-0">Unified management for Fabric Rolls, Raw Materials, Third-Party Goods, and Own Production purchases.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <?php if (hasPermission('production_purchases', 'create') || hasPermission('sellers', 'create')): ?>

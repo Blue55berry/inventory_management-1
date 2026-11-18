@@ -86,6 +86,12 @@ class ProductionProgram {
                 WHERE 1=1";
         $params = [];
 
+        $cid = currentConcernId();
+        if ($cid) {
+            $sql .= " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            $params[] = $cid;
+        }
+
         if (!empty($filters['status'])) {
             $sql .= " AND pp.status = ?";
             $params[] = $filters['status'];
@@ -221,11 +227,14 @@ class ProductionProgram {
             if (!$ssc) $subSubcategoryId = null;
         }
 
+        $cid = currentConcernId();
+
         Database::execute(
             "INSERT INTO production_programs 
-             (name, program_number, person_name, production_unit_id, product_id, seller_roll_id, seller_id, roll_weight, roll_price, category_id, subcategory_id, sub_subcategory_id, planned_quantity, completed_quantity, start_date, end_date, target_date, priority, assigned_to, status, approved_by, approved_at, notes, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             (concern_id, name, program_number, person_name, production_unit_id, product_id, seller_roll_id, seller_id, roll_weight, roll_price, category_id, subcategory_id, sub_subcategory_id, planned_quantity, completed_quantity, start_date, end_date, target_date, priority, assigned_to, status, approved_by, approved_at, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
+                $cid,
                 $data['name'] ?? null,
                 $data['program_number'],
                 $data['person_name'] ?? null,
@@ -321,9 +330,6 @@ class ProductionProgram {
             $cuttingIds = Database::fetchAll("SELECT id FROM cutting_batches WHERE program_id = ?", [$id]);
             $cIds = array_column($cuttingIds, 'id');
 
-            $labelIds = Database::fetchAll("SELECT id FROM label_batches WHERE program_id = ?", [$id]);
-            $lIds = array_column($labelIds, 'id');
-
             // 1. Reworks referencing production outwards or batches
             try {
                 if (!empty($bIds)) {
@@ -380,28 +386,19 @@ class ProductionProgram {
                 Database::execute("DELETE FROM cutting_batches WHERE program_id = ?", [$id]);
             } catch (\Throwable $e) {}
 
-            // 7. Label batches & items
-            try {
-                if (!empty($lIds)) {
-                    $inL = implode(',', array_map('intval', $lIds));
-                    Database::execute("DELETE FROM label_items WHERE label_batch_id IN ($inL)");
-                }
-                Database::execute("DELETE FROM label_batches WHERE program_id = ?", [$id]);
-            } catch (\Throwable $e) {}
-
-            // 8. Program items & rolls
+            // 7. Program items & rolls
             try {
                 Database::execute("DELETE FROM production_program_items WHERE program_id = ?", [$id]);
                 Database::execute("DELETE FROM production_program_rolls WHERE program_id = ?", [$id]);
             } catch (\Throwable $e) {}
 
-            // 9. Unlink or delete from bills
+            // 8. Unlink or delete from bills
             try {
                 Database::execute("DELETE FROM production_bill_item_tags WHERE bill_item_id IN (SELECT id FROM production_bill_items WHERE program_id = ?)", [$id]);
                 Database::execute("DELETE FROM production_bill_items WHERE program_id = ?", [$id]);
             } catch (\Throwable $e) {}
 
-            // 10. Delete the program completely
+            // 9. Delete the program completely
             $res = Database::execute("DELETE FROM production_programs WHERE id = ?", [$id]) >= 0;
 
             Database::commit();
@@ -483,14 +480,6 @@ class ProductionProgram {
                 WHERE pp.id IS NULL OR pp.is_active = 0 OR pp.status = 'CANCELLED'
             )");
             Database::execute("DELETE FROM cutting_batches WHERE program_id NOT IN (SELECT id FROM production_programs WHERE (is_active IS NULL OR is_active = 1) AND status != 'CANCELLED')");
-
-            // Purge label batches without a valid program
-            Database::execute("DELETE FROM label_items WHERE label_batch_id IN (
-                SELECT lb.id FROM label_batches lb
-                LEFT JOIN production_programs pp ON lb.program_id = pp.id
-                WHERE pp.id IS NULL OR pp.is_active = 0 OR pp.status = 'CANCELLED'
-            )");
-            Database::execute("DELETE FROM label_batches WHERE program_id NOT IN (SELECT id FROM production_programs WHERE (is_active IS NULL OR is_active = 1) AND status != 'CANCELLED')");
 
             Database::execute("SET FOREIGN_KEY_CHECKS = 1");
         } catch (\Throwable $e) {

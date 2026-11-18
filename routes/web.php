@@ -185,7 +185,6 @@ class Router {
         $this->get('api/stock/check/{variant_id}', 'ProductionController', 'checkStock', ['AuthMiddleware']);
         $this->get('api/programs/{id}/details', 'ProductionController', 'ajaxProgramDetails', ['AuthMiddleware']);
         $this->get('api/cutting/{id}/details', 'ProductionController', 'ajaxCuttingDetails', ['AuthMiddleware']);
-        $this->get('api/stitching/{id}/details', 'ProductionController', 'ajaxStitchingDetails', ['AuthMiddleware']);
         $this->get('api/catalog/variants', 'ProductionController', 'ajaxCatalogVariants', ['AuthMiddleware']);
         $this->get('api/catalog/check-qr-code', 'ProductionController', 'ajaxCheckQRCode', ['AuthMiddleware']);
         $this->get('api/hsn-codes', 'ProductionController', 'ajaxHsnCodesList', ['AuthMiddleware']);
@@ -236,6 +235,8 @@ class Router {
 
         // Third-Party Product Mapping Module
         $this->get('production/purchases/mapping', 'ProductionController', 'thirdPartyMappingList', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'view']]);
+        $this->get('production/purchases/mapping/bill/{id}', 'ProductionController', 'thirdPartyMappingBill', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
+        $this->get('production/purchases/mapping/edit/{id}', 'ProductionController', 'thirdPartyMappingEdit', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
         $this->post('production/purchases/mapping/save', 'ProductionController', 'saveThirdPartyMapping', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
         $this->get('api/purchases/mapping/item/{id}', 'ProductionController', 'ajaxGetThirdPartyItem', ['AuthMiddleware']);
 
@@ -245,6 +246,8 @@ class Router {
         $this->post('purchases/store', 'ProductionController', 'storeProductionPurchase', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'create']]);
         $this->get('purchases/view/{id}', 'ProductionController', 'viewProductionPurchase', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'view']]);
         $this->get('purchases/mapping', 'ProductionController', 'thirdPartyMappingList', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'view']]);
+        $this->get('purchases/mapping/bill/{id}', 'ProductionController', 'thirdPartyMappingBill', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
+        $this->get('purchases/mapping/edit/{id}', 'ProductionController', 'thirdPartyMappingEdit', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
         $this->post('purchases/mapping/save', 'ProductionController', 'saveThirdPartyMapping', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchases', 'edit']]);
 
         // Production Billing
@@ -346,6 +349,8 @@ class Router {
         $this->get('production/qr-generations/create', 'QrGenerationController', 'create', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'create']]);
         $this->post('production/qr-generations/store-manual', 'QrGenerationController', 'storeManual', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'create']]);
         $this->post('production/qr-generations/store-catalog', 'QrGenerationController', 'storeCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'create']]);
+        $this->post('production/qr-generations/store-purchase', 'QrGenerationController', 'storePurchaseBatch', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'create']]);
+        $this->post('production/qr-generations/add-to-stock/{id}', 'QrGenerationController', 'addToStock', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'create']]);
         $this->get('production/qr-generations/view/{id}', 'QrGenerationController', 'view', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'view']]);
         $this->get('production/qr-generations/print/{id}', 'QrGenerationController', 'printLabels', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'view']]);
         $this->post('production/qr-generations/delete/{id}', 'QrGenerationController', 'delete', ['AuthMiddleware', ['PermissionMiddleware', 'qr_generation', 'delete']]);
@@ -414,17 +419,6 @@ class Router {
         $this->post('api/production/expenses/quick-add-category', 'ProductionController', 'ajaxQuickAddExpenseCategory', ['AuthMiddleware']);
         $this->post('api/production/expenses/quick-add-unit', 'ProductionController', 'ajaxQuickAddUnit', ['AuthMiddleware']);
         $this->get('api/production/expenses/items', 'ProductionController', 'ajaxGetExpenseItems', ['AuthMiddleware']);
-
-        // Label
-        $this->get('production/labels', 'ProductionController', 'labelList', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'view']]);
-        $this->get('production/labels/view/{id}', 'ProductionController', 'viewLabelBatch', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'view']]);
-        $this->get('production/labels/create', 'ProductionController', 'createLabel', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'create']]);
-        $this->post('production/labels/store', 'ProductionController', 'storeLabel', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'create']]);
-        $this->get('production/labels/edit/{id}', 'ProductionController', 'editLabel', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'edit']]);
-        $this->post('production/labels/update/{id}', 'ProductionController', 'updateLabel', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'edit']]);
-        $this->post('production/labels/delete/{id}', 'ProductionController', 'deleteLabel', ['AuthMiddleware', ['PermissionMiddleware', 'labels', 'delete']]);
-        $this->get('api/production/labels/deleted-codes', 'ProductionController', 'ajaxGetDeletedLabelCodes', ['AuthMiddleware']);
-        $this->post('api/production/labels/delete-code', 'ProductionController', 'ajaxDeleteLabelCode', ['AuthMiddleware']);
 
         // QC
         $this->get('production/qc', 'ProductionController', 'qcList', ['AuthMiddleware', ['PermissionMiddleware', 'qc', 'view']]);
@@ -565,5 +559,19 @@ class Router {
         $this->post('system/backup/email-latest', 'SystemController', 'emailLatestBackup', ['AuthMiddleware', ['PermissionMiddleware', 'backup', 'create']]);
         $this->get('system/backup/send-email/{id}', 'SystemController', 'emailSpecificBackup', ['AuthMiddleware', ['PermissionMiddleware', 'backup', 'create']]);
         $this->post('system/backup/send-email/{id}', 'SystemController', 'emailSpecificBackup', ['AuthMiddleware', ['PermissionMiddleware', 'backup', 'create']]);
+
+        // Multi-Concern Enterprise Architecture (concern.pdf)
+        $this->get('admin/concerns', 'ConcernController', 'index', ['AuthMiddleware']);
+        $this->get('admin/concerns/create', 'ConcernController', 'create', ['AuthMiddleware']);
+        $this->post('admin/concerns/store', 'ConcernController', 'store', ['AuthMiddleware']);
+        $this->get('admin/concerns/edit/{id}', 'ConcernController', 'edit', ['AuthMiddleware']);
+        $this->post('admin/concerns/update/{id}', 'ConcernController', 'update', ['AuthMiddleware']);
+        $this->post('admin/concerns/assign-staff/{id}', 'ConcernController', 'assignStaff', ['AuthMiddleware']);
+        $this->post('admin/concerns/quick-create-staff', 'ConcernController', 'quickCreateStaff', ['AuthMiddleware']);
+        $this->get('admin/concerns/modules/{id}', 'ConcernController', 'modules', ['AuthMiddleware']);
+        $this->post('admin/concerns/modules/{id}', 'ConcernController', 'updateModules', ['AuthMiddleware']);
+        $this->get('admin/concerns/toggle/{id}', 'ConcernController', 'toggleStatus', ['AuthMiddleware']);
+        $this->post('admin/concerns/toggle/{id}', 'ConcernController', 'toggleStatus', ['AuthMiddleware']);
+        $this->get('system/concerns/switch/{id}', 'ConcernController', 'switch', ['AuthMiddleware']);
     }
 }

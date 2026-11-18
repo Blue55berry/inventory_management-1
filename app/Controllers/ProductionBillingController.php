@@ -7,6 +7,9 @@ class ProductionBillingController
 {
     public function billList(): void
     {
+        $cid = currentConcernId();
+        $whereSql = $cid ? "WHERE (pb.concern_id = {$cid} OR pb.concern_id IS NULL)" : "";
+
         $bills = Database::fetchAll(
             "SELECT pb.*,
                     (SELECT COUNT(*) FROM production_bill_items pbi WHERE pbi.bill_id = pb.id) AS line_count,
@@ -16,6 +19,7 @@ class ProductionBillingController
                     (SELECT COUNT(*) FROM production_batches pbat WHERE pbat.production_bill_id = pb.id AND pbat.status = 'DISPATCHED') AS dispatched_batch_count,
                     (SELECT COUNT(*) FROM production_batches pbat WHERE pbat.production_bill_id = pb.id AND pbat.status = 'RECEIVED') AS received_batch_count
              FROM production_bills pb
+             {$whereSql}
              ORDER BY pb.bill_date DESC, pb.id DESC"
         );
 
@@ -1439,16 +1443,19 @@ class ProductionBillingController
         Database::beginTransaction();
         try {
             if ($billId === null) {
-                $billNumber = 'PB-' . date('Y') . '-' . date('mdHis') . '-' . random_int(10, 99);
+                $activeConcernId = currentConcernId();
+                $activeConcern = currentConcern();
+                $invPrefix = !empty($activeConcern['invoice_prefix']) ? rtrim($activeConcern['invoice_prefix'], '-') . '-' : 'PB-';
+                $billNumber = $invPrefix . date('Y') . '-' . date('mdHis') . '-' . random_int(10, 99);
                 Database::execute(
                     "INSERT INTO production_bills
-                     (bill_number, production_unit_id, buyer_type, company_name, company_address, company_phone, company_email, company_gstin,
+                     (concern_id, bill_number, production_unit_id, buyer_type, company_name, company_address, company_phone, company_email, company_gstin,
                       customer_name, customer_phone, customer_address, customer_city, customer_state, customer_gstin,
                       bill_date, payment_method, payment_status, tax_type, cash_amount, upi_amount, upi_reference,
                       gross_amount, discount_amount, subtotal, cgst_amount, sgst_amount, igst_amount, tax_amount,
                       total_amount, notes, created_by)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    array_merge([$billNumber], $header, [(int)(Auth::id() ?? 0) ?: null])
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    array_merge([$activeConcernId, $billNumber], $header, [(int)(Auth::id() ?? 0) ?: null])
                 );
                 $billId = (int)Database::lastInsertId();
             } else {

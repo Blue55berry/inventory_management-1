@@ -36,6 +36,20 @@ class User {
                 Database::execute("ALTER TABLE users ADD COLUMN staff_role VARCHAR(50) NULL DEFAULT NULL AFTER department");
                 Database::execute("ALTER TABLE users ADD INDEX idx_users_staff_role (staff_role)");
             }
+            $defConcernCol = Database::fetchOne("SHOW COLUMNS FROM users LIKE 'default_concern_id'");
+            if (!$defConcernCol) {
+                Database::execute("ALTER TABLE users ADD COLUMN default_concern_id INT NULL AFTER channel_id");
+            }
+            Database::execute("CREATE TABLE IF NOT EXISTS user_concerns (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT UNSIGNED NOT NULL,
+                concern_id INT NOT NULL,
+                is_default TINYINT(1) DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_concern (user_id, concern_id),
+                INDEX idx_uc_user (user_id),
+                INDEX idx_uc_concern (concern_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             Database::execute("CREATE TABLE IF NOT EXISTS user_permissions (
                 user_id INT UNSIGNED NOT NULL,
                 permission_id INT UNSIGNED NOT NULL,
@@ -76,13 +90,15 @@ class User {
         return Database::fetchOne(
             "SELECT u.*, r.name as role_name, r.slug as role_slug,
                     pu.name as production_unit_name, w.name as warehouse_name, s.name as shop_name,
-                    sc.name as channel_name, sc.code as channel_code, sc.channel_type as channel_type
+                    sc.name as channel_name, sc.code as channel_code, sc.channel_type as channel_type,
+                    c_def.name as default_concern_name, c_def.code as default_concern_code
              FROM users u 
              LEFT JOIN roles r ON u.role_id = r.id 
              LEFT JOIN production_units pu ON u.production_unit_id = pu.id
              LEFT JOIN warehouses w ON u.warehouse_id = w.id
              LEFT JOIN shops s ON u.shop_id = s.id
              LEFT JOIN sales_channels sc ON u.channel_id = sc.id
+             LEFT JOIN concerns c_def ON u.default_concern_id = c_def.id
              WHERE u.id = ?",
             [$id]
         );
@@ -95,13 +111,21 @@ class User {
         self::ensureSchema();
         $sql = "SELECT u.*, r.name as role_name, r.slug as role_slug,
                        pu.name as production_unit_name, w.name as warehouse_name, s.name as shop_name,
-                       sc.name as channel_name, sc.code as channel_code, sc.channel_type as channel_type
+                       sc.name as channel_name, sc.code as channel_code, sc.channel_type as channel_type,
+                       c_def.name as default_concern_name, c_def.code as default_concern_code,
+                       (
+                           SELECT GROUP_CONCAT(CONCAT(c.code, ':', c.name) ORDER BY uc.is_default DESC, c.name ASC SEPARATOR '||')
+                           FROM user_concerns uc
+                           JOIN concerns c ON uc.concern_id = c.id
+                           WHERE uc.user_id = u.id
+                       ) as assigned_concerns_str
                 FROM users u 
                 LEFT JOIN roles r ON u.role_id = r.id 
                 LEFT JOIN production_units pu ON u.production_unit_id = pu.id
                 LEFT JOIN warehouses w ON u.warehouse_id = w.id
                 LEFT JOIN shops s ON u.shop_id = s.id
                 LEFT JOIN sales_channels sc ON u.channel_id = sc.id
+                LEFT JOIN concerns c_def ON u.default_concern_id = c_def.id
                 WHERE 1=1";
         $params = [];
 
@@ -111,6 +135,10 @@ class User {
             $sql .= " AND (u.role_id != 1 AND u.username != 'admin' AND (r.slug != 'admin' OR r.slug IS NULL))";
         }
 
+        if (!empty($filters['concern_id'])) {
+            $sql .= " AND EXISTS (SELECT 1 FROM user_concerns uc WHERE uc.user_id = u.id AND uc.concern_id = ?)";
+            $params[] = (int)$filters['concern_id'];
+        }
         if (!empty($filters['role_id'])) {
             $sql .= " AND u.role_id = ?";
             $params[] = $filters['role_id'];
@@ -164,10 +192,11 @@ class User {
         $whId = ($dept === 'WAREHOUSE') ? (!empty($data['warehouse_id']) ? (int)$data['warehouse_id'] : null) : null;
         $shopId = ($dept === 'SHOP') ? (!empty($data['shop_id']) ? (int)$data['shop_id'] : null) : null;
         $staffRole = !empty($data['staff_role']) ? strtoupper(trim((string)$data['staff_role'])) : null;
+        $defaultConcernId = !empty($data['default_concern_id']) ? (int)$data['default_concern_id'] : null;
 
         Database::execute(
-            "INSERT INTO users (username, email, password_hash, full_name, phone, role_id, department, staff_role, production_unit_id, warehouse_id, shop_id, channel_id, reports_access, is_active, created_at, updated_at) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())",
+            "INSERT INTO users (username, email, password_hash, full_name, phone, role_id, department, staff_role, production_unit_id, warehouse_id, shop_id, channel_id, default_concern_id, reports_access, is_active, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())",
             [
                 $data['username'],
                 $email,
@@ -181,10 +210,18 @@ class User {
                 $whId,
                 $shopId,
                 $channelId,
+                $defaultConcernId,
                 $data['reports_access'] ?? 'ALL',
             ]
         );
         $userId = (int) Database::lastInsertId();
+
+        // Save assigned business concerns if provided
+        if (isset($data['concerns']) && is_array($data['concerns'])) {
+            self::saveConcerns($userId, $data['concerns'], $defaultConcernId);
+        } elseif ($defaultConcernId) {
+            self::saveConcerns($userId, [$defaultConcernId], $defaultConcernId);
+        }
 
         // Save customized permissions if provided (strictly scoped to department)
         if (isset($data['permissions']) && is_array($data['permissions'])) {
@@ -233,13 +270,13 @@ class User {
         $fields = [];
         $params = [];
 
-        foreach (['full_name', 'email', 'phone', 'role_id', 'department', 'staff_role', 'production_unit_id', 'warehouse_id', 'shop_id', 'channel_id', 'reports_access', 'is_active'] as $field) {
+        foreach (['full_name', 'email', 'phone', 'role_id', 'department', 'staff_role', 'production_unit_id', 'warehouse_id', 'shop_id', 'channel_id', 'reports_access', 'is_active', 'default_concern_id'] as $field) {
             if (array_key_exists($field, $data)) {
                 $fields[] = "$field = ?";
                 $val = $data[$field];
                 if ($field === 'department' && !empty($val)) $val = strtoupper($val);
                 if (in_array($field, ['email', 'phone']) && empty(trim((string)$val))) $val = null;
-                if (in_array($field, ['production_unit_id', 'warehouse_id', 'shop_id', 'channel_id']) && empty($val)) $val = null;
+                if (in_array($field, ['production_unit_id', 'warehouse_id', 'shop_id', 'channel_id', 'default_concern_id']) && empty($val)) $val = null;
                 $params[] = $val;
             }
         }
@@ -256,6 +293,12 @@ class User {
             "UPDATE users SET " . implode(', ', $fields) . " WHERE id = ?",
             $params
         );
+
+        // Update assigned business concerns if provided
+        if (isset($data['concerns']) && is_array($data['concerns'])) {
+            $defCid = !empty($data['default_concern_id']) ? (int)$data['default_concern_id'] : null;
+            self::saveConcerns($id, $data['concerns'], $defCid);
+        }
 
         // Update customized permissions if provided (strictly scoped to department)
         if (isset($data['permissions']) && is_array($data['permissions'])) {
@@ -384,9 +427,68 @@ class User {
      * Delete user by ID.
      */
     public static function delete(int $id): void {
+        Database::execute("DELETE FROM user_concerns WHERE user_id = ?", [$id]);
         Database::execute("DELETE FROM user_permissions WHERE user_id = ?", [$id]);
         Database::execute("DELETE FROM user_permission_overrides WHERE user_id = ?", [$id]);
         Database::execute("DELETE FROM users WHERE id = ?", [$id]);
+    }
+
+    /**
+     * Get all concerns mapped to a user with details and default session indicator.
+     */
+    public static function getConcerns(int $userId): array {
+        self::ensureSchema();
+        return Database::fetchAll(
+            "SELECT c.*, uc.is_default
+             FROM user_concerns uc
+             JOIN concerns c ON uc.concern_id = c.id
+             WHERE uc.user_id = ?
+             ORDER BY uc.is_default DESC, c.name ASC",
+            [$userId]
+        ) ?: [];
+    }
+
+    /**
+     * Get array of integer concern IDs assigned to a user.
+     */
+    public static function getConcernIds(int $userId): array {
+        self::ensureSchema();
+        $rows = Database::fetchAll(
+            "SELECT concern_id FROM user_concerns WHERE user_id = ?",
+            [$userId]
+        );
+        return !empty($rows) ? array_map('intval', array_column($rows, 'concern_id')) : [];
+    }
+
+    /**
+     * Sync authorized business concerns for a user and designate primary default concern.
+     */
+    public static function saveConcerns(int $userId, array $concernIds, ?int $defaultConcernId = null): void {
+        self::ensureSchema();
+        Database::execute("DELETE FROM user_concerns WHERE user_id = ?", [$userId]);
+
+        $cleanIds = array_values(array_unique(array_filter(array_map('intval', $concernIds))));
+        if (empty($cleanIds)) {
+            Database::execute("UPDATE users SET default_concern_id = NULL WHERE id = ?", [$userId]);
+            return;
+        }
+
+        if (!$defaultConcernId || !in_array($defaultConcernId, $cleanIds, true)) {
+            $defaultConcernId = $cleanIds[0];
+        }
+
+        foreach ($cleanIds as $cid) {
+            $isDefault = ($cid === $defaultConcernId) ? 1 : 0;
+            Database::execute(
+                "INSERT INTO user_concerns (user_id, concern_id, is_default, created_at) VALUES (?, ?, ?, NOW())",
+                [$userId, $cid, $isDefault]
+            );
+        }
+
+        Database::execute(
+            "UPDATE users SET default_concern_id = ? WHERE id = ?",
+            [$defaultConcernId, $userId]
+        );
     }
 
     /**

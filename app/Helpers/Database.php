@@ -174,6 +174,13 @@ class Database {
     }
 
     /**
+     * Fetch a single scalar value from the first row (alias for fetchColumn).
+     */
+    public static function fetchValue(string $sql, array $params = [], int $column = 0): mixed {
+        return self::fetchColumn($sql, $params, $column);
+    }
+
+    /**
      * Fetch all rows.
      */
     public static function fetchAll(string $sql, array $params = []): array {

@@ -79,6 +79,13 @@ class ExportController {
                 'color' => 'primary',
                 'category' => 'Logistics & Warehousing'
             ],
+            'stock_ledger' => [
+                'name' => 'Detailed Warehouse Stock Ledger',
+                'desc' => 'Monthly stock-in/out history with QR, variant, size, color, design, and pricing details',
+                'icon' => 'bi bi-arrow-left-right',
+                'color' => 'success',
+                'category' => 'Logistics & Warehousing'
+            ],
             'billing' => [
                 'name' => 'Direct Factory Billing (POS)',
                 'desc' => 'Tax invoices, customer details, HSN codes, GST amounts & payment types',
@@ -118,6 +125,7 @@ class ExportController {
 
         // Active production facilities
         $facilities = Database::fetchAll("SELECT id, name, code, is_active FROM production_units WHERE is_active = 1 ORDER BY name ASC");
+        $warehouses = Database::fetchAll("SELECT id, name, code FROM warehouses WHERE is_active = 1 ORDER BY name ASC");
 
         Response::view('export.index', [
             'pageTitle'        => 'Data Export Center',
@@ -128,6 +136,7 @@ class ExportController {
             ],
             'modules'          => $modules,
             'facilities'       => $facilities,
+            'warehouses'       => $warehouses,
             'activeFacility'   => $activeFacility,
             'curMonth'         => $curMonth,
             'curYear'          => $curYear,
@@ -157,7 +166,7 @@ class ExportController {
             $periodLabel = date('d M Y', strtotime($startDate)) . ' to ' . date('d M Y', strtotime($endDate));
         }
 
-        $allModules = ['purchases', 'rolls', 'programs', 'cuttings', 'stitching', 'qc', 'batches', 'outward', 'billing', 'returns', 'stock_requests', 'wastage', 'expenses'];
+        $allModules = ['purchases', 'rolls', 'programs', 'cuttings', 'stitching', 'qc', 'batches', 'outward', 'stock_ledger', 'billing', 'returns', 'stock_requests', 'wastage', 'expenses'];
         $selectedModules = !empty($_REQUEST['modules']) && is_array($_REQUEST['modules'])
             ? array_values(array_intersect($_REQUEST['modules'], $allModules))
             : $allModules;
@@ -167,7 +176,13 @@ class ExportController {
         }
 
         $activeFacility = class_exists('ProductionUnit') ? ProductionUnit::getActiveFacility() : null;
-        $data = ExportService::getReportData($startDate, $endDate, $selectedModules);
+        $requestedWarehouseIds = $_REQUEST['warehouse_ids'] ?? [];
+        $selectedWarehouseIds = is_array($requestedWarehouseIds)
+            ? array_values(array_unique(array_filter(array_map('intval', $requestedWarehouseIds), static function (int $id): bool {
+                return $id > 0;
+            })))
+            : [];
+        $data = ExportService::getReportData($startDate, $endDate, $selectedModules, null, $selectedWarehouseIds);
 
         if ($format === 'PRINT') {
             if (file_exists(BASE_PATH . '/views/export/print.php')) {
@@ -176,6 +191,7 @@ class ExportController {
                     'startDate'       => $startDate,
                     'endDate'         => $endDate,
                     'selectedModules' => $selectedModules,
+                    'selectedWarehouseIds' => $selectedWarehouseIds,
                     'data'            => $data,
                     'prodUnit'        => $activeFacility,
                     'sellerCompany'   => SettingsService::getGroup('company'),
@@ -186,6 +202,7 @@ class ExportController {
                     'startDate'       => $startDate,
                     'endDate'         => $endDate,
                     'selectedModules' => $selectedModules,
+                    'selectedWarehouseIds' => $selectedWarehouseIds,
                     'data'            => $data,
                     'prodUnit'        => $activeFacility,
                     'sellerCompany'   => SettingsService::getGroup('company'),

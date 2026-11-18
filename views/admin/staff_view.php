@@ -106,6 +106,51 @@ foreach ($hierarchicalModules as $module) {
     </div>
 </div>
 
+<!-- Authorized Business Concerns & Scoping Profile Card -->
+<div class="card border shadow-sm">
+    <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+            <h5 class="card-title mb-0 fw-bold"><i class="bi bi-buildings-fill me-2 text-primary"></i>Authorized Business Concerns &amp; Scoping</h5>
+            <small class="text-muted">Sister concerns and operational entities this staff member is permitted to access</small>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border">
+            <?= count($userConcerns ?? []) ?> Authorized <?= count($userConcerns ?? []) === 1 ? 'Concern' : 'Concerns' ?>
+        </span>
+    </div>
+    <div class="card-body">
+        <?php if (empty($userConcerns)): ?>
+            <div class="text-center py-4 text-muted">
+                <i class="bi bi-building-slash fs-1 d-block mb-2"></i>
+                <span>No specific concerns assigned. Staff operates under default business context.</span>
+            </div>
+        <?php else: ?>
+            <div class="row g-3">
+                <?php foreach ($userConcerns as $uc): ?>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="card h-100 border rounded-3 p-3 <?= !empty($uc['is_default']) ? 'border-primary bg-primary bg-opacity-10' : 'bg-light bg-opacity-25' ?>">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <span class="badge bg-secondary-subtle text-primary border fw-bold font-monospace"><?= e($uc['code']) ?></span>
+                                <?php if (!empty($uc['is_default'])): ?>
+                                    <span class="badge bg-warning text-dark border border-warning-subtle">
+                                        <i class="bi bi-star-fill me-1"></i>Default Session
+                                    </span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="fw-bold text-dark fs-6 mb-1"><?= e($uc['name']) ?></div>
+                            <?php if (!empty($uc['legal_name'])): ?>
+                                <div class="text-muted small mb-1"><?= e($uc['legal_name']) ?></div>
+                            <?php endif; ?>
+                            <?php if (!empty($uc['gst_number'])): ?>
+                                <div class="text-muted small font-monospace"><i class="bi bi-receipt me-1"></i>GSTIN: <?= e($uc['gst_number']) ?></div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+
 <div class="card border shadow-sm">
     <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <div>

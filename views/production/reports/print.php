@@ -565,6 +565,109 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
         </div>
     <?php endif; ?>
 
+    <?php if (in_array('stock_ledger', $selectedModules, true)): ?>
+        <?php
+            $ledgerByMonth = [];
+            foreach (($data['stock_ledger'] ?? []) as $movement) {
+                $monthKey = date('Y-m', strtotime($movement['transaction_date']));
+                $ledgerByMonth[$monthKey][] = $movement;
+            }
+        ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Detailed Warehouse Stock Movement Ledger</h3>
+                <span class="section-count"><?= count($data['stock_ledger'] ?? []) ?> movements</span>
+            </div>
+            <p>Each month is shown as a separate table. Positive movements add stock; negative movements remove stock. Balance is recorded after each movement.</p>
+            <?php if (!$ledgerByMonth): ?>
+                <p>No warehouse stock movements found for the selected period and warehouses.</p>
+            <?php else: ?>
+                <?php foreach ($ledgerByMonth as $monthKey => $movements): ?>
+                    <h4><?= htmlspecialchars(date('F Y', strtotime($monthKey . '-01'))) ?></h4>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Warehouse</th>
+                                <th>QR / Variant / SKU</th>
+                                <th>Product / Material / Category</th>
+                                <th>Size</th>
+                                <th>Color</th>
+                                <th>Design / Pattern</th>
+                                <th>HSN / GST</th>
+                                <th>MRP</th>
+                                <th>Purchase Price</th>
+                                <th>Selling Price</th>
+                                <th>Transaction</th>
+                                <th>Stock In</th>
+                                <th>Stock Out</th>
+                                <th>Balance After</th>
+                                <th>Complementary</th>
+                                <th>Source / Destination</th>
+                                <th>Reference</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($movements as $movement): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars(date('d M Y H:i', strtotime($movement['transaction_date']))) ?></td>
+                                    <td><?= htmlspecialchars($movement['warehouse_name'] ?? '-') ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($movement['qr_code'] ?? '-') ?><br>
+                                        <small><?= htmlspecialchars($movement['variant_code'] ?? '-') ?> · <?= htmlspecialchars($movement['sku'] ?? '-') ?></small>
+                                        <?php if (!empty($movement['series_start_code']) || !empty($movement['series_end_code'])): ?>
+                                            <br><small>Series: <?= htmlspecialchars($movement['series_start_code'] ?? '-') ?>&ndash;<?= htmlspecialchars($movement['series_end_code'] ?? '-') ?></small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?= htmlspecialchars($movement['product_name'] ?? '-') ?><br>
+                                        <small>
+                                            <?= htmlspecialchars($movement['product_code'] ?? '-') ?> ·
+                                            <?= htmlspecialchars($movement['material'] ?? '-') ?> ·
+                                            <?= htmlspecialchars($movement['category_name'] ?? '-') ?> /
+                                            <?= htmlspecialchars($movement['subcategory_name'] ?? '-') ?> /
+                                            <?= htmlspecialchars($movement['sub_subcategory_name'] ?? '-') ?>
+                                        </small>
+                                        <?php if (!empty($movement['description'])): ?>
+                                            <br><small><?= htmlspecialchars($movement['description']) ?></small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= htmlspecialchars($movement['size_name'] ?? '-') ?></td>
+                                    <td><?= htmlspecialchars($movement['color_name'] ?? '-') ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($movement['design_name'] ?? '-') ?>
+                                        <?= !empty($movement['design_code']) ? ' (' . htmlspecialchars($movement['design_code']) . ')' : '' ?>
+                                    </td>
+                                    <td><?= htmlspecialchars($movement['hsn_code'] ?? '-') ?> / <?= number_format((float)($movement['gst_rate'] ?? 0), 2) ?>%</td>
+                                    <td class="right">₹<?= number_format((float)($movement['mrp'] ?? 0), 2) ?></td>
+                                    <td class="right">₹<?= number_format((float)($movement['purchase_price'] ?? 0), 2) ?></td>
+                                    <td class="right">₹<?= number_format((float)($movement['selling_price'] ?? 0), 2) ?></td>
+                                    <td><?= htmlspecialchars($movement['transaction_type']) ?><br><small><?= htmlspecialchars($movement['stock_state']) ?></small></td>
+                                    <td class="right text-success"><?= number_format((float)$movement['stock_in'], 2) ?></td>
+                                    <td class="right text-danger"><?= number_format((float)$movement['stock_out'], 2) ?></td>
+                                    <td class="right fw-bold"><?= number_format((float)$movement['balance_after'], 2) ?></td>
+                                    <td><?= !empty($movement['is_complementary']) ? 'Yes' : 'No' ?></td>
+                                    <td>
+                                        <?= htmlspecialchars($movement['source_type'] ?? '-') ?>
+                                        <?= !empty($movement['source_id']) ? ' #' . (int)$movement['source_id'] : '' ?>
+                                        &rarr;
+                                        <?= htmlspecialchars($movement['dest_type'] ?? '-') ?>
+                                        <?= !empty($movement['dest_id']) ? ' #' . (int)$movement['dest_id'] : '' ?>
+                                    </td>
+                                    <td>
+                                        <?= htmlspecialchars($movement['reference_type'] ?? '-') ?>
+                                        <?= !empty($movement['reference_id']) ? ' #' . (int)$movement['reference_id'] : '' ?>
+                                        <?php if (!empty($movement['notes'])): ?><br><small><?= htmlspecialchars($movement['notes']) ?></small><?php endif; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endforeach; ?>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
     <!-- 9. Production Billing -->
     <?php if (in_array('billing', $selectedModules, true) && !empty($data['billing'])): ?>
         <div class="section">
@@ -713,11 +816,11 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
         </div>
     <?php endif; ?>
 
-    <!-- 13. Production Expenses & Machinery Assets -->
+    <!-- 13. Production Operating Expenses -->
     <?php if (in_array('expenses', $selectedModules, true) && !empty($data['expenses'])): ?>
         <div class="section">
             <div class="section-header">
-                <h3 class="section-title">13. Production Expenses &amp; Machinery Assets</h3>
+                <h3 class="section-title">13. Production Operating Expenses</h3>
                 <span class="section-count"><?= count($data['expenses']) ?> items</span>
             </div>
             <table class="data-table">

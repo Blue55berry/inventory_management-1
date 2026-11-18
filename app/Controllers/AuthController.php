@@ -77,6 +77,15 @@ class AuthController {
         // Regenerate session ID for security
         Session::regenerate();
 
+        // Resolve default concern context for staff member
+        $userDefaultConcern = (int)($user['default_concern_id'] ?? 0);
+        if ($userDefaultConcern <= 0 && class_exists('Database')) {
+            $userDefaultConcern = (int)Database::fetchColumn(
+                "SELECT concern_id FROM user_concerns WHERE user_id = ? ORDER BY is_default DESC, id ASC LIMIT 1",
+                [$user['id']]
+            ) ?: 1;
+        }
+
         // Store user in session
         Session::set('user', [
             'id'                   => (int) $user['id'],
@@ -93,9 +102,13 @@ class AuthController {
             'production_unit_name' => $user['production_unit_name'] ?? null,
             'warehouse_name'       => $user['warehouse_name'] ?? null,
             'shop_name'            => $user['shop_name'] ?? null,
+            'default_concern_id'   => $userDefaultConcern ?: null,
             'is_active'            => (int) $user['is_active'],
         ]);
         Session::set('permissions', $permissions);
+        if ($userDefaultConcern > 0) {
+            Session::set('active_concern_id', $userDefaultConcern);
+        }
 
         // Update last login
         User::updateLastLogin($user['id']);
@@ -110,7 +123,6 @@ class AuthController {
                 'programs.view'           => url('production/programs'),
                 'cutting.view'            => url('production/cutting'),
                 'stitching.view'          => url('production/stitching'),
-                'labels.view'             => url('production/labels'),
                 'qc.view'                 => url('production/qc'),
                 'inventory.view'          => url('production/inventory'),
                 'batches.view'            => url('production/batches'),

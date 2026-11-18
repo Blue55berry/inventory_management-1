@@ -719,7 +719,7 @@ $batchDate = new DateTime($batchInfo['batch_created_at'] ?? 'now');
                     <i class="bi bi-trash3 fs-3"></i>
                 </div>
                 <h5 id="deleteInventoryPieceModalTitle" class="fw-bold mb-2">Delete this QR from inventory?</h5>
-                <p class="text-muted mb-2">This will permanently remove the item from Production Unit Inventory and the Production QR Labels module.</p>
+                <p class="text-muted mb-2">This will permanently remove the item from Production Unit Inventory.</p>
                 <span id="deleteInventoryPieceCode" class="badge bg-light text-dark border font-monospace fs-6"></span>
                 <p class="small text-muted mt-3 mb-0">This action cannot be undone.</p>
             </div>

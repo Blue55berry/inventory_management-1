@@ -21,9 +21,6 @@
     $yearStr = $now->format('y');
 
     $getPieceCatalogAbbr = function($it, $batch) {
-        if (!empty($it['label_start_code']) && preg_match('/^([A-Za-z]+)/', $it['label_start_code'], $m)) {
-            return strtoupper($m[1]);
-        }
         if (!empty($it['qr_code_prefix']) && strlen(trim($it['qr_code_prefix'])) <= 5) {
             return strtoupper(trim($it['qr_code_prefix']));
         }
@@ -93,23 +90,8 @@
 
         $itemHierarchy = $it['catalog_hierarchy'] ?? 'General Apparel';
         $catalogPrefix = $getPieceCatalogAbbr($it, $batch);
-        $startSeq = !empty($it['label_start_seq']) ? (int)$it['label_start_seq'] : null;
-
-        $codePrefixAndDate = null;
-        if (!empty($it['label_start_code']) && preg_match('/^([A-Za-z]+\d{4})/', $it['label_start_code'], $m)) {
-            $codePrefixAndDate = strtoupper($m[1]);
-        }
-
         for ($p = 1; $p <= $inspectedQty; $p++) {
-            if ($codePrefixAndDate && $startSeq !== null) {
-                $seqVal = $startSeq + ($p - 1);
-                $pieceTagCode = $codePrefixAndDate . sprintf("%02d", $seqVal);
-            } elseif ($startSeq !== null) {
-                $seqVal = $startSeq + ($p - 1);
-                $pieceTagCode = $catalogPrefix . $monthStr . $yearStr . sprintf("%02d", $seqVal);
-            } else {
-                $pieceTagCode = $catalogPrefix . $monthStr . $yearStr . sprintf("%02d", $pieceIndex);
-            }
+            $pieceTagCode = $catalogPrefix . $monthStr . $yearStr . sprintf("%02d", $pieceIndex);
 
             $initialStatus = 'PENDING';
             $isReinspected = false;

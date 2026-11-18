@@ -263,7 +263,83 @@ foreach ($hierarchicalModules as $m) {
                 </div>
 
                 <!-- ========================================================================= -->
-                <!-- 2. PERMISSIONS MATRIX & MODULE ACCESS (Dynamic Role Sync & Instant Edit) -->
+                <!-- 2. BUSINESS CONCERN ASSIGNMENT & ACCESS RESTRICTIONS -->
+                <!-- ========================================================================= -->
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white py-3 border-0">
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <h5 class="card-title mb-1 fw-bold d-flex align-items-center gap-2">
+                                    <i class="bi bi-buildings-fill text-primary"></i>
+                                    Business Concern Assignment &amp; Access Restrictions
+                                </h5>
+                                <p class="text-muted small mb-0">Authorize the business entities/sister concerns this staff member is permitted to operate. Staff access is strictly partitioned to checked concerns.</p>
+                            </div>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1.5 rounded-pill">
+                                <i class="bi bi-shield-check me-1"></i>Multi-Entity Scoped
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <!-- Authorized Concerns Checkboxes -->
+                        <label class="form-label fw-semibold d-block mb-2">
+                            Authorized Concerns / Entities <span class="text-danger">*</span>
+                            <small class="text-muted fw-normal d-block">Check all business firms this staff member is authorized to access.</small>
+                        </label>
+                        
+                        <div class="row g-3 mb-4" id="concernCheckboxesList">
+                            <?php foreach (($concerns ?? []) as $concern): ?>
+                                <?php 
+                                $cid = (int)$concern['id'];
+                                $isAssigned = in_array($cid, $staffConcerns ?? [], true);
+                                ?>
+                                <div class="col-12 col-md-6 col-lg-4">
+                                    <div class="card h-100 border rounded-3 p-3 concern-select-card <?= $isAssigned ? 'border-primary bg-primary bg-opacity-10' : 'bg-light bg-opacity-25' ?>" style="cursor: pointer;" onclick="toggleConcernCard(event, <?= $cid ?>)">
+                                        <div class="form-check d-flex align-items-start gap-2">
+                                            <input class="form-check-input concern-checkbox mt-1" type="checkbox" name="concerns[]" value="<?= $cid ?>" id="concern_<?= $cid ?>" <?= $isAssigned ? 'checked' : '' ?> data-concern-name="<?= e($concern['name']) ?>" data-concern-code="<?= e($concern['code']) ?>" onchange="syncDefaultConcernOptions()">
+                                            <label class="form-check-label w-100" for="concern_<?= $cid ?>" style="cursor: pointer;">
+                                                <div class="d-flex align-items-center justify-content-between mb-1">
+                                                    <span class="badge bg-secondary-subtle text-primary border fw-bold"><?= e($concern['code']) ?></span>
+                                                    <?php if (!empty($concern['legal_name'])): ?>
+                                                        <small class="text-muted text-truncate" style="max-width: 140px;"><?= e($concern['legal_name']) ?></small>
+                                                    <?php endif; ?>
+                                                </div>
+                                                <div class="fw-bold text-dark fs-6"><?= e($concern['name']) ?></div>
+                                                <?php if (!empty($concern['gst_number'])): ?>
+                                                    <small class="text-muted d-block font-monospace">GSTIN: <?= e($concern['gst_number']) ?></small>
+                                                <?php endif; ?>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <!-- Default Concern for Login Session -->
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label for="default_concern_id" class="form-label fw-semibold">
+                                    <i class="bi bi-star-fill text-warning me-1"></i>Default Active Concern (Upon Login) <span class="text-danger">*</span>
+                                </label>
+                                <select name="default_concern_id" id="default_concern_id" class="form-select" required>
+                                    <!-- Options populated dynamically from checked concerns -->
+                                </select>
+                                <div class="form-text text-muted">The entity automatically activated when this staff member signs in. Must be one of their authorized concerns.</div>
+                            </div>
+                            <div class="col-12 col-md-6 d-flex align-items-center">
+                                <div class="alert alert-info border-0 d-flex align-items-center gap-2 mb-0 py-2 w-100">
+                                    <i class="bi bi-info-circle fs-5 text-info flex-shrink-0"></i>
+                                    <div class="small">
+                                        Staff members will only be able to view documents, batches, and switch between entities that are checked above.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========================================================================= -->
+                <!-- 3. PERMISSIONS MATRIX & MODULE ACCESS (Dynamic Role Sync & Instant Edit) -->
                 <!-- ========================================================================= -->
                 <div class="card border-0 shadow-sm mb-4">
                     <div class="card-header bg-white py-3 border-0 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
@@ -1052,7 +1128,82 @@ document.addEventListener('DOMContentLoaded', function () {
                 return false;
             }
         }
+
+        // Validate business concern assignment
+        const checkedConcerns = document.querySelectorAll('.concern-checkbox:checked');
+        if (checkedConcerns.length === 0) {
+            e.preventDefault();
+            alert('⚠️ Concern Assignment Required:\n\nPlease select at least one authorized Business Concern for this staff member.');
+            return false;
+        }
     });
+
+    // =========================================================================
+    // Concern Multi-Select & Default Sync Helpers
+    // =========================================================================
+    window.toggleConcernCard = function(event, cid) {
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'LABEL') {
+            return;
+        }
+        const chk = document.getElementById('concern_' + cid);
+        if (chk) {
+            chk.checked = !chk.checked;
+            syncDefaultConcernOptions();
+        }
+    };
+
+    window.syncDefaultConcernOptions = function() {
+        const select = document.getElementById('default_concern_id');
+        if (!select) return;
+
+        const checkboxes = document.querySelectorAll('.concern-checkbox');
+        const curVal = parseInt(select.value) || <?= json_encode((int)($defaultConcernId ?? 0)) ?>;
+        
+        select.innerHTML = '';
+        let hasSelected = false;
+        let checkedCount = 0;
+
+        checkboxes.forEach(cb => {
+            const card = cb.closest('.concern-select-card');
+            if (cb.checked) {
+                checkedCount++;
+                if (card) {
+                    card.classList.add('border-primary', 'bg-primary', 'bg-opacity-10');
+                    card.classList.remove('bg-light', 'bg-opacity-25');
+                }
+                const cid = parseInt(cb.value);
+                const name = cb.getAttribute('data-concern-name') || ('Concern #' + cid);
+                const code = cb.getAttribute('data-concern-code') || '';
+                const opt = document.createElement('option');
+                opt.value = cid;
+                opt.textContent = code ? `${code} - ${name}` : name;
+                if (cid === curVal) {
+                    opt.selected = true;
+                    hasSelected = true;
+                }
+                select.appendChild(opt);
+            } else {
+                if (card) {
+                    card.classList.remove('border-primary', 'bg-primary', 'bg-opacity-10');
+                    card.classList.add('bg-light', 'bg-opacity-25');
+                }
+            }
+        });
+
+        if (!hasSelected && select.options.length > 0) {
+            select.options[0].selected = true;
+        }
+
+        if (checkedCount === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '-- Select at least one authorized concern above --';
+            select.appendChild(opt);
+        }
+    };
+
+    // Initialize concern dropdown options
+    syncDefaultConcernOptions();
 
     // =========================================================================
     // Initial Load Setup

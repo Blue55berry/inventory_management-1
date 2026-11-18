@@ -21,12 +21,13 @@ class Role {
     public const DEPT_MODULE_MAP = [
         'PRODUCTION' => [
             'production', 'sellers', 'production_purchases', 'damages', 'catalog', 'programs', 'cutting', 'wastage',
-            'stitching', 'stitching_wastage', 'labels', 'qc', 'inventory', 'production_expenses',
+            'stitching', 'stitching_wastage', 'qc', 'inventory', 'production_expenses',
             'production_billing', 'production_returns', 'batches', 'outward', 'production_stock_requests',
             'warehouse_rework', 'reports'
         ],
+        'ASSETS' => ['asset_register', 'asset_dashboard', 'asset_maintenance'],
         'GENERAL'    => [
-            'dashboard', 'staff', 'roles', 'audit', 'settings', 'backup', 'notifications'
+            'dashboard', 'concerns', 'staff', 'roles', 'audit', 'settings', 'backup', 'notifications'
         ],
     ];
 
@@ -95,10 +96,7 @@ class Role {
 
         $allDeptMods = array_merge(
             self::DEPT_MODULE_MAP['PRODUCTION'],
-            self::DEPT_MODULE_MAP['WAREHOUSE'],
-            self::DEPT_MODULE_MAP['WHATSAPP'],
-            self::DEPT_MODULE_MAP['WEBSITE'],
-            self::DEPT_MODULE_MAP['SHOP']
+            self::DEPT_MODULE_MAP['ASSETS']
         );
         $otherDeptsCount = (int)(Database::fetchOne(
             "SELECT COUNT(p.id) as cnt
@@ -173,8 +171,14 @@ class Role {
      */
     public static function create(array $data): int {
         Database::execute(
-            "INSERT INTO roles (name, slug, description, is_active, created_at) VALUES (?, ?, ?, 1, NOW())",
-            [$data['name'], $data['slug'], $data['description'] ?? '']
+            "INSERT INTO roles (name, slug, description, concern_scope, applicable_concerns, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, NOW())",
+            [
+                $data['name'],
+                $data['slug'],
+                $data['description'] ?? '',
+                $data['concern_scope'] ?? 'ALL',
+                isset($data['applicable_concerns']) ? (is_array($data['applicable_concerns']) ? json_encode(array_values(array_map('intval', $data['applicable_concerns']))) : $data['applicable_concerns']) : null
+            ]
         );
         return (int) Database::lastInsertId();
     }
@@ -184,8 +188,16 @@ class Role {
      */
     public static function update(int $id, array $data): void {
         Database::execute(
-            "UPDATE roles SET name = ?, slug = ?, description = ?, is_active = ? WHERE id = ?",
-            [$data['name'], $data['slug'], $data['description'] ?? '', $data['is_active'] ?? 1, $id]
+            "UPDATE roles SET name = ?, slug = ?, description = ?, concern_scope = ?, applicable_concerns = ?, is_active = ? WHERE id = ?",
+            [
+                $data['name'],
+                $data['slug'],
+                $data['description'] ?? '',
+                $data['concern_scope'] ?? 'ALL',
+                isset($data['applicable_concerns']) ? (is_array($data['applicable_concerns']) ? json_encode(array_values(array_map('intval', $data['applicable_concerns']))) : $data['applicable_concerns']) : null,
+                $data['is_active'] ?? 1,
+                $id
+            ]
         );
     }
 
@@ -328,11 +340,6 @@ class Role {
             ['stitching_wastage', 'create', 'Log Thread/Trimming Scrap & Defects', 'stitching_wastage.create', null],
             ['stitching_wastage', 'edit', 'Edit Stitching Wastage Records', 'stitching_wastage.edit', null],
             ['stitching_wastage', 'delete', 'Delete Stitching Wastage Logs', 'stitching_wastage.delete', null],
-
-            ['labels', 'view', 'View Label Batches & Print History', 'labels.view', null],
-            ['labels', 'create', 'Create Label Batches & Barcode Stickers', 'labels.create', null],
-            ['labels', 'edit', 'Edit Label Configurations & Batches', 'labels.edit', null],
-            ['labels', 'delete', 'Delete Label Batches & Print Records', 'labels.delete', null],
 
             ['qc', 'view', 'View QC Inspections & Audit Results', 'qc.view', null],
             ['qc', 'create', 'Create QC Inspections & Rework Queues', 'qc.create', null],
@@ -705,7 +712,6 @@ class Role {
                     'wastage'                   => ['name' => 'Wastage Selling', 'icon' => 'bi-recycle', 'desc' => 'Fabric scrap selling tickets, scrap weights, and scrap invoices', 'department' => 'PRODUCTION'],
                     'stitching'                 => ['name' => 'Stitching', 'icon' => 'bi-bounding-box', 'desc' => 'Line allocation, tailor piece-rate tracking, and bundle stitching', 'department' => 'PRODUCTION'],
                     'stitching_wastage'         => ['name' => 'Stitching Wastage', 'icon' => 'bi-trash3', 'desc' => 'Thread/trimming scrap, defect logs, and floor disposal', 'department' => 'PRODUCTION'],
-                    'labels'                    => ['name' => 'Labels', 'icon' => 'bi-tag', 'desc' => 'Brand tags, care labels, barcode sticker print batches', 'department' => 'PRODUCTION'],
                     'qc'                        => ['name' => 'QC', 'icon' => 'bi-shield-check', 'desc' => 'AQL inspections, passed/failed piece audits, and rework queues', 'department' => 'PRODUCTION'],
                     'inventory'                 => ['name' => 'Inventory', 'icon' => 'bi-boxes', 'desc' => 'Unassigned lot staging bays and finished goods floor storage', 'department' => 'PRODUCTION'],
                     'inward'                    => ['name' => 'Goods Inward (GRN)', 'icon' => 'bi-box-arrow-in-down', 'desc' => 'Inward finished goods from production units and suppliers', 'department' => 'PRODUCTION'],
@@ -717,11 +723,33 @@ class Role {
                     'outward'                   => ['name' => 'Outward', 'icon' => 'bi-truck', 'desc' => 'Delivery challans and outward dispatch to Central Warehouses', 'department' => 'PRODUCTION'],
                     'production_stock_requests' => ['name' => 'Stock Requests', 'icon' => 'bi-inbox', 'desc' => 'Warehouse stock requisitions and production fulfillment requests', 'department' => 'PRODUCTION'],
                     'warehouse_rework'          => ['name' => 'Warehouse Rework', 'icon' => 'bi-tools', 'desc' => 'Repair and dispatch damaged warehouse goods', 'department' => 'PRODUCTION'],
-                    'asset_register'            => ['name' => 'Asset Register', 'icon' => 'bi-cpu', 'desc' => 'Plant machinery, stitching machines, cutters, and equipment records', 'department' => 'PRODUCTION'],
-                    'asset_maintenance'         => ['name' => 'Asset Maintenance', 'icon' => 'bi-wrench-adjustable-circle', 'desc' => 'Machinery service logs, technician repairs, and downtime tracking', 'department' => 'PRODUCTION'],
                 ]
             ],
-                        'staff' => [
+            'assets' => [
+                'title'      => 'Assets',
+                'icon'       => 'bi-tools',
+                'badge'      => 'bg-dark-subtle text-dark border-dark',
+                'department' => 'ASSETS',
+                'submodules' => [
+                    'asset_register'    => ['name' => 'Asset Register', 'icon' => 'bi-cpu', 'desc' => 'Plant machinery, stitching machines, cutters, and equipment records', 'department' => 'ASSETS'],
+                    'asset_maintenance' => ['name' => 'Asset Maintenance', 'icon' => 'bi-wrench-adjustable-circle', 'desc' => 'Machinery service logs, technician repairs, and downtime tracking', 'department' => 'ASSETS'],
+                ]
+            ],
+                        'concerns' => [
+                'title'      => 'Concerns',
+                'icon'       => 'bi-buildings',
+                'badge'      => 'bg-info-subtle text-info border-info',
+                'department' => 'ALL',
+                'submodules' => [
+                    'concerns' => [
+                        'name'       => 'Concerns Management',
+                        'icon'       => 'bi-buildings',
+                        'desc'       => 'Business entities, multi-firm configurations, legal profiles, and staff assignments',
+                        'department' => 'ALL',
+                    ],
+                ]
+            ],
+            'staff' => [
                 'title'      => 'Staff',
                 'icon'       => 'bi-people',
                 'badge'      => 'bg-primary-subtle text-primary border-primary',

@@ -11,8 +11,6 @@ require_once BASE_PATH . '/app/Models/CuttingBatch.php';
 require_once BASE_PATH . '/app/Models/CuttingItem.php';
 require_once BASE_PATH . '/app/Models/StitchingBatch.php';
 require_once BASE_PATH . '/app/Models/StitchingItem.php';
-require_once BASE_PATH . '/app/Models/LabelBatch.php';
-require_once BASE_PATH . '/app/Models/LabelItem.php';
 require_once BASE_PATH . '/app/Models/QCBatch.php';
 require_once BASE_PATH . '/app/Models/QCItem.php';
 require_once BASE_PATH . '/app/Models/ProductionBatch.php';
@@ -424,196 +422,6 @@ class ProductionService {
     }
 
     /**
-     * Create Label Batch.
-     */
-    public static function createLabelBatch(array $batchData, array $items, int $userId): int {
-        Database::beginTransaction();
-        try {
-            if (!empty($batchData['stitching_batch_id'])) {
-                $existingLabel = Database::fetchOne(
-                    "SELECT id, batch_number FROM label_batches WHERE stitching_batch_id = ?",
-                    [(int)$batchData['stitching_batch_id']]
-                );
-                if ($existingLabel) {
-                    throw new Exception("Validation Error: This Stitching Batch has already been assigned to Label Batch {$existingLabel['batch_number']}. Duplicate label generation is not allowed.");
-                }
-            }
-            if (!empty($batchData['program_id'])) {
-                $existingLabelProg = Database::fetchOne(
-                    "SELECT id, batch_number FROM label_batches WHERE program_id = ?",
-                    [(int)$batchData['program_id']]
-                );
-                if ($existingLabelProg) {
-                    throw new Exception("Validation Error: This Production Program has already been assigned to Label Batch {$existingLabelProg['batch_number']}. Duplicate label generation is not allowed.");
-                }
-            }
-
-            if (empty($batchData['batch_number'])) {
-                $batchData['batch_number'] = self::generateSequenceNumber('label_batches', 'batch_number', 'LBL');
-            }
-
-            $batchId = LabelBatch::create($batchData);
-
-            $catalogRunningSeq = [];
-            foreach ($items as $item) {
-                $catId = !empty($item['category_id']) ? (int)$item['category_id'] : null;
-                $subcatId = !empty($item['subcategory_id']) ? (int)$item['subcategory_id'] : null;
-                $subSubcatId = !empty($item['sub_subcategory_id']) ? (int)$item['sub_subcategory_id'] : null;
-                $catHierarchy = $item['catalog_hierarchy'] ?? null;
-                $qty = (int)($item['required_qty'] ?? ($item['printed_qty'] ?? 1));
-
-                $catKey = ($catId ?? 0) . '_' . ($subcatId ?? 0) . '_' . ($subSubcatId ?? 0);
-                if (!isset($catalogRunningSeq[$catKey])) {
-                    $lastDbSeq = LabelItem::getLastSequenceForCatalog($catId, $subcatId, $subSubcatId, $catHierarchy);
-                    if (!empty($item['start_seq']) && (int)$item['start_seq'] > $lastDbSeq) {
-                        $catalogRunningSeq[$catKey] = (int)$item['start_seq'];
-                    } else {
-                        $catalogRunningSeq[$catKey] = $lastDbSeq + 1;
-                    }
-                }
-
-                $startSeq = (!empty($item['start_seq']) && (int)$item['start_seq'] >= $catalogRunningSeq[$catKey]) 
-                    ? (int)$item['start_seq'] 
-                    : $catalogRunningSeq[$catKey];
-                $endSeq = (!empty($item['end_seq']) && (int)$item['end_seq'] >= $startSeq) 
-                    ? (int)$item['end_seq'] 
-                    : ($startSeq + max($qty, 1) - 1);
-                $catalogRunningSeq[$catKey] = $endSeq + 1;
-
-                $startCode = LabelItem::generateLabelCode($startSeq, $catHierarchy, $item);
-                $endCode = LabelItem::generateLabelCode($endSeq, $catHierarchy, $item);
-
-                LabelItem::create([
-                    'label_batch_id'     => $batchId,
-                    'variant_id'         => !empty($item['variant_id']) ? (int)$item['variant_id'] : null,
-                    'category_id'        => $catId,
-                    'subcategory_id'     => $subcatId,
-                    'sub_subcategory_id' => $subSubcatId,
-                    'catalog_hierarchy'  => $catHierarchy,
-                    'size_name'          => $item['size_name'] ?? null,
-                    'color_name'         => $item['color_name'] ?? null,
-                    'base_price'         => (float)($item['base_price'] ?? 0.00),
-                    'discount_price'     => (float)($item['discount_price'] ?? 0.00),
-                    'required_qty'       => (int)($item['required_qty'] ?? 0),
-                    'printed_qty'        => (int)($item['printed_qty'] ?? 0),
-                    'used_qty'           => (int)($item['used_qty'] ?? 0),
-                    'damaged_qty'        => (int)($item['damaged_qty'] ?? 0),
-                    'start_seq'          => $startSeq,
-                    'end_seq'            => $endSeq,
-                    'start_code'         => $startCode,
-                    'end_code'           => $endCode,
-                ]);
-            }
-
-            LabelBatch::recalculateTotals($batchId);
-            AuditService::log('production', 'create', 'label_batch', $batchId, null, $batchData);
-            Database::commit();
-            return $batchId;
-        } catch (Exception $e) {
-            Database::rollback();
-            throw $e;
-        }
-    }
-
-    /**
-     * Update Label Batch.
-     */
-    public static function updateLabelBatch(int $id, array $batchData, array $items): bool {
-        Database::beginTransaction();
-        try {
-            $existing = LabelBatch::find($id);
-            if (!$existing) {
-                throw new Exception("Label batch not found: $id");
-            }
-
-            LabelBatch::update($id, $batchData);
-
-            LabelItem::deleteByBatch($id);
-            $catalogRunningSeq = [];
-            foreach ($items as $item) {
-                $catId = !empty($item['category_id']) ? (int)$item['category_id'] : null;
-                $subcatId = !empty($item['subcategory_id']) ? (int)$item['subcategory_id'] : null;
-                $subSubcatId = !empty($item['sub_subcategory_id']) ? (int)$item['sub_subcategory_id'] : null;
-                $catHierarchy = $item['catalog_hierarchy'] ?? null;
-                $qty = (int)($item['required_qty'] ?? ($item['printed_qty'] ?? 1));
-
-                $catKey = ($catId ?? 0) . '_' . ($subcatId ?? 0) . '_' . ($subSubcatId ?? 0);
-                if (!isset($catalogRunningSeq[$catKey])) {
-                    $lastDbSeq = LabelItem::getLastSequenceForCatalog($catId, $subcatId, $subSubcatId, $catHierarchy, $id);
-                    if (!empty($item['start_seq']) && (int)$item['start_seq'] > $lastDbSeq) {
-                        $catalogRunningSeq[$catKey] = (int)$item['start_seq'];
-                    } else {
-                        $catalogRunningSeq[$catKey] = $lastDbSeq + 1;
-                    }
-                }
-
-                $startSeq = (!empty($item['start_seq']) && (int)$item['start_seq'] >= $catalogRunningSeq[$catKey]) 
-                    ? (int)$item['start_seq'] 
-                    : $catalogRunningSeq[$catKey];
-                $endSeq = (!empty($item['end_seq']) && (int)$item['end_seq'] >= $startSeq) 
-                    ? (int)$item['end_seq'] 
-                    : ($startSeq + max($qty, 1) - 1);
-                $catalogRunningSeq[$catKey] = $endSeq + 1;
-
-                $startCode = LabelItem::generateLabelCode($startSeq, $catHierarchy, $item);
-                $endCode = LabelItem::generateLabelCode($endSeq, $catHierarchy, $item);
-
-                LabelItem::create([
-                    'label_batch_id'     => $id,
-                    'variant_id'         => !empty($item['variant_id']) ? (int)$item['variant_id'] : null,
-                    'category_id'        => $catId,
-                    'subcategory_id'     => $subcatId,
-                    'sub_subcategory_id' => $subSubcatId,
-                    'catalog_hierarchy'  => $catHierarchy,
-                    'size_name'          => $item['size_name'] ?? null,
-                    'color_name'         => $item['color_name'] ?? null,
-                    'base_price'         => (float)($item['base_price'] ?? 0.00),
-                    'discount_price'     => (float)($item['discount_price'] ?? 0.00),
-                    'required_qty'       => (int)($item['required_qty'] ?? 0),
-                    'printed_qty'        => (int)($item['printed_qty'] ?? 0),
-                    'used_qty'           => (int)($item['used_qty'] ?? 0),
-                    'damaged_qty'        => (int)($item['damaged_qty'] ?? 0),
-                    'start_seq'          => $startSeq,
-                    'end_seq'            => $endSeq,
-                    'start_code'         => $startCode,
-                    'end_code'           => $endCode,
-                ]);
-            }
-
-            LabelBatch::recalculateTotals($id);
-            AuditService::log('production', 'edit', 'label_batch', $id, $existing, $batchData);
-
-            Database::commit();
-            return true;
-        } catch (Exception $e) {
-            Database::rollback();
-            throw $e;
-        }
-    }
-
-    /**
-     * Delete Label Batch.
-     */
-    public static function deleteLabelBatch(int $id): bool {
-        Database::beginTransaction();
-        try {
-            $existing = LabelBatch::find($id);
-            if (!$existing) {
-                throw new Exception("Label batch not found: $id");
-            }
-
-            LabelBatch::delete($id);
-            AuditService::log('production', 'delete', 'label_batch', $id, $existing, null);
-
-            Database::commit();
-            return true;
-        } catch (Exception $e) {
-            Database::rollback();
-            throw $e;
-        }
-    }
-
-    /**
      * Create QC Batch.
      */
     public static function createQCBatch(array $batchData, array $items, int $userId): int {
@@ -626,15 +434,6 @@ class ProductionService {
                 );
                 if ($existingQC) {
                     throw new Exception("Validation Error: This Stitching Batch has already undergone QC Inspection (QC #{$existingQC['id']}). Duplicate QC inspection is not allowed.");
-                }
-            }
-            if (!empty($batchData['label_batch_id'])) {
-                $existingQC = Database::fetchOne(
-                    "SELECT id FROM qc_batches WHERE label_batch_id = ?",
-                    [(int)$batchData['label_batch_id']]
-                );
-                if ($existingQC) {
-                    throw new Exception("Validation Error: This Label Batch has already undergone QC Inspection (QC #{$existingQC['id']}). Duplicate QC inspection is not allowed.");
                 }
             }
             if (!empty($batchData['program_id'])) {
@@ -748,15 +547,9 @@ class ProductionService {
             $itemId = (int)$item['id'];
             $tags = array_values(array_unique($savedApprovedByItem[$itemId] ?? []));
             if (empty($tags)) {
-                $startCode = trim((string)($item['label_start_code'] ?? $item['tag_code'] ?? ''));
-                $startSeq = (int)($item['label_start_seq'] ?? 0);
-                $effectiveQty = max(0, (int)($item['passed_qty'] ?? 0)) + ($includeRework ? max(0, (int)($item['rework_qty'] ?? 0)) : 0);
-                if ($startSeq > 0 && $effectiveQty > 0 && preg_match('/^(.+?)(\d+)$/', $startCode, $match)) {
-                    $endSeq = (int)($item['label_end_seq'] ?? ($startSeq + $effectiveQty - 1));
-                    $endSeq = min($endSeq, $startSeq + $effectiveQty - 1);
-                    for ($seq = $startSeq; $seq <= $endSeq; $seq++) {
-                        $tags[] = $match[1] . str_pad((string)$seq, strlen($match[2]), '0', STR_PAD_LEFT);
-                    }
+                $fallbackTag = trim((string)($item['tag_code'] ?? ''));
+                if ($fallbackTag !== '') {
+                    $tags[] = $fallbackTag;
                 }
             }
             $approvedByItem[$itemId] = [
@@ -1458,7 +1251,6 @@ class ProductionService {
         $items = ProductionProgram::getItems($programId);
         $cutting = Database::fetchAll("SELECT * FROM cutting_batches WHERE program_id = ? ORDER BY id DESC", [$programId]);
         $stitching = Database::fetchAll("SELECT * FROM stitching_batches WHERE program_id = ? ORDER BY id DESC", [$programId]);
-        $labels = Database::fetchAll("SELECT * FROM label_batches WHERE program_id = ? ORDER BY id DESC", [$programId]);
         $qc = Database::fetchAll("SELECT * FROM qc_batches WHERE program_id = ? ORDER BY id DESC", [$programId]);
         $batches = Database::fetchAll("SELECT * FROM production_batches WHERE program_id = ? ORDER BY id DESC", [$programId]);
 
@@ -1467,7 +1259,6 @@ class ProductionService {
             'items'     => $items,
             'cutting'   => $cutting,
             'stitching' => $stitching,
-            'labels'    => $labels,
             'qc'        => $qc,
             'batches'   => $batches,
         ];

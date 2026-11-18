@@ -5,6 +5,7 @@
  */
 
 require_once BASE_PATH . '/app/Services/QrGenerationService.php';
+require_once BASE_PATH . '/app/Services/PurchaseMappingFulfillmentService.php';
 require_once BASE_PATH . '/app/Models/Design.php';
 
 class QrGenerationController {
@@ -13,16 +14,31 @@ class QrGenerationController {
      * List all generated QR batches.
      */
     public function index(): void {
+        QrGenerationService::ensureSourceSchema();
+        PurchaseMappingFulfillmentService::ensureSchema();
+
+        $tabs = QrGenerationService::sourceTabs();
+        $activeTab = QrGenerationService::normalizeTab($_GET['tab'] ?? null);
+
         $filters = [
             'search'      => trim($_GET['search'] ?? ''),
             'brand_name'  => trim($_GET['brand_name'] ?? ''),
             'category_id' => !empty($_GET['category_id']) ? (int)$_GET['category_id'] : null,
             'type'        => trim($_GET['type'] ?? ''),
+            'qr_source'   => $tabs[$activeTab]['source'],
         ];
 
         $batches = QrGenerationService::listBatches($filters);
         $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
         $brands = Database::fetchAll("SELECT DISTINCT brand_name FROM qr_generations WHERE brand_name IS NOT NULL AND brand_name != '' ORDER BY brand_name ASC");
+
+        $tabCounts = [];
+        foreach ($tabs as $key => $tab) {
+            $tabCounts[$key] = (int)(Database::fetchOne(
+                "SELECT COUNT(*) AS c FROM qr_generations WHERE qr_source = ?",
+                [$tab['source']]
+            )['c'] ?? 0);
+        }
 
         $totalQrs = (int)Database::fetchOne("SELECT COUNT(*) as c FROM qr_generation_items")['c'];
 
@@ -35,6 +51,9 @@ class QrGenerationController {
             'categories'   => $categories,
             'brands'       => $brands,
             'totalQrs'     => $totalQrs,
+            'tabs'         => $tabs,
+            'activeTab'    => $activeTab,
+            'tabCounts'    => $tabCounts,
             'breadcrumb'   => [
                 ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Code Generations'],
@@ -46,6 +65,13 @@ class QrGenerationController {
      * Show generator interface with Manual and Catalog/Variant modes.
      */
     public function create(): void {
+        QrGenerationService::ensureSourceSchema();
+        PurchaseMappingFulfillmentService::ensureSchema();
+
+        $tabs = QrGenerationService::sourceTabs();
+        $requestedTab = $_GET['tab'] ?? (!empty($_GET['mode']) ? 'third_party' : null);
+        $activeTab = QrGenerationService::normalizeTab($requestedTab);
+
         $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
         $subcategories = Database::fetchAll("SELECT id, category_id, name, code FROM subcategories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
         $subSubcategories = Database::fetchAll("SELECT id, subcategory_id, name, code FROM sub_subcategories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
@@ -67,12 +93,76 @@ class QrGenerationController {
             'colors'           => $colors,
             'designs'          => $designs,
             'sizes'            => $sizes,
+            'tabs'             => $tabs,
+            'activeTab'        => $activeTab,
+            'purchaseGroups'   => self::getPurchaseGroups(),
             'breadcrumb'       => [
                 ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Generations', 'url' => url('production/qr-generations')],
                 ['label' => 'Generate QR Labels'],
             ],
         ]);
+    }
+
+    /**
+     * Group purchasable lines by the QR tab they belong to.
+     */
+    private static function getPurchaseGroups(): array {
+        $groups = [
+            QrGenerationService::SOURCE_FABRIC      => [],
+            QrGenerationService::SOURCE_RAW         => [],
+            QrGenerationService::SOURCE_THIRD_PARTY => [],
+        ];
+
+        $rows = Database::fetchAll(
+            "SELECT ppi.id AS item_id, ppi.item_type, ppi.item_name, ppi.quantity, ppi.unit,
+                    ppi.vendor_sku, ppi.product_code, ppi.color, ppi.size, ppi.start_code,
+                    ppi.mrp, ppi.selling_price, ppi.is_mapped,
+                    ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
+                    pp.id AS purchase_id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
+                    s.name AS seller_name, s.company AS seller_company,
+                    sr.roll_number
+             FROM production_purchase_items ppi
+             INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+             LEFT JOIN sellers s ON s.id = pp.seller_id
+             LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
+             WHERE ppi.item_type IN ('FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY')
+               AND ppi.qr_generation_id IS NULL
+               AND (ppi.qr_batch_code IS NULL OR TRIM(ppi.qr_batch_code) = '')
+               AND NOT EXISTS (
+                   SELECT 1
+                   FROM qr_generations qrg
+                   WHERE qrg.source_purchase_item_id = ppi.id
+               )
+             ORDER BY pp.purchase_date DESC, pp.id DESC, ppi.id ASC
+             LIMIT 1000"
+        );
+
+        foreach ($rows as $row) {
+            $source = strtoupper((string)$row['item_type']);
+            if (!isset($groups[$source])) {
+                continue;
+            }
+            $purchaseId = (int)$row['purchase_id'];
+            if (!isset($groups[$source][$purchaseId])) {
+                $groups[$source][$purchaseId] = [
+                    'id'             => $purchaseId,
+                    'purchase_number'=> $row['purchase_number'],
+                    'purchase_date'  => $row['purchase_date'],
+                    'invoice_number' => $row['invoice_number'],
+                    'seller_label'   => trim((string)($row['seller_company'] ?: ($row['seller_name'] ?? 'Supplier'))),
+                    'items'          => [],
+                ];
+            }
+            $groups[$source][$purchaseId]['items'][] = $row;
+        }
+
+        foreach ($groups as &$purchases) {
+            $purchases = array_values($purchases);
+        }
+        unset($purchases);
+
+        return $groups;
     }
 
     /**
@@ -106,6 +196,56 @@ class QrGenerationController {
     }
 
     /**
+     * Handle QR generation from a real purchase line (Fabric / Raw / Third-Party).
+     */
+    public function storePurchaseBatch(): void {
+        $tab = QrGenerationService::normalizeTab($_POST['tab'] ?? null);
+        $source = strtoupper(trim((string)($_POST['qr_source'] ?? '')));
+        $itemId = (int)($_POST['purchase_item_id'] ?? 0);
+
+        // Tab-based validation: a roll item can never be generated from the
+        // Third-Party tab (and vice versa).
+        if ($itemId <= 0 || $source === '') {
+            Session::flash('error', 'Select a purchase item from the selected tab.');
+            Response::redirect(url('production/qr-generations/create?tab=' . $tab));
+            return;
+        }
+        $selectedItem = Database::fetchOne(
+            "SELECT item_type FROM production_purchase_items WHERE id = ?",
+            [$itemId]
+        );
+        if (!$selectedItem || strtoupper((string)$selectedItem['item_type']) !== $source) {
+            Session::flash('error', 'The selected product does not belong to this QR tab. Choose a product from the tab-specific list.');
+            Response::redirect(url('production/qr-generations/create?tab=' . $tab));
+            return;
+        }
+
+        try {
+            $result = QrGenerationService::generatePurchaseBatch($_POST);
+            Session::flash('success', "Batch {$result['batch_code']} generated with {$result['quantity']} QR labels!");
+            Response::redirect(url('production/qr-generations/view/' . $result['generation_id'] . '?tab=' . $tab));
+        } catch (Throwable $e) {
+            Session::flash('error', $e->getMessage());
+            Response::redirect(url('production/qr-generations/create?tab=' . $tab));
+        }
+    }
+
+    /**
+     * Explicitly add a generated QR batch to inventory.
+     */
+    public function addToStock(string $id): void {
+        $generationId = (int)$id;
+        try {
+            $result = QrGenerationService::addToStock($generationId, Auth::id());
+            Session::flash('success', "Added {$result['quantity']} pieces to warehouse stock.");
+        } catch (Throwable $e) {
+            Session::flash('error', $e->getMessage());
+        }
+        $tab = QrGenerationService::normalizeTab($_POST['tab'] ?? $_GET['tab'] ?? null);
+        Response::redirect(url('production/qr-generations/view/' . $generationId . '?tab=' . $tab));
+    }
+
+    /**
      * View batch details and item list.
      */
     public function view(string $id): void {
@@ -120,6 +260,7 @@ class QrGenerationController {
             'activeModule' => 'production',
             'activeMenu'   => 'prod-qr-generation',
             'batch'        => $batch,
+            'activeTab'    => QrGenerationService::normalizeTab($_GET['tab'] ?? $batch['qr_source'] ?? null),
             'breadcrumb'   => [
                 ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Generations', 'url' => url('production/qr-generations')],
