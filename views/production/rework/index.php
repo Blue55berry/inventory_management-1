@@ -6,7 +6,6 @@
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
         <div>
             <h2 class="mb-0"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Rework from Warehouse</h2>
-            <span class="text-muted">Manage defective and damaged goods returned from warehouses for factory rework, repair, and re-dispatch</span>
         </div>
         <div class="d-flex gap-2 align-items-center">
             <?php if (hasPermission('outward', 'view')): ?>
@@ -367,7 +366,6 @@
                                     </option>
                                 <?php endforeach; ?>
                             </select>
-                            <div class="form-text small">Selecting a batch will filter the variants belonging to it.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Date Received <span class="text-danger">*</span></label>
