@@ -123,7 +123,6 @@
     <div class="card shadow-sm border mb-4">
         <div class="card-header bg-white py-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Select Inward &amp; Purchase Type *</h5>
-            <small class="text-muted">Choose product entry method based on what is being received on this supplier invoice.</small>
         </div>
         <div class="card-body p-3">
             <div class="row g-3">
@@ -280,14 +279,12 @@
                         <option value="1000m">
                         <option value="5000m">
                     </datalist>
-                    <small class="text-muted">Select a standard grade or enter a custom fabric name and GSM.</small>
                 </div>
             </div>
         </div>
         <div class="card-body">
             <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-stack me-1 text-primary"></i>Individual Fabric Rolls (<span id="rollCountBadge">0</span>)</h6>
-                <span class="text-muted small">Add each roll received on this supplier invoice.</span>
             </div>
             <div id="rollsContainer" class="d-flex flex-column gap-3 mb-4"></div>
             <div class="card border shadow-sm mb-4" id="rollDetailsTableContainer">
@@ -306,7 +303,7 @@
                 </div>
             </div>
             <div class="p-3 bg-primary-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div><strong class="text-primary"><i class="bi bi-calculator me-1"></i>Batch Metrics Summary</strong><small class="d-block text-muted">Totals are calculated from the rolls in this purchase.</small></div>
+                <div><strong class="text-primary"><i class="bi bi-calculator me-1"></i>Batch Metrics Summary</strong></div>
                 <div class="d-flex flex-wrap gap-4">
                     <div><small class="text-muted d-block">Total Rolls</small><strong id="summaryTotalRolls">0 Rolls</strong></div>
                     <div><small class="text-muted d-block">Total RQ</small><strong id="summaryTotalRQ">0 RQ</strong></div>
@@ -325,7 +322,6 @@
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 fw-bold"><i class="bi bi-boxes me-2 text-warning"></i>Raw Materials Procurement (Yarn, Thread &amp; Accessories)</h5>
-                    <small class="text-muted">Enter yarn counts, sewing threads, trims, accessories, and raw materials inwarded for the production unit with vendor purchase price and GST.</small>
                 </div>
                 <button type="button" class="btn btn-sm btn-warning text-dark fw-semibold" id="btnAddRawMaterialItem">
                     <i class="bi bi-plus-circle me-1"></i> Add Raw Material
@@ -335,7 +331,6 @@
                 <!-- Individual Cards Container -->
                 <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                     <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1 text-warning"></i>Individual Raw Materials (<span id="rmCountBadge">0</span>)</h6>
-                    <span class="text-muted small">Configure raw materials, yarn counts, units, and supplier procurement prices.</span>
                 </div>
                 <div id="rawMaterialContainer" class="d-flex flex-column gap-3 mb-4"></div>
 
@@ -375,7 +370,6 @@
                 <div class="p-3 bg-warning-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <div>
                         <strong class="text-dark"><i class="bi bi-calculator me-1"></i>Raw Materials Procurement Summary</strong>
-                        <small class="d-block text-muted">Totals calculated from individual raw materials and their specific GST rates.</small>
                     </div>
                     <div class="d-flex flex-wrap gap-4 align-items-center">
                         <div><small class="text-muted d-block">Total Items</small><strong id="summaryRmItems">0 Items</strong></div>
@@ -395,7 +389,6 @@
             <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div>
                     <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-info"></i>Third-Party Finished Products Inward</h5>
-                    <small class="text-muted">Enter items received from external brands/vendors with individual item GST and purchase price.</small>
                 </div>
                 <button type="button" class="btn btn-sm btn-info text-white fw-semibold" id="btnAddThirdPartyItem">
                     <i class="bi bi-plus-circle me-1"></i> Add Third-Party Product
@@ -405,7 +398,6 @@
                 <!-- Individual Cards Container -->
                 <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                     <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge">0</span>)</h6>
-                    <span class="text-muted small">Configure individual products with separate GST rates and vendor procurement pricing.</span>
                 </div>
                 <div id="thirdPartyContainer" class="d-flex flex-column gap-3 mb-4"></div>
 
@@ -446,7 +438,6 @@
                 <div class="p-3 bg-info-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
                     <div>
                         <strong class="text-info-emphasis"><i class="bi bi-calculator me-1"></i>Third-Party Inward Summary</strong>
-                        <small class="d-block text-muted">Totals calculated from individual products and their specific GST rates.</small>
                     </div>
                     <div class="d-flex flex-wrap gap-4 align-items-center">
                         <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
@@ -683,6 +674,32 @@
     color: #ffffff !important;
     border-color: rgba(255, 255, 255, 0.4) !important;
 }
+
+.tax-strip-container {
+    background-color: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+.tax-strip-container .item-gst-type,
+.item-gst-type {
+    min-width: 195px;
+    padding-right: 1.85rem !important;
+    font-size: 0.84rem;
+}
+.tax-strip-container .item-tax-treatment {
+    min-width: 160px;
+    padding-right: 1.85rem !important;
+    font-size: 0.84rem;
+}
+.tax-strip-container .item-tax-mode {
+    min-width: 130px;
+    padding-right: 1.85rem !important;
+    font-size: 0.84rem;
+}
+.tax-strip-container .item-tax-value,
+.tax-strip-container .item-cgst-value {
+    font-size: 0.84rem;
+    text-align: center;
+}
 </style>
 
 <template id="fabricRollTemplate">
@@ -791,8 +808,8 @@
 
                 <!-- Individual GST & Tax options -->
                 <div class="col-12 mt-2 pt-2 border-top">
-                    <div class="p-2.5 rounded border bg-light-subtle d-flex flex-wrap align-items-center gap-3">
-                        <div style="min-width: 200px; max-width: 260px;" class="flex-grow-1">
+                    <div class="p-2.5 rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 tax-strip-container">
+                        <div style="min-width: 220px; flex: 1 1 240px; max-width: 330px;">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
                                 <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
@@ -813,9 +830,9 @@
                                 </div>
                             </div>
                         </div>
-                        <div style="min-width: 170px;">
+                        <div style="min-width: 195px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">GST Type</label>
-                            <select class="form-select form-select-sm item-gst-type">
+                            <select class="form-select form-select-sm item-gst-type" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="BOTH" selected>Both (CGST and SGST)</option>
                                 <option value="IGST">IGST</option>
                                 <option value="CGST">CGST</option>
@@ -823,29 +840,29 @@
                                 <option value="EXEMPTED">Exempted</option>
                             </select>
                         </div>
-                        <div style="min-width: 170px;">
+                        <div style="min-width: 160px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">GST Included / Excluded</label>
-                            <select class="form-select form-select-sm item-tax-treatment">
+                            <select class="form-select form-select-sm item-tax-treatment" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="INCLUDED" selected>GST Included</option>
                                 <option value="EXCLUDED">GST Excluded</option>
                             </select>
                         </div>
-                        <div class="tax-mode-field" style="min-width: 130px;">
+                        <div class="tax-mode-field" style="min-width: 130px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">Tax Input Type</label>
-                            <select class="form-select form-select-sm item-tax-mode">
+                            <select class="form-select form-select-sm item-tax-mode" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="PERCENT" selected>Percentage (%)</option>
                                 <option value="AMOUNT">Amount (₹)</option>
                             </select>
                         </div>
-                        <div class="tax-value-field" style="min-width: 100px;">
+                        <div class="tax-value-field" style="min-width: 90px; max-width: 105px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold item-tax-label">SGST (%)</label>
-                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold" value="2.50">
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="tax-cgst-field" style="min-width: 100px;">
+                        <div class="tax-cgst-field" style="min-width: 90px; max-width: 105px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
-                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold" value="2.50">
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="ms-auto text-end">
+                        <div class="ms-auto text-end flex-shrink-0 ps-2">
                             <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
                             <strong class="text-success fs-6 rm-line-total">₹0.00</strong>
                         </div>
@@ -918,8 +935,8 @@
 
                 <!-- Individual GST & Tax options directly near product fields! -->
                 <div class="col-12 mt-2 pt-2 border-top">
-                    <div class="p-2.5 rounded border bg-light-subtle d-flex flex-wrap align-items-center gap-3">
-                        <div style="min-width: 200px; max-width: 260px;" class="flex-grow-1">
+                    <div class="p-2.5 rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 tax-strip-container">
+                        <div style="min-width: 220px; flex: 1 1 240px; max-width: 330px;">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
                                 <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary fw-semibold btn-add-hsn-trigger" style="font-size: 11px;" title="Add new HSN Code">
@@ -940,9 +957,9 @@
                                 </div>
                             </div>
                         </div>
-                        <div style="min-width: 170px;">
+                        <div style="min-width: 195px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">GST Type</label>
-                            <select class="form-select form-select-sm item-gst-type">
+                            <select class="form-select form-select-sm item-gst-type" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="BOTH" selected>Both (CGST and SGST)</option>
                                 <option value="IGST">IGST</option>
                                 <option value="CGST">CGST</option>
@@ -950,29 +967,29 @@
                                 <option value="EXEMPTED">Exempted</option>
                             </select>
                         </div>
-                        <div style="min-width: 170px;">
+                        <div style="min-width: 160px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">GST Included / Excluded</label>
-                            <select class="form-select form-select-sm item-tax-treatment">
+                            <select class="form-select form-select-sm item-tax-treatment" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="INCLUDED" selected>GST Included</option>
                                 <option value="EXCLUDED">GST Excluded</option>
                             </select>
                         </div>
-                        <div class="tax-mode-field" style="min-width: 130px;">
+                        <div class="tax-mode-field" style="min-width: 130px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold">Tax Input Type</label>
-                            <select class="form-select form-select-sm item-tax-mode">
+                            <select class="form-select form-select-sm item-tax-mode" style="padding-right: 1.85rem; font-size: 0.84rem;">
                                 <option value="PERCENT" selected>Percentage (%)</option>
                                 <option value="AMOUNT">Amount (₹)</option>
                             </select>
                         </div>
-                        <div class="tax-value-field" style="min-width: 100px;">
+                        <div class="tax-value-field" style="min-width: 90px; max-width: 105px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold item-tax-label">SGST (%)</label>
-                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold" value="2.50">
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-tax-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="tax-cgst-field" style="min-width: 100px;">
+                        <div class="tax-cgst-field" style="min-width: 90px; max-width: 105px; flex: 0 0 auto;">
                             <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
-                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold" value="2.50">
+                            <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="ms-auto text-end">
+                        <div class="ms-auto text-end flex-shrink-0 ps-2">
                             <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
                             <strong class="text-success fs-6 tp-line-total">₹0.00</strong>
                         </div>

@@ -194,7 +194,6 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-journal-text me-1.5 text-primary"></i>Roll Buying &amp; Replacement Audit Log</h6>
-                        <small class="text-muted">Chronological audit trail of all rolls bought and replacement rolls received with exact date and time.</small>
                     </div>
                     <div class="d-flex gap-2 align-items-center">
                         <div class="input-group input-group-sm" style="max-width: 280px;">
@@ -319,7 +318,6 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-cart-check me-1.5 text-success"></i>Purchased / Bought Rolls History</h6>
-                        <small class="text-muted">Detailed register of every roll bought from this supplier with QR code sequences and purchase references.</small>
                     </div>
                     <span class="badge bg-success-subtle text-success px-2 py-1">
                         Total: <?= number_format($totalPurchasedRollsCount) ?> Rolls
@@ -430,7 +428,6 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-arrow-repeat me-1.5 text-info"></i>Damage Replacement Rolls Log</h6>
-                        <small class="text-muted">Register of all replacement rolls received from this supplier to replace defective or damaged fabric rolls.</small>
                     </div>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
                         <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1.5 fs-6">
@@ -622,7 +619,6 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-layers me-1.5 text-secondary"></i>Active Fabric Rolls in Inventory</h6>
-                        <small class="text-muted">Current rolls registered under this supplier ready for production cutting and program assignment.</small>
                     </div>
                     <span class="badge bg-secondary-subtle text-secondary px-2 py-1">
                         Active Rolls: <?= number_format($totalActiveRollsCount) ?>
@@ -706,7 +702,6 @@
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
                     <div>
                         <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-receipt me-1.5 text-dark"></i>Supplier Purchase Orders</h6>
-                        <small class="text-muted">All purchase orders created with this supplier.</small>
                     </div>
                     <a href="<?= url('production/purchases/create?seller_id=' . (int)$seller['id']) ?>" class="btn btn-sm btn-primary">
                         <i class="bi bi-plus-circle me-1"></i>Create New Purchase
