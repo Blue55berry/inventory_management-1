@@ -26,13 +26,22 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-8">
+                        <div class="col-md-5">
                             <label class="form-label fw-semibold">Concern / Firm Display Name <span class="text-danger">*</span></label>
                             <input type="text" name="name" class="form-control" value="<?= e($concern['name']) ?>" required>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Short Unique Code <span class="text-danger">*</span></label>
                             <input type="text" name="code" class="form-control text-uppercase font-monospace" value="<?= e($concern['code']) ?>" maxlength="20" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Concern Archetype <span class="text-danger">*</span></label>
+                            <select name="concern_type" class="form-select fw-semibold" required>
+                                <option value="HEAD_OFFICE" <?= ($concern['concern_type'] ?? 'HEAD_OFFICE') === 'HEAD_OFFICE' ? 'selected' : '' ?>>Corporate Head Office</option>
+                                <option value="PRODUCTION" <?= ($concern['concern_type'] ?? '') === 'PRODUCTION' ? 'selected' : '' ?>>Manufacturing Unit</option>
+                                <option value="WAREHOUSE" <?= ($concern['concern_type'] ?? '') === 'WAREHOUSE' ? 'selected' : '' ?>>Central Warehouse</option>
+                                <option value="RETAIL" <?= ($concern['concern_type'] ?? '') === 'RETAIL' ? 'selected' : '' ?>>Retail Store / POS</option>
+                            </select>
                         </div>
                         <div class="col-md-12">
                             <label class="form-label fw-semibold">Registered Legal Company Name</label>

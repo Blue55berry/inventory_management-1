@@ -253,6 +253,7 @@ CREATE TABLE `concerns` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `name` varchar(150) NOT NULL,
   `code` varchar(50) NOT NULL,
+  `concern_type` enum('HEAD_OFFICE','PRODUCTION','WAREHOUSE','RETAIL') NOT NULL DEFAULT 'HEAD_OFFICE',
   `legal_name` varchar(255) DEFAULT NULL,
   `gst_number` varchar(15) DEFAULT NULL,
   `pan_number` varchar(10) DEFAULT NULL,

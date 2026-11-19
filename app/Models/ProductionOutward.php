@@ -154,11 +154,16 @@ class ProductionOutward {
         $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
         if ($cid) {
             if ($cid === 1) {
-                $sql .= " AND (po.concern_id = ? OR po.concern_id IS NULL)";
+                $sql .= " AND (po.concern_id = ? OR po.concern_id IS NULL OR w.concern_id = ? OR pw.concern_id = ?)";
+                $params[] = $cid;
+                $params[] = $cid;
+                $params[] = $cid;
             } else {
-                $sql .= " AND po.concern_id = ?";
+                $sql .= " AND (po.concern_id = ? OR w.concern_id = ? OR pw.concern_id = ?)";
+                $params[] = $cid;
+                $params[] = $cid;
+                $params[] = $cid;
             }
-            $params[] = $cid;
         }
 
         if (!empty($filters['production_unit_id'])) {

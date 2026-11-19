@@ -197,6 +197,11 @@ class ConcernController {
 
         $name = trim($_POST['name'] ?? '');
         $code = strtoupper(trim($_POST['code'] ?? ''));
+        $validTypes = ['HEAD_OFFICE', 'PRODUCTION', 'WAREHOUSE', 'RETAIL'];
+        $concernType = strtoupper(trim($_POST['concern_type'] ?? 'HEAD_OFFICE'));
+        if (!in_array($concernType, $validTypes, true)) {
+            $concernType = 'HEAD_OFFICE';
+        }
         $legalName = trim($_POST['legal_name'] ?? '');
         $gstNumber = strtoupper(trim($_POST['gst_number'] ?? ''));
         $panNumber = strtoupper(trim($_POST['pan_number'] ?? ''));
@@ -239,19 +244,19 @@ class ConcernController {
         try {
             $stmt = $db->prepare("
                 INSERT INTO concerns (
-                    name, code, legal_name, gst_number, pan_number,
+                    name, code, concern_type, legal_name, gst_number, pan_number,
                     phone, email, address, city, state, pincode,
                     invoice_prefix, po_prefix, dispatch_prefix,
                     is_active, created_by, created_at
                 ) VALUES (
-                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
                     ?, ?, ?,
                     1, ?, NOW()
                 )
             ");
             $stmt->execute([
-                $name, $code, $legalName ?: null, $gstNumber ?: null, $panNumber ?: null,
+                $name, $code, $concernType, $legalName ?: null, $gstNumber ?: null, $panNumber ?: null,
                 $phone ?: null, $email ?: null, $address ?: null, $city ?: null, $state ?: null, $pincode ?: null,
                 $invoicePrefix, $poPrefix, $dispatchPrefix,
                 $creatorId
@@ -365,6 +370,11 @@ class ConcernController {
 
         $name = trim($_POST['name'] ?? '');
         $code = strtoupper(trim($_POST['code'] ?? ''));
+        $validTypes = ['HEAD_OFFICE', 'PRODUCTION', 'WAREHOUSE', 'RETAIL'];
+        $concernType = strtoupper(trim($_POST['concern_type'] ?? 'HEAD_OFFICE'));
+        if (!in_array($concernType, $validTypes, true)) {
+            $concernType = 'HEAD_OFFICE';
+        }
         $legalName = trim($_POST['legal_name'] ?? '');
         $gstNumber = strtoupper(trim($_POST['gst_number'] ?? ''));
         $panNumber = strtoupper(trim($_POST['pan_number'] ?? ''));
@@ -405,14 +415,14 @@ class ConcernController {
         try {
             $stmt = $db->prepare("
                 UPDATE concerns SET
-                    name = ?, code = ?, legal_name = ?, gst_number = ?, pan_number = ?,
+                    name = ?, code = ?, concern_type = ?, legal_name = ?, gst_number = ?, pan_number = ?,
                     phone = ?, email = ?, address = ?, city = ?, state = ?, pincode = ?,
                     invoice_prefix = ?, po_prefix = ?, dispatch_prefix = ?, is_active = ?,
                     updated_at = NOW()
                 WHERE id = ?
             ");
             $stmt->execute([
-                $name, $code, $legalName ?: null, $gstNumber ?: null, $panNumber ?: null,
+                $name, $code, $concernType, $legalName ?: null, $gstNumber ?: null, $panNumber ?: null,
                 $phone ?: null, $email ?: null, $address ?: null, $city ?: null, $state ?: null, $pincode ?: null,
                 $invoicePrefix, $poPrefix, $dispatchPrefix, $isActive,
                 $concernId

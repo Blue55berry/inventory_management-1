@@ -109,9 +109,20 @@
                                 <span class="badge bg-primary text-white font-monospace fs-6 px-2"><?= e($c['code']) ?></span>
                                 <div>
                                     <strong class="text-dark d-block"><?= e($c['name']) ?></strong>
-                                    <?php if ($isActiveSession): ?>
-                                        <span class="badge bg-primary text-white" style="font-size: 10px;"><i class="bi bi-check-circle me-1"></i>Active Context</span>
-                                    <?php endif; ?>
+                                    <div class="d-flex align-items-center gap-1 mt-0.5">
+                                        <?php 
+                                        $typeBadge = match($c['concern_type'] ?? 'HEAD_OFFICE') {
+                                            'PRODUCTION' => ['bg-warning-subtle text-warning-emphasis border-warning-subtle', '🏭 Production'],
+                                            'WAREHOUSE'  => ['bg-info-subtle text-info-emphasis border-info-subtle', '🏢 Warehouse'],
+                                            'RETAIL'     => ['bg-success-subtle text-success-emphasis border-success-subtle', '🛍️ Retail POS'],
+                                            default      => ['bg-secondary-subtle text-secondary-emphasis border-secondary-subtle', '🌐 Head Office']
+                                        };
+                                        ?>
+                                        <span class="badge <?= $typeBadge[0] ?> border" style="font-size: 10px;"><?= $typeBadge[1] ?></span>
+                                        <?php if ($isActiveSession): ?>
+                                            <span class="badge bg-primary text-white" style="font-size: 10px;"><i class="bi bi-check-circle me-1"></i>Active</span>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </div>
                         </td>
