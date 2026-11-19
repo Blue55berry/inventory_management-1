@@ -42,11 +42,14 @@ class PurchaseInward {
         $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
         if ($cid) {
             if ($cid === 1) {
-                $sql .= " AND (pi.concern_id = ? OR pi.concern_id IS NULL)";
+                $sql .= " AND (pi.concern_id = ? OR pi.concern_id IS NULL OR w.concern_id = ?)";
+                $params[] = $cid;
+                $params[] = $cid;
             } else {
-                $sql .= " AND pi.concern_id = ?";
+                $sql .= " AND (pi.concern_id = ? OR w.concern_id = ?)";
+                $params[] = $cid;
+                $params[] = $cid;
             }
-            $params[] = $cid;
         }
 
         if (!empty($filters['search'])) {

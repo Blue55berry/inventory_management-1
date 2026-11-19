@@ -74,15 +74,25 @@
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                             <label class="form-label fw-semibold">Concern / Firm Display Name <span class="text-danger">*</span></label>
                             <input type="text" name="name" class="form-control" placeholder="e.g. GRM Apparels Unit 2 / GRM Tex Trading" required>
-                            <div class="form-text">Common business name shown across dashboard, navbar, and invoice headers.</div>
+                            <div class="form-text">Common business name shown across dashboard and invoice headers.</div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <label class="form-label fw-semibold">Short Unique Code <span class="text-danger">*</span></label>
                             <input type="text" name="code" class="form-control text-uppercase font-monospace" placeholder="e.g. CN-02, GRM-TEX" maxlength="20" required>
-                            <div class="form-text">Used in QR labels, barcodes, and compact badges.</div>
+                            <div class="form-text">Used in QR labels and barcodes.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Concern Archetype <span class="text-danger">*</span></label>
+                            <select name="concern_type" id="concernTypeSelect" class="form-select fw-semibold" required>
+                                <option value="HEAD_OFFICE">Corporate Head Office</option>
+                                <option value="PRODUCTION">Manufacturing Unit</option>
+                                <option value="WAREHOUSE">Central Warehouse</option>
+                                <option value="RETAIL">Retail Store / POS</option>
+                            </select>
+                            <div class="form-text">Operational role.</div>
                         </div>
                         <div class="col-md-12">
                             <label class="form-label fw-semibold">Registered Legal Company Name</label>
@@ -195,6 +205,11 @@ function applyConcernArchetype(type) {
     const invPrefix = document.querySelector('input[name="invoice_prefix"]');
     const poPrefix = document.querySelector('input[name="po_prefix"]');
     const dspPrefix = document.querySelector('input[name="dispatch_prefix"]');
+    const typeSelect = document.getElementById('concernTypeSelect');
+
+    if (typeSelect) {
+        typeSelect.value = (type === 'ENTERPRISE') ? 'HEAD_OFFICE' : type;
+    }
 
     if (type === 'PRODUCTION') {
         if (!nameInput.value || nameInput.value.includes('Warehouse') || nameInput.value.includes('Store')) {

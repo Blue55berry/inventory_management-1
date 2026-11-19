@@ -723,18 +723,56 @@ function getScopedShops(bool $activeOnly = true): array {
 /**
  * Get current active concern ID from Session.
  */
+/**
+ * Get current active concern ID from Session with strict access authorization.
+ */
 function currentConcernId(): ?int {
+    $u = currentUser();
+    $isSuper = isSuperAdmin();
+
     if (Session::has('active_concern_id')) {
         $cid = (int)Session::get('active_concern_id');
-        if ($cid > 0) return $cid;
+        if ($cid > 0) {
+            if ($isSuper) {
+                return $cid;
+            }
+            // Strict authorization check: ensure current user is assigned to this concern
+            if (!empty($u['id']) && class_exists('Database')) {
+                $isAllowed = Database::fetchOne(
+                    "SELECT 1 FROM user_concerns WHERE user_id = ? AND concern_id = ?
+                     UNION
+                     SELECT 1 FROM users WHERE id = ? AND default_concern_id = ?",
+                    [$u['id'], $cid, $u['id'], $cid]
+                );
+                if ($isAllowed) {
+                    return $cid;
+                }
+            }
+        }
     }
-    $u = currentUser();
+
+    // Default to user's explicitly assigned default concern
     if (!empty($u['default_concern_id'])) {
         Session::set('active_concern_id', (int)$u['default_concern_id']);
         return (int)$u['default_concern_id'];
     }
-    // Fallback to first available active concern
-    if (class_exists('Database')) {
+
+    // Next fallback: first concern assigned in user_concerns
+    if (!empty($u['id']) && class_exists('Database') && !$isSuper) {
+        $firstAssigned = Database::fetchOne("
+            SELECT c.id FROM concerns c
+            JOIN user_concerns uc ON uc.concern_id = c.id
+            WHERE uc.user_id = ? AND c.is_active = 1
+            ORDER BY uc.is_default DESC, c.id ASC LIMIT 1
+        ", [$u['id']]);
+        if ($firstAssigned) {
+            Session::set('active_concern_id', (int)$firstAssigned['id']);
+            return (int)$firstAssigned['id'];
+        }
+    }
+
+    // Super admin fallback to first available active concern
+    if ($isSuper && class_exists('Database')) {
         $first = Database::fetchOne("SELECT id FROM concerns WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
         if ($first) {
             Session::set('active_concern_id', (int)$first['id']);
@@ -762,17 +800,36 @@ function currentConcern(): ?array {
 }
 
 /**
+ * Get concern archetype type string (HEAD_OFFICE, PRODUCTION, WAREHOUSE, RETAIL).
+ */
+function currentConcernType(?int $concernId = null): string {
+    $c = $concernId ? (class_exists('Database') ? Database::fetchOne("SELECT concern_type, name FROM concerns WHERE id = ?", [$concernId]) : null) : currentConcern();
+    if (!$c) return 'HEAD_OFFICE';
+    if (!empty($c['concern_type'])) {
+        return strtoupper($c['concern_type']);
+    }
+    $n = strtolower($c['name'] ?? '');
+    if (strpos($n, 'production') !== false || strpos($n, 'plant') !== false || strpos($n, 'factory') !== false || strpos($n, 'processing') !== false || strpos($n, 'manufacturing') !== false || strpos($n, 'unit') !== false) {
+        return 'PRODUCTION';
+    }
+    if (strpos($n, 'warehouse') !== false || strpos($n, 'storage') !== false || strpos($n, 'depot') !== false) {
+        return 'WAREHOUSE';
+    }
+    if (strpos($n, 'retail') !== false || strpos($n, 'store') !== false || strpos($n, 'pos') !== false || strpos($n, 'shop') !== false) {
+        return 'RETAIL';
+    }
+    return 'HEAD_OFFICE';
+}
+
+/**
  * Check if a module is enabled for the current active concern.
- * All concerns support standard modules; module assignment and permissions are managed by the Staff module.
  */
 function hasConcernModule(string $moduleKey): bool {
     return true;
 }
 
 /**
- * Check if a concern is designated as a Production entity.
- * Evaluates concern name keywords (e.g. "production", "processing", "factory", "plant", "unit", "manufacturing"),
- * linked production unit records, or enabled production module archetype.
+ * Check if a concern is designated as a Manufacturing / Production entity.
  */
 function isProductionConcern(?int $concernId = null): bool {
     $cid = $concernId ?: currentConcernId();
@@ -787,10 +844,16 @@ function isProductionConcern(?int $concernId = null): bool {
         return false;
     }
 
-    $c = Database::fetchOne("SELECT id, name, code FROM concerns WHERE id = ?", [$cid]);
+    $c = Database::fetchOne("SELECT id, name, code, concern_type FROM concerns WHERE id = ?", [$cid]);
     if (!$c) {
         $prodConcernCache[$cid] = false;
         return false;
+    }
+
+    // Direct archetype check
+    if (!empty($c['concern_type']) && strtoupper($c['concern_type']) === 'PRODUCTION') {
+        $prodConcernCache[$cid] = true;
+        return true;
     }
 
     $name = strtolower($c['name'] ?? '');
@@ -814,7 +877,34 @@ function isProductionConcern(?int $concernId = null): bool {
 }
 
 /**
- * Get available concerns for a user (or current user).
+ * Check if a concern is designated as a Central Warehouse / Storage entity.
+ */
+function isWarehouseConcern(?int $concernId = null): bool {
+    $cid = $concernId ?: currentConcernId();
+    if (!$cid) return false;
+    $type = currentConcernType($cid);
+    if ($type === 'WAREHOUSE') return true;
+    $c = currentConcern();
+    $n = strtolower($c['name'] ?? '');
+    return strpos($n, 'warehouse') !== false || strpos($n, 'storage') !== false || strpos($n, 'depot') !== false;
+}
+
+/**
+ * Check if a concern is designated as a Retail Store / POS entity.
+ */
+function isRetailConcern(?int $concernId = null): bool {
+    $cid = $concernId ?: currentConcernId();
+    if (!$cid) return false;
+    $type = currentConcernType($cid);
+    if ($type === 'RETAIL') return true;
+    $c = currentConcern();
+    $n = strtolower($c['name'] ?? '');
+    return strpos($n, 'retail') !== false || strpos($n, 'store') !== false || strpos($n, 'pos') !== false || strpos($n, 'showroom') !== false;
+}
+
+/**
+ * Get available concerns strictly authorized for a user.
+ * Non-admin staff are STRICTLY restricted to their assigned entities.
  */
 function getAvailableUserConcerns(?int $userId = null): array {
     if (!class_exists('Database')) return [];
@@ -824,7 +914,7 @@ function getAvailableUserConcerns(?int $userId = null): array {
     $u = currentUser();
     $uid = $userId ?? ($u['id'] ?? null);
     if (!$uid) {
-        return Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
+        return [];
     }
 
     $concerns = Database::fetchAll("
@@ -835,26 +925,30 @@ function getAvailableUserConcerns(?int $userId = null): array {
         ORDER BY uc.is_default DESC, c.id ASC
     ", [$uid]);
 
-    // Fallback if none mapped: allow all active concerns
-    if (empty($concerns)) {
-        $concerns = Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
+    // Strict boundary: if no explicit user_concerns mapped, fall back ONLY to their assigned default concern!
+    if (empty($concerns) && !empty($u['default_concern_id'])) {
+        $concerns = Database::fetchAll("SELECT * FROM concerns WHERE id = ? AND is_active = 1", [(int)$u['default_concern_id']]) ?: [];
     }
     return $concerns;
 }
 
 /**
- * Switch active concern in session.
+ * Switch active concern in session with strict authorization verification.
  */
 function switchConcern(int $concernId): bool {
     if (!class_exists('Database')) return false;
     $concern = Database::fetchOne("SELECT id, name, code FROM concerns WHERE id = ? AND is_active = 1", [$concernId]);
     if (!$concern) return false;
 
-    // Verify user authorization if not super admin
+    // Verify user authorization strictly if not super admin
     if (!isSuperAdmin()) {
         $u = currentUser();
         $uid = $u['id'] ?? 0;
-        $allowed = Database::fetchOne("SELECT id FROM user_concerns WHERE user_id = ? AND concern_id = ?", [$uid, $concernId]);
+        $allowed = Database::fetchOne("
+            SELECT 1 FROM user_concerns WHERE user_id = ? AND concern_id = ?
+            UNION
+            SELECT 1 FROM users WHERE id = ? AND default_concern_id = ?
+        ", [$uid, $concernId, $uid, $concernId]);
         if (!$allowed) {
             return false;
         }
