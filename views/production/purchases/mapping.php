@@ -3,18 +3,6 @@
         <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Third-Party Product Mapping</h2>
         <span class="text-muted small">Exclusively for mapping third-party purchased products to catalog categories &amp; variants. Fabric rolls &amp; raw materials move directly to QR Generations.</span>
     </div>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
-        <?php if (hasPermission('production_purchase_mapping', 'view')): ?>
-        <a href="<?= url('production/purchases/mapping/catalog') ?>" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-collection me-1"></i> Third-Party Catalog
-        </a>
-        <?php endif; ?>
-        <?php if (hasPermission('production_purchase_mapping', 'create')): ?>
-        <a href="<?= url('production/purchases/mapping/catalog/create') ?>" class="btn btn-primary btn-sm shadow-sm">
-            <i class="bi bi-plus-circle-fill me-1"></i> Add Third-Party Product
-        </a>
-        <?php endif; ?>
-    </div>
 </div>
 
 <!-- KPI Metric Cards -->

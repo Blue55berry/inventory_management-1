@@ -203,8 +203,6 @@
                             <strong class="d-block text-dark"><?= e($item['item_name']) ?></strong>
                             <div class="small text-muted">
                                 <?php if (!empty($item['vendor_sku'])): ?><span class="font-monospace me-2">SKU: <?= e($item['vendor_sku']) ?></span><?php endif; ?>
-                                <?php if (!empty($item['size'])): ?><span class="me-2">Size: <?= e($item['size']) ?></span><?php endif; ?>
-                                <?php if (!empty($item['color'])): ?><span>Color: <?= e($item['color']) ?></span><?php endif; ?>
                             </div>
                         <?php elseif ($item['item_type'] === 'OWN_PRODUCT'): ?>
                             <span class="badge bg-success-subtle text-success border mb-1"><i class="bi bi-building-check me-1"></i>Own Production</span>

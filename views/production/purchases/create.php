@@ -414,8 +414,6 @@
                                     <th class="text-center" style="width: 35px;">#</th>
                                     <th>Product / Item Name</th>
                                     <th>Auto SKU</th>
-                                    <th>Color</th>
-                                    <th>Size</th>
                                     <th class="text-center">Unit</th>
                                     <th class="text-end">Quantity</th>
                                     <th class="text-end">Purchase Price (₹)</th>
@@ -427,7 +425,7 @@
                                 </tr>
                             </thead>
                             <tbody id="tpDetailsTableBody">
-                                <tr><td colspan="13" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
+                                <tr><td colspan="11" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>
                             </tbody>
                             <tfoot id="tpDetailsTableFoot" class="table-light fw-bold"></tfoot>
                         </table>
@@ -897,19 +895,11 @@
         <div class="card-body p-3">
             <input type="hidden" class="tp-sku">
             <div class="row g-3">
-                <div class="col-lg-3 col-md-6">
+                <div class="col-lg-5 col-md-4">
                     <label class="form-label required">Product / Item Name *</label>
                     <input class="form-control tp-name text-uppercase" maxlength="255" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
                 </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Color / Shade</label>
-                    <input class="form-control tp-color text-uppercase" maxlength="100" placeholder="E.G. NAVY BLUE" list="colorDataList">
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Size</label>
-                    <input class="form-control tp-size text-uppercase" maxlength="30" placeholder="E.G. M / 38" list="sizeDataList">
-                </div>
-                <div class="col-lg-2 col-md-3">
+                <div class="col-lg-2 col-md-2">
                     <label class="form-label required">Unit *</label>
                     <select class="form-select tp-unit fw-semibold">
                         <option value="Pieces" selected>Pieces</option>
@@ -925,11 +915,11 @@
                     </select>
                     <input type="text" class="form-control form-control-sm tp-custom-unit mt-1 d-none" placeholder="Enter custom unit">
                 </div>
-                <div class="col-lg-1 col-md-3">
+                <div class="col-lg-2 col-md-3">
                     <label class="form-label required tp-qty-label">Qty (Pieces) *</label>
                     <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
                 </div>
-                <div class="col-lg-2 col-md-3">
+                <div class="col-lg-3 col-md-3">
                     <label class="form-label required">Purchase Price (₹) *</label>
                     <div class="input-group">
                         <span class="input-group-text p-1">₹</span>
@@ -2203,8 +2193,6 @@
                     <td class="text-center fw-bold">${index + 1}</td>
                     <td><strong>${safe(name)}</strong></td>
                     <td><span class="badge bg-light text-dark border font-monospace fw-semibold">${safe(autoSku)}</span></td>
-                    <td><span class="badge bg-light text-dark border">${safe(color)}</span></td>
-                    <td><span class="badge bg-light text-dark border">${safe(size)}</span></td>
                     <td class="text-center"><span class="badge bg-secondary-subtle text-secondary border">${safe(unit)}</span></td>
                     <td class="text-end fw-semibold">${qty.toLocaleString('en-IN', {minimumFractionDigits: 0, maximumFractionDigits: 3})}</td>
                     <td class="text-end">${money(cost)} ${treatmentLabel}</td>

@@ -383,19 +383,11 @@ $taxValueForItem = static function (array $item, string $type): float {
                             <input type="hidden" class="tp-sku" name="items[<?= $tpId ?>][vendor_sku]" value="<?= e($autoSku) ?>">
                             <input type="hidden" class="tp-item-type" name="items[<?= $tpId ?>][item_type]" value="THIRD_PARTY">
                             <div class="row g-3">
-                                <div class="col-lg-3 col-md-6">
+                                <div class="col-lg-5 col-md-4">
                                     <label class="form-label required">Product / Item Name *</label>
                                     <input class="form-control tp-name text-uppercase" name="items[<?= $tpId ?>][item_name]" maxlength="255" value="<?= e($item['item_name']) ?>" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
                                 </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label">Color / Shade</label>
-                                    <input class="form-control tp-color text-uppercase" name="items[<?= $tpId ?>][color]" maxlength="100" value="<?= e($item['color'] ?? '') ?>" placeholder="E.G. NAVY BLUE" list="colorDataList">
-                                </div>
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label">Size</label>
-                                    <input class="form-control tp-size text-uppercase" name="items[<?= $tpId ?>][size]" maxlength="30" value="<?= e($item['size'] ?? '') ?>" placeholder="E.G. M / 38" list="sizeDataList">
-                                </div>
-                                <div class="col-lg-2 col-md-3">
+                                <div class="col-lg-2 col-md-2">
                                     <label class="form-label required">Unit *</label>
                                     <select class="form-select tp-unit fw-semibold" name="items[<?= $tpId ?>][unit]">
                                         <?php foreach ($unitOptions as $uOpt): ?>
@@ -404,11 +396,11 @@ $taxValueForItem = static function (array $item, string $type): float {
                                     </select>
                                     <input type="text" class="form-control form-control-sm tp-custom-unit mt-1 <?= $isCustomUnit ? '' : 'd-none' ?>" name="items[<?= $tpId ?>][custom_unit]" value="<?= $isCustomUnit ? e($item['unit']) : '' ?>" placeholder="Enter custom unit">
                                 </div>
-                                <div class="col-lg-1 col-md-3">
+                                <div class="col-lg-2 col-md-3">
                                     <label class="form-label required tp-qty-label">Qty (<?= e($isCustomUnit ? ($item['unit'] ?: 'Pieces') : $currentUnit) ?>) *</label>
                                     <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" name="items[<?= $tpId ?>][quantity]" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="<?= (float)$item['quantity'] ?>" required>
                                 </div>
-                                <div class="col-lg-2 col-md-3">
+                                <div class="col-lg-3 col-md-3">
                                     <label class="form-label required">Purchase Price (₹) *</label>
                                     <div class="input-group">
                                         <span class="input-group-text p-1">₹</span>
@@ -503,8 +495,6 @@ $taxValueForItem = static function (array $item, string $type): float {
                                 <th class="text-center" style="width: 35px;">#</th>
                                 <th>Product / Item Name</th>
                                 <th>Auto SKU</th>
-                                <th>Color</th>
-                                <th>Size</th>
                                 <th>Unit</th>
                                 <th class="text-end">Qty</th>
                                 <th class="text-end">Purchase Price (₹)</th>
@@ -724,19 +714,11 @@ $taxValueForItem = static function (array $item, string $type): float {
             <input type="hidden" class="tp-sku">
             <input type="hidden" class="tp-item-type" value="THIRD_PARTY">
             <div class="row g-3">
-                <div class="col-lg-3 col-md-6">
+                <div class="col-lg-5 col-md-4">
                     <label class="form-label required">Product / Item Name *</label>
                     <input class="form-control tp-name text-uppercase" maxlength="255" placeholder="E.G. MEN SLIM FIT COTTON SHIRT" required>
                 </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Color / Shade</label>
-                    <input class="form-control tp-color text-uppercase" maxlength="100" placeholder="E.G. NAVY BLUE" list="colorDataList">
-                </div>
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">Size</label>
-                    <input class="form-control tp-size text-uppercase" maxlength="30" placeholder="E.G. M / 38" list="sizeDataList">
-                </div>
-                <div class="col-lg-2 col-md-3">
+                <div class="col-lg-2 col-md-2">
                     <label class="form-label required">Unit *</label>
                     <select class="form-select tp-unit fw-semibold">
                         <option value="Pieces" selected>Pieces</option>
@@ -752,11 +734,11 @@ $taxValueForItem = static function (array $item, string $type): float {
                     </select>
                     <input type="text" class="form-control form-control-sm tp-custom-unit mt-1 d-none" placeholder="Enter custom unit">
                 </div>
-                <div class="col-lg-1 col-md-3">
+                <div class="col-lg-2 col-md-3">
                     <label class="form-label required tp-qty-label">Qty (Pieces) *</label>
                     <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0.01" data-step="0.01" class="form-control tp-quantity numeric-text-input fw-bold text-end" value="1" required>
                 </div>
-                <div class="col-lg-2 col-md-3">
+                <div class="col-lg-3 col-md-3">
                     <label class="form-label required">Purchase Price (₹) *</label>
                     <div class="input-group">
                         <span class="input-group-text p-1">₹</span>
@@ -2205,7 +2187,7 @@ $taxValueForItem = static function (array $item, string $type): float {
         const tableFoot = document.getElementById('tpDetailsTableFoot');
 
         if (!cards.length) {
-            if (tableBody) tableBody.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
+            if (tableBody) tableBody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Add third-party products to see their inward details.</td></tr>';
             if (tableFoot) tableFoot.innerHTML = '';
         } else {
             let rowsHtml = '';
@@ -2288,8 +2270,6 @@ $taxValueForItem = static function (array $item, string $type): float {
                         <td class="text-center fw-bold text-muted">${index + 1}</td>
                         <td class="fw-bold text-dark">${safe(name)}</td>
                         <td class="font-monospace"><span class="badge bg-light text-dark border">${safe(finalSku)}</span></td>
-                        <td>${safe(color)}</td>
-                        <td>${safe(size)}</td>
                         <td><span class="badge bg-secondary-subtle text-secondary border">${safe(unitVal)}</span></td>
                         <td class="text-end fw-bold">${qty}</td>
                         <td class="text-end">${money(cost)} ${treatmentBadge}</td>
@@ -2306,7 +2286,7 @@ $taxValueForItem = static function (array $item, string $type): float {
             if (tableFoot) {
                 tableFoot.innerHTML = `
                     <tr>
-                        <td colspan="6" class="text-end">Totals:</td>
+                        <td colspan="4" class="text-end">Totals:</td>
                         <td class="text-end">${totalQty}</td>
                         <td></td>
                         <td class="text-end">${money(subtotal)}</td>
