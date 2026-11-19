@@ -23,20 +23,51 @@ class ExportController {
 
         // Available Export Modules Metadata
         $modules = [
+            // PROCUREMENT & MATERIALS
             'purchases' => [
-                'name' => 'Fabric Purchases',
-                'desc' => 'Purchase orders, invoices, roll counts, weights & supplier procurement costs',
+                'name' => 'Purchase Orders & Invoices',
+                'desc' => 'Procurement orders across fabric rolls, raw materials, third-party goods, supplier invoices & valuations',
                 'icon' => 'bi bi-bag-check',
                 'color' => 'primary',
                 'category' => 'Procurement & Materials'
             ],
             'rolls' => [
                 'name' => 'Fabric Rolls & Inwards',
-                'desc' => 'Individual roll serials, barcodes, colors, meters, kg & per-kg valuation',
+                'desc' => 'Individual fabric roll serials, barcodes, colors, meters, kg & per-kg valuation',
                 'icon' => 'bi bi-stack',
                 'color' => 'primary',
                 'category' => 'Procurement & Materials'
             ],
+            'raw_materials' => [
+                'name' => 'Raw Materials Supply & Stock',
+                'desc' => 'Procured yarn counts, sewing threads, trims, accessories, pricing & tax breakdowns',
+                'icon' => 'bi bi-boxes',
+                'color' => 'warning',
+                'category' => 'Procurement & Materials'
+            ],
+            'third_party_products' => [
+                'name' => 'Third-Party Products & Mapping',
+                'desc' => 'Ready-to-sell vendor SKUs, retail catalog mapping, 3-tier taxonomy, sizes, colors, MRP & SP',
+                'icon' => 'bi bi-shop',
+                'color' => 'info',
+                'category' => 'Procurement & Materials'
+            ],
+            'suppliers' => [
+                'name' => 'Suppliers & Mills Directory',
+                'desc' => 'Registered vendors, mill profiles, contact details, GSTIN, payment terms & procurement volumes',
+                'icon' => 'bi bi-person-lines-fill',
+                'color' => 'secondary',
+                'category' => 'Procurement & Materials'
+            ],
+            'goods_inward' => [
+                'name' => 'Goods Inward Notes (GRN)',
+                'desc' => 'Warehouse & factory receipts, challan verification, received, accepted & rejected quantities',
+                'icon' => 'bi bi-box-arrow-in-down',
+                'color' => 'success',
+                'category' => 'Procurement & Materials'
+            ],
+
+            // MANUFACTURING
             'programs' => [
                 'name' => 'Production Programs',
                 'desc' => 'Manufacturing targets, product styles, scheduled dates & planned volumes',
@@ -65,6 +96,29 @@ class ExportController {
                 'color' => 'success',
                 'category' => 'Manufacturing'
             ],
+            'damages' => [
+                'name' => 'Damage & Rejection Management',
+                'desc' => 'Roll damages, defect logs, loss amounts, resolutions, debit notes & replacement rolls',
+                'icon' => 'bi bi-exclamation-octagon',
+                'color' => 'danger',
+                'category' => 'Manufacturing'
+            ],
+            'catalog' => [
+                'name' => 'Product Catalog & Style Master',
+                'desc' => 'Master finished garment styles, category hierarchy, HSN codes, default specs & active variant counts',
+                'icon' => 'bi bi-grid-3x3-gap',
+                'color' => 'primary',
+                'category' => 'Manufacturing'
+            ],
+            'qr_generations' => [
+                'name' => 'QR Code Generation Batches',
+                'desc' => 'Thermal QR/barcode generation batches, brand names, variant codes & printed serial sequences',
+                'icon' => 'bi bi-qr-code-scan',
+                'color' => 'dark',
+                'category' => 'Manufacturing'
+            ],
+
+            // LOGISTICS & WAREHOUSING
             'batches' => [
                 'name' => 'Packing Batches (Cartons)',
                 'desc' => 'Master cartons, packaging batches, piece counts & production costing',
@@ -79,6 +133,13 @@ class ExportController {
                 'color' => 'primary',
                 'category' => 'Logistics & Warehousing'
             ],
+            'inventory' => [
+                'name' => 'Finished Goods Inventory (On-Hand)',
+                'desc' => 'Real-time available stock levels by SKU, style, color, size, location & stock states',
+                'icon' => 'bi bi-layers',
+                'color' => 'info',
+                'category' => 'Logistics & Warehousing'
+            ],
             'stock_ledger' => [
                 'name' => 'Detailed Warehouse Stock Ledger',
                 'desc' => 'Monthly stock-in/out history with QR, variant, size, color, design, and pricing details',
@@ -86,6 +147,22 @@ class ExportController {
                 'color' => 'success',
                 'category' => 'Logistics & Warehousing'
             ],
+            'stock_requests' => [
+                'name' => 'Stock Requirements',
+                'desc' => 'Warehouse requisition orders, priority levels, fulfillment statuses',
+                'icon' => 'bi bi-box-arrow-in-down-right',
+                'color' => 'info',
+                'category' => 'Logistics & Warehousing'
+            ],
+            'warehouse_rework' => [
+                'name' => 'Warehouse Rework & Repairs',
+                'desc' => 'Warehouse repair orders, defect types, repair notes, repaired vs scrapped quantities',
+                'icon' => 'bi bi-wrench-adjustable',
+                'color' => 'warning',
+                'category' => 'Logistics & Warehousing'
+            ],
+
+            // SALES & FINANCE
             'billing' => [
                 'name' => 'Direct Factory Billing (POS)',
                 'desc' => 'Tax invoices, customer details, HSN codes, GST amounts & payment types',
@@ -100,15 +177,8 @@ class ExportController {
                 'color' => 'danger',
                 'category' => 'Sales & Finance'
             ],
-            'stock_requests' => [
-                'name' => 'Stock Requirements',
-                'desc' => 'Warehouse requisition orders, priority levels, fulfillment statuses',
-                'icon' => 'bi bi-box-arrow-in-down-right',
-                'color' => 'info',
-                'category' => 'Logistics & Warehousing'
-            ],
             'wastage' => [
-                'name' => 'Scrap & Wastage Sales',
+                'name' => 'Fabric & Stitching Scrap Sales',
                 'desc' => 'Cutting scrap & stitching fabric waste monetized sales and buyer invoices',
                 'icon' => 'bi bi-recycle',
                 'color' => 'success',
@@ -120,6 +190,22 @@ class ExportController {
                 'icon' => 'bi bi-wallet2',
                 'color' => 'warning',
                 'category' => 'Sales & Finance'
+            ],
+
+            // ASSETS & INFRASTRUCTURE
+            'assets' => [
+                'name' => 'Fixed Assets Register',
+                'desc' => 'Plant machinery, asset codes, serial numbers, purchase value, current book value & condition',
+                'icon' => 'bi bi-tools',
+                'color' => 'primary',
+                'category' => 'Assets & Infrastructure'
+            ],
+            'asset_maintenance' => [
+                'name' => 'Asset Maintenance & Service Logs',
+                'desc' => 'Servicing logs, downtime hours, technician info, parts replaced & maintenance expenditures',
+                'icon' => 'bi bi-gear',
+                'color' => 'secondary',
+                'category' => 'Assets & Infrastructure'
             ],
         ];
 
@@ -166,7 +252,12 @@ class ExportController {
             $periodLabel = date('d M Y', strtotime($startDate)) . ' to ' . date('d M Y', strtotime($endDate));
         }
 
-        $allModules = ['purchases', 'rolls', 'programs', 'cuttings', 'stitching', 'qc', 'batches', 'outward', 'stock_ledger', 'billing', 'returns', 'stock_requests', 'wastage', 'expenses'];
+        $allModules = [
+            'purchases', 'rolls', 'raw_materials', 'third_party_products', 'suppliers', 'goods_inward',
+            'programs', 'cuttings', 'stitching', 'qc', 'damages', 'catalog', 'qr_generations',
+            'batches', 'outward', 'inventory', 'stock_ledger', 'stock_requests', 'warehouse_rework',
+            'billing', 'returns', 'wastage', 'expenses', 'assets', 'asset_maintenance'
+        ];
         $selectedModules = !empty($_REQUEST['modules']) && is_array($_REQUEST['modules'])
             ? array_values(array_intersect($_REQUEST['modules'], $allModules))
             : $allModules;

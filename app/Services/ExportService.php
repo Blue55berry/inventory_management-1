@@ -334,6 +334,193 @@ class ExportService
             );
         }
 
+        // 13. Raw Materials Supply & Procurement
+        if (in_array('raw_materials', $selectedModules, true)) {
+            $data['raw_materials'] = Database::fetchAll(
+                "SELECT ppi.id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
+                        s.name AS supplier_name, s.company AS supplier_company,
+                        ppi.item_name, ppi.color, ppi.size, ppi.unit, ppi.quantity, ppi.unit_price,
+                        ppi.total_price, ppi.hsn_code, ppi.gst_type, ppi.tax_treatment,
+                        ppi.sgst_amount, ppi.cgst_amount, ppi.igst_amount, ppi.start_code, ppi.created_at
+                 FROM production_purchase_items ppi
+                 JOIN production_purchases pp ON pp.id = ppi.purchase_id
+                 LEFT JOIN sellers s ON s.id = pp.seller_id
+                 WHERE ppi.item_type = 'RAW_MATERIAL'
+                   AND pp.purchase_date >= ? AND pp.purchase_date <= ?
+                 ORDER BY ppi.id DESC",
+                [$startDateOnly, $endDateOnly]
+            );
+        }
+
+        // 14. Third-Party Products & Catalog Mapping
+        if (in_array('third_party_products', $selectedModules, true)) {
+            $data['third_party_products'] = Database::fetchAll(
+                "SELECT ppi.id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
+                        s.name AS supplier_name, s.company AS supplier_company,
+                        ppi.item_name, ppi.product_code, ppi.vendor_sku, ppi.color, ppi.size,
+                        ppi.unit, ppi.quantity, ppi.unit_price, ppi.mrp, ppi.selling_price, ppi.total_price,
+                        ppi.hsn_code, ppi.is_mapped, ppi.mapped_at,
+                        tc.name AS category_name, tsc.name AS subcategory_name, tssc.name AS sub_subcategory_name
+                 FROM production_purchase_items ppi
+                 JOIN production_purchases pp ON pp.id = ppi.purchase_id
+                 LEFT JOIN sellers s ON s.id = pp.seller_id
+                 LEFT JOIN third_party_categories tc ON tc.id = ppi.mapped_third_party_category_id
+                 LEFT JOIN third_party_subcategories tsc ON tsc.id = ppi.mapped_third_party_subcategory_id
+                 LEFT JOIN third_party_sub_subcategories tssc ON tssc.id = ppi.mapped_third_party_sub_subcategory_id
+                 WHERE ppi.item_type = 'THIRD_PARTY'
+                   AND pp.purchase_date >= ? AND pp.purchase_date <= ?
+                 ORDER BY ppi.id DESC",
+                [$startDateOnly, $endDateOnly]
+            );
+        }
+
+        // 15. Suppliers & Mills Directory
+        if (in_array('suppliers', $selectedModules, true)) {
+            $data['suppliers'] = Database::fetchAll(
+                "SELECT s.id, s.name, s.company, s.seller_type, s.phone, s.email, s.gstin, s.gst_number,
+                        s.address, s.city, s.state, s.payment_terms, s.material_type, s.created_at,
+                        (SELECT COUNT(*) FROM production_purchases pp WHERE pp.seller_id = s.id) AS total_orders,
+                        (SELECT COALESCE(SUM(total_amount), 0) FROM production_purchases pp WHERE pp.seller_id = s.id) AS total_order_value
+                 FROM sellers s
+                 WHERE s.production_deleted_at IS NULL
+                 ORDER BY s.id DESC"
+            );
+        }
+
+        // 16. Goods Inward Notes (GRN)
+        if (in_array('goods_inward', $selectedModules, true)) {
+            $data['goods_inward'] = Database::fetchAll(
+                "SELECT pi.id, pi.grn_number, pi.invoice_number, pi.invoice_date, pi.received_date,
+                        pi.status, pi.total_received_qty, pi.total_accepted_qty, pi.total_rejected_qty,
+                        pi.gate_pass_number, pi.vehicle_number, pi.driver_name, pi.notes,
+                        w.name AS warehouse_name, u.full_name AS received_by_name
+                 FROM purchase_inwards pi
+                 LEFT JOIN warehouses w ON w.id = pi.warehouse_id
+                 LEFT JOIN users u ON u.id = pi.received_by
+                 WHERE pi.received_date >= ? AND pi.received_date <= ?
+                 ORDER BY pi.id DESC",
+                [$startDateOnly, $endDateOnly]
+            );
+        }
+
+        // 17. Damage & Rejection Management
+        if (in_array('damages', $selectedModules, true)) {
+            $data['damages'] = Database::fetchAll(
+                "SELECT rd.id, rd.damage_number, rd.item_type, rd.damaged_quantity, rd.damaged_weight,
+                        rd.loss_amount, rd.damage_reason, rd.defect_notes, rd.status, rd.resolution_type,
+                        rd.refund_amount, rd.debit_note_number, rd.created_at,
+                        s.company AS supplier_company, s.name AS supplier_name,
+                        sr.roll_number, p.name AS product_name
+                 FROM roll_damages rd
+                 LEFT JOIN sellers s ON s.id = rd.seller_id
+                 LEFT JOIN seller_rolls sr ON sr.id = rd.seller_roll_id
+                 LEFT JOIN products p ON p.id = rd.product_id
+                 WHERE rd.created_at >= ? AND rd.created_at <= ?
+                 ORDER BY rd.id DESC",
+                [$startDateTime, $endDateTime]
+            );
+        }
+
+        // 18. Product Catalog & Style Master
+        if (in_array('catalog', $selectedModules, true)) {
+            $data['catalog'] = Database::fetchAll(
+                "SELECT p.id, p.name AS product_name, p.code AS product_code, p.source_type,
+                        c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                        p.hsn_code, p.material, p.is_active, p.created_at,
+                        (SELECT COUNT(*) FROM product_variants pv WHERE pv.product_id = p.id) AS variant_count
+                 FROM products p
+                 LEFT JOIN categories c ON c.id = p.category_id
+                 LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
+                 LEFT JOIN sub_subcategories ssc ON ssc.id = p.sub_subcategory_id
+                 WHERE (p.created_at >= ? AND p.created_at <= ?) OR p.is_active = 1
+                 ORDER BY p.id DESC",
+                [$startDateTime, $endDateTime]
+            );
+        }
+
+        // 19. QR Code Generations
+        if (in_array('qr_generations', $selectedModules, true)) {
+            $data['qr_generations'] = Database::fetchAll(
+                "SELECT qg.id, qg.batch_code, qg.generation_type, qg.brand_name,
+                        qg.category_name, qg.subcategory_name, qg.color_name, qg.size_name,
+                        qg.quantity, qg.mrp, qg.selling_price, qg.qr_prefix, qg.stock_added,
+                        qg.created_at, u.full_name AS created_by_name
+                 FROM qr_generations qg
+                 LEFT JOIN users u ON u.id = qg.created_by
+                 WHERE qg.created_at >= ? AND qg.created_at <= ?
+                 ORDER BY qg.id DESC",
+                [$startDateTime, $endDateTime]
+            );
+        }
+
+        // 20. Finished Goods Inventory (On-Hand Balances)
+        if (in_array('inventory', $selectedModules, true)) {
+            $data['inventory'] = Database::fetchAll(
+                "SELECT sb.id, sb.location_type, sb.stock_state, sb.quantity, sb.last_updated,
+                        pv.sku, pv.variant_code, pv.mrp, pv.selling_price, pv.purchase_price,
+                        p.name AS product_name, p.code AS product_code,
+                        sz.name AS size_name, col.name AS color_name,
+                        CASE WHEN sb.location_type = 'WAREHOUSE' THEN w.name ELSE pu.name END AS location_name
+                 FROM stock_balances sb
+                 JOIN product_variants pv ON pv.id = sb.variant_id
+                 JOIN products p ON p.id = pv.product_id
+                 LEFT JOIN sizes sz ON sz.id = pv.size_id
+                 LEFT JOIN colors col ON col.id = pv.color_id
+                 LEFT JOIN warehouses w ON (w.id = sb.location_id AND sb.location_type = 'WAREHOUSE')
+                 LEFT JOIN production_units pu ON (pu.id = sb.location_id AND sb.location_type = 'PRODUCTION_UNIT')
+                 WHERE sb.quantity > 0
+                 ORDER BY p.name ASC, pv.sku ASC"
+            );
+        }
+
+        // 21. Warehouse Rework & Repairs
+        if (in_array('warehouse_rework', $selectedModules, true)) {
+            $data['warehouse_rework'] = Database::fetchAll(
+                "SELECT pwr.id, pwr.rework_number, pwr.quantity, pwr.repaired_qty, pwr.scrapped_qty,
+                        pwr.defect_type, pwr.damage_reason, pwr.defect_notes, pwr.status,
+                        pwr.received_date, pwr.challan_number, pwr.created_at,
+                        w.name AS warehouse_name, p.name AS product_name, pv.sku
+                 FROM production_warehouse_reworks pwr
+                 LEFT JOIN warehouses w ON w.id = pwr.warehouse_id
+                 LEFT JOIN products p ON p.id = pwr.product_id
+                 LEFT JOIN product_variants pv ON pv.id = pwr.variant_id
+                 WHERE pwr.created_at >= ? AND pwr.created_at <= ?
+                 ORDER BY pwr.id DESC",
+                [$startDateTime, $endDateTime]
+            );
+        }
+
+        // 22. Fixed Assets Register
+        if (in_array('assets', $selectedModules, true)) {
+            $data['assets'] = Database::fetchAll(
+                "SELECT a.id, a.asset_code, a.name, a.brand, a.model_number, a.serial_number,
+                       a.purchase_date, a.purchase_cost, a.current_book_value, a.salvage_value,
+                       a.useful_life_years, a.vendor_name, a.invoice_number, a.status,
+                       a.condition_state, a.location_type, ac.name AS category_name
+                FROM assets a
+                LEFT JOIN asset_categories ac ON ac.id = a.category_id
+                WHERE (a.purchase_date >= ? AND a.purchase_date <= ?) OR a.created_at >= ?
+                ORDER BY a.id DESC",
+                [$startDateOnly, $endDateOnly, $startDateTime]
+            );
+        }
+
+        // 23. Asset Maintenance & Service Logs
+        if (in_array('asset_maintenance', $selectedModules, true)) {
+            $data['asset_maintenance'] = Database::fetchAll(
+                "SELECT aml.id, aml.log_number, a.asset_code, a.name AS asset_name,
+                       aml.service_type, aml.issue_description, aml.action_taken,
+                       aml.serviced_by_vendor, aml.technician_name, aml.service_cost,
+                       aml.parts_replaced, aml.service_date, aml.next_due_date,
+                       aml.downtime_hours, aml.status
+                FROM asset_maintenance_logs aml
+                JOIN assets a ON a.id = aml.asset_id
+                WHERE aml.service_date >= ? AND aml.service_date <= ?
+                ORDER BY aml.id DESC",
+                [$startDateOnly, $endDateOnly]
+            );
+        }
+
         // =========================================================================
         // EXECUTIVE FINANCIAL & OPERATIONAL STOCK RECONCILIATION SUMMARY
         // =========================================================================
@@ -945,6 +1132,283 @@ class ExportService
                     number_format((float)$ex['pending_amount'], 2, '.', ''),
                     $ex['payment_status'],
                     !empty($ex['expense_date']) ? date('d M Y', strtotime($ex['expense_date'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 14. Raw Materials Supply & Procurement
+        if (!empty($data['raw_materials'])) {
+            fputcsv($out, ['=== 14. RAW MATERIALS SUPPLY & PROCUREMENT ===']);
+            fputcsv($out, ['PO Number', 'Purchase Date', 'Supplier', 'Invoice #', 'Material Name', 'Color', 'Count / Size', 'Unit', 'Quantity', 'Purchase Price (INR)', 'Total Amount (INR)', 'HSN Code', 'GST Type', 'Tax Treatment', 'Item Code']);
+            foreach ($data['raw_materials'] as $rm) {
+                fputcsv($out, [
+                    $rm['purchase_number'],
+                    !empty($rm['purchase_date']) ? date('d M Y', strtotime($rm['purchase_date'])) : '-',
+                    $rm['supplier_company'] ?: ($rm['supplier_name'] ?? 'Direct Supplier'),
+                    $rm['invoice_number'] ?: '-',
+                    $rm['item_name'],
+                    $rm['color'] ?: '-',
+                    $rm['size'] ?: '-',
+                    $rm['unit'] ?? 'Kilograms',
+                    number_format((float)$rm['quantity'], 2, '.', ''),
+                    number_format((float)$rm['unit_price'], 2, '.', ''),
+                    number_format((float)$rm['total_price'], 2, '.', ''),
+                    $rm['hsn_code'] ?: '-',
+                    $rm['gst_type'] ?? 'EXEMPTED',
+                    $rm['tax_treatment'] ?? 'INCLUDED',
+                    $rm['start_code'] ?: '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 15. Third-Party Finished Products & Mapping
+        if (!empty($data['third_party_products'])) {
+            fputcsv($out, ['=== 15. THIRD-PARTY PRODUCTS & CATALOG MAPPING ===']);
+            fputcsv($out, ['PO Number', 'Purchase Date', 'Supplier', 'Invoice #', 'Product Name', 'Vendor SKU / Code', 'Color', 'Size', 'Unit', 'Quantity', 'Unit Cost (INR)', 'MRP (INR)', 'Selling Price (INR)', 'Total Cost (INR)', 'HSN Code', 'Mapped Category', 'Mapped Subcategory', 'Mapped Sub-Subcategory', 'Mapping Status']);
+            foreach ($data['third_party_products'] as $tp) {
+                fputcsv($out, [
+                    $tp['purchase_number'],
+                    !empty($tp['purchase_date']) ? date('d M Y', strtotime($tp['purchase_date'])) : '-',
+                    $tp['supplier_company'] ?: ($tp['supplier_name'] ?? 'Direct Supplier'),
+                    $tp['invoice_number'] ?: '-',
+                    $tp['item_name'],
+                    $tp['vendor_sku'] ?: ($tp['product_code'] ?? '-'),
+                    $tp['color'] ?: '-',
+                    $tp['size'] ?: '-',
+                    $tp['unit'] ?? 'Pieces',
+                    number_format((float)$tp['quantity'], 2, '.', ''),
+                    number_format((float)$tp['unit_price'], 2, '.', ''),
+                    number_format((float)$tp['mrp'], 2, '.', ''),
+                    number_format((float)$tp['selling_price'], 2, '.', ''),
+                    number_format((float)$tp['total_price'], 2, '.', ''),
+                    $tp['hsn_code'] ?: '-',
+                    $tp['category_name'] ?: 'Uncategorized',
+                    $tp['subcategory_name'] ?: '-',
+                    $tp['sub_subcategory_name'] ?: '-',
+                    !empty($tp['is_mapped']) ? 'MAPPED TO CATALOG' : 'PENDING MAPPING',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 16. Suppliers & Mills Directory
+        if (!empty($data['suppliers'])) {
+            fputcsv($out, ['=== 16. SUPPLIERS & MILLS DIRECTORY ===']);
+            fputcsv($out, ['Supplier / Mill Name', 'Company', 'Type', 'Phone', 'Email', 'GSTIN', 'City', 'State', 'Payment Terms', 'Total Orders Placed', 'Total Inward Value (INR)', 'Registered Date']);
+            foreach ($data['suppliers'] as $sup) {
+                fputcsv($out, [
+                    $sup['name'],
+                    $sup['company'] ?: '-',
+                    $sup['seller_type'] ?? 'MILL',
+                    $sup['phone'] ?: '-',
+                    $sup['email'] ?: '-',
+                    $sup['gstin'] ?: ($sup['gst_number'] ?? '-'),
+                    $sup['city'] ?: '-',
+                    $sup['state'] ?: '-',
+                    $sup['payment_terms'] ?: '-',
+                    (int)($sup['total_orders'] ?? 0),
+                    number_format((float)($sup['total_order_value'] ?? 0), 2, '.', ''),
+                    !empty($sup['created_at']) ? date('d M Y', strtotime($sup['created_at'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 17. Goods Inward Notes (GRN)
+        if (!empty($data['goods_inward'])) {
+            fputcsv($out, ['=== 17. GOODS INWARD NOTES (GRN) ===']);
+            fputcsv($out, ['GRN Number', 'Invoice #', 'Invoice Date', 'Received Date', 'Destination Warehouse', 'Gate Pass #', 'Vehicle #', 'Driver Name', 'Total Received Qty', 'Accepted Qty', 'Rejected Qty', 'Status', 'Received By']);
+            foreach ($data['goods_inward'] as $grn) {
+                fputcsv($out, [
+                    $grn['grn_number'],
+                    $grn['invoice_number'] ?: '-',
+                    !empty($grn['invoice_date']) ? date('d M Y', strtotime($grn['invoice_date'])) : '-',
+                    !empty($grn['received_date']) ? date('d M Y', strtotime($grn['received_date'])) : '-',
+                    $grn['warehouse_name'] ?? 'Main Warehouse',
+                    $grn['gate_pass_number'] ?: '-',
+                    $grn['vehicle_number'] ?: '-',
+                    $grn['driver_name'] ?: '-',
+                    number_format((float)$grn['total_received_qty'], 2, '.', ''),
+                    number_format((float)$grn['total_accepted_qty'], 2, '.', ''),
+                    number_format((float)$grn['total_rejected_qty'], 2, '.', ''),
+                    $grn['status'] ?? 'COMPLETED',
+                    $grn['received_by_name'] ?: '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 18. Damage & Rejection Management
+        if (!empty($data['damages'])) {
+            fputcsv($out, ['=== 18. DAMAGE & REJECTION MANAGEMENT ===']);
+            fputcsv($out, ['Damage Report #', 'Item Type', 'Product / Roll Name', 'Roll Number', 'Supplier', 'Damaged Qty', 'Damaged Weight (kg)', 'Loss Amount (INR)', 'Damage Reason', 'Defect Notes', 'Status', 'Resolution Type', 'Debit Note #', 'Refund Amount (INR)', 'Reported Date']);
+            foreach ($data['damages'] as $dm) {
+                fputcsv($out, [
+                    $dm['damage_number'],
+                    $dm['item_type'] ?? 'ROLL',
+                    $dm['product_name'] ?: 'Fabric Roll',
+                    $dm['roll_number'] ?: '-',
+                    $dm['supplier_company'] ?: ($dm['supplier_name'] ?? '-'),
+                    number_format((float)($dm['damaged_quantity'] ?? 0), 2, '.', ''),
+                    number_format((float)($dm['damaged_weight'] ?? 0), 2, '.', ''),
+                    number_format((float)($dm['loss_amount'] ?? 0), 2, '.', ''),
+                    $dm['damage_reason'] ?: '-',
+                    $dm['defect_notes'] ?: '-',
+                    $dm['status'] ?? 'PENDING',
+                    $dm['resolution_type'] ?: '-',
+                    $dm['debit_note_number'] ?: '-',
+                    number_format((float)($dm['refund_amount'] ?? 0), 2, '.', ''),
+                    !empty($dm['created_at']) ? date('d M Y', strtotime($dm['created_at'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 19. Product Catalog & Style Master
+        if (!empty($data['catalog'])) {
+            fputcsv($out, ['=== 19. PRODUCT CATALOG & STYLE MASTER ===']);
+            fputcsv($out, ['Product / Style Name', 'Product Code', 'Source Type', 'Category', 'Subcategory', 'Sub-Subcategory', 'HSN Code', 'Material', 'Active Variants Count', 'Status', 'Created Date']);
+            foreach ($data['catalog'] as $cat) {
+                fputcsv($out, [
+                    $cat['product_name'],
+                    $cat['product_code'] ?: '-',
+                    $cat['source_type'] ?? 'MANUFACTURED',
+                    $cat['category_name'] ?: '-',
+                    $cat['subcategory_name'] ?: '-',
+                    $cat['sub_subcategory_name'] ?: '-',
+                    $cat['hsn_code'] ?: '-',
+                    $cat['material'] ?: '-',
+                    (int)($cat['variant_count'] ?? 0),
+                    !empty($cat['is_active']) ? 'ACTIVE' : 'INACTIVE',
+                    !empty($cat['created_at']) ? date('d M Y', strtotime($cat['created_at'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 20. QR Code Generation Batches
+        if (!empty($data['qr_generations'])) {
+            fputcsv($out, ['=== 20. QR CODE GENERATION BATCHES ===']);
+            fputcsv($out, ['Batch Code', 'Generation Type', 'Brand', 'Category', 'Subcategory', 'Color', 'Size', 'Generated Quantity', 'MRP (INR)', 'Selling Price (INR)', 'QR Prefix', 'Stock Added Status', 'Created By', 'Created Date']);
+            foreach ($data['qr_generations'] as $qr) {
+                fputcsv($out, [
+                    $qr['batch_code'],
+                    $qr['generation_type'] ?? 'STANDARD',
+                    $qr['brand_name'] ?: '-',
+                    $qr['category_name'] ?: '-',
+                    $qr['subcategory_name'] ?: '-',
+                    $qr['color_name'] ?: '-',
+                    $qr['size_name'] ?: '-',
+                    (int)($qr['quantity'] ?? 0),
+                    number_format((float)($qr['mrp'] ?? 0), 2, '.', ''),
+                    number_format((float)($qr['selling_price'] ?? 0), 2, '.', ''),
+                    $qr['qr_prefix'] ?: '-',
+                    !empty($qr['stock_added']) ? 'ADDED TO STOCK' : 'PENDING INWARD',
+                    $qr['created_by_name'] ?: '-',
+                    !empty($qr['created_at']) ? date('d M Y', strtotime($qr['created_at'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 21. Finished Goods Inventory (On-Hand)
+        if (!empty($data['inventory'])) {
+            fputcsv($out, ['=== 21. FINISHED GOODS INVENTORY (ON-HAND) ===']);
+            fputcsv($out, ['Product Name', 'Product Code', 'SKU', 'Variant Code', 'Size', 'Color', 'Location Name', 'Location Type', 'Stock State', 'On-Hand Quantity', 'Purchase Price (INR)', 'Selling Price (INR)', 'MRP (INR)', 'Last Updated']);
+            foreach ($data['inventory'] as $inv) {
+                fputcsv($out, [
+                    $inv['product_name'],
+                    $inv['product_code'] ?: '-',
+                    $inv['sku'],
+                    $inv['variant_code'] ?: '-',
+                    $inv['size_name'] ?: '-',
+                    $inv['color_name'] ?: '-',
+                    $inv['location_name'] ?: 'Central Facility',
+                    $inv['location_type'],
+                    $inv['stock_state'],
+                    number_format((float)$inv['quantity'], 2, '.', ''),
+                    number_format((float)($inv['purchase_price'] ?? 0), 2, '.', ''),
+                    number_format((float)($inv['selling_price'] ?? 0), 2, '.', ''),
+                    number_format((float)($inv['mrp'] ?? 0), 2, '.', ''),
+                    !empty($inv['last_updated']) ? date('d M Y H:i', strtotime($inv['last_updated'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 22. Warehouse Rework & Repairs
+        if (!empty($data['warehouse_rework'])) {
+            fputcsv($out, ['=== 22. WAREHOUSE REWORK & REPAIRS ===']);
+            fputcsv($out, ['Rework #', 'Warehouse', 'Product Name', 'SKU', 'Defect Type', 'Damage Reason', 'Defect Notes', 'Quantity Dispatched', 'Repaired Qty', 'Scrapped Qty', 'Challan #', 'Status', 'Received Date']);
+            foreach ($data['warehouse_rework'] as $wr) {
+                fputcsv($out, [
+                    $wr['rework_number'],
+                    $wr['warehouse_name'] ?? 'Main Warehouse',
+                    $wr['product_name'] ?: '-',
+                    $wr['sku'] ?: '-',
+                    $wr['defect_type'] ?: '-',
+                    $wr['damage_reason'] ?: '-',
+                    $wr['defect_notes'] ?: '-',
+                    number_format((float)($wr['quantity'] ?? 0), 2, '.', ''),
+                    number_format((float)($wr['repaired_qty'] ?? 0), 2, '.', ''),
+                    number_format((float)($wr['scrapped_qty'] ?? 0), 2, '.', ''),
+                    $wr['challan_number'] ?: '-',
+                    $wr['status'] ?? 'PENDING',
+                    !empty($wr['received_date']) ? date('d M Y', strtotime($wr['received_date'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 23. Fixed Assets Register
+        if (!empty($data['assets'])) {
+            fputcsv($out, ['=== 23. FIXED ASSETS & MACHINERY REGISTER ===']);
+            fputcsv($out, ['Asset Code', 'Asset Name', 'Category', 'Brand', 'Model Number', 'Serial Number', 'Location Type', 'Purchase Date', 'Purchase Cost (INR)', 'Current Book Value (INR)', 'Salvage Value (INR)', 'Useful Life (Years)', 'Vendor Name', 'Invoice #', 'Condition', 'Status']);
+            foreach ($data['assets'] as $ast) {
+                fputcsv($out, [
+                    $ast['asset_code'],
+                    $ast['name'],
+                    $ast['category_name'] ?: 'General Equipment',
+                    $ast['brand'] ?: '-',
+                    $ast['model_number'] ?: '-',
+                    $ast['serial_number'] ?: '-',
+                    $ast['location_type'] ?? 'FACTORY',
+                    !empty($ast['purchase_date']) ? date('d M Y', strtotime($ast['purchase_date'])) : '-',
+                    number_format((float)($ast['purchase_cost'] ?? 0), 2, '.', ''),
+                    number_format((float)($ast['current_book_value'] ?? 0), 2, '.', ''),
+                    number_format((float)($ast['salvage_value'] ?? 0), 2, '.', ''),
+                    (int)($ast['useful_life_years'] ?? 0),
+                    $ast['vendor_name'] ?: '-',
+                    $ast['invoice_number'] ?: '-',
+                    $ast['condition_state'] ?? 'GOOD',
+                    $ast['status'] ?? 'OPERATIONAL',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 24. Asset Maintenance & Service Logs
+        if (!empty($data['asset_maintenance'])) {
+            fputcsv($out, ['=== 24. ASSET MAINTENANCE & SERVICE LOGS ===']);
+            fputcsv($out, ['Service Log #', 'Asset Code', 'Asset Name', 'Service Type', 'Issue Description', 'Action Taken', 'Serviced By Vendor', 'Technician Name', 'Parts Replaced', 'Service Cost (INR)', 'Downtime Hours', 'Next Due Date', 'Status', 'Service Date']);
+            foreach ($data['asset_maintenance'] as $am) {
+                fputcsv($out, [
+                    $am['log_number'],
+                    $am['asset_code'],
+                    $am['asset_name'],
+                    $am['service_type'] ?? 'PREVENTIVE',
+                    $am['issue_description'] ?: '-',
+                    $am['action_taken'] ?: '-',
+                    $am['serviced_by_vendor'] ?: '-',
+                    $am['technician_name'] ?: '-',
+                    $am['parts_replaced'] ?: '-',
+                    number_format((float)($am['service_cost'] ?? 0), 2, '.', ''),
+                    number_format((float)($am['downtime_hours'] ?? 0), 2, '.', ''),
+                    !empty($am['next_due_date']) ? date('d M Y', strtotime($am['next_due_date'])) : '-',
+                    $am['status'] ?? 'COMPLETED',
+                    !empty($am['service_date']) ? date('d M Y', strtotime($am['service_date'])) : '-',
                 ]);
             }
             fputcsv($out, []);

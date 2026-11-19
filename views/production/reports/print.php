@@ -854,6 +854,368 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
         </div>
     <?php endif; ?>
 
+    <!-- Raw Materials -->
+    <?php if (in_array('raw_materials', $selectedModules, true) && !empty($data['raw_materials'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Raw Materials Supply &amp; Procurement</h3>
+                <span class="section-count"><?= count($data['raw_materials']) ?> items</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Material Name</th>
+                        <th>Color / Size</th>
+                        <th class="right">Quantity</th>
+                        <th class="right">Price (₹)</th>
+                        <th class="right">Total (₹)</th>
+                        <th>HSN</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['raw_materials'] as $rm): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($rm['purchase_number']) ?></strong></td>
+                            <td><?= !empty($rm['purchase_date']) ? date('d M Y', strtotime($rm['purchase_date'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($rm['supplier_company'] ?: ($rm['supplier_name'] ?? '-')) ?></td>
+                            <td><strong><?= htmlspecialchars($rm['item_name']) ?></strong></td>
+                            <td><?= htmlspecialchars(trim(($rm['color'] ?? '') . ' ' . ($rm['size'] ?? ''))) ?: '-' ?></td>
+                            <td class="right"><?= number_format((float)$rm['quantity'], 2) ?> <?= htmlspecialchars($rm['unit'] ?? '') ?></td>
+                            <td class="right">₹<?= number_format((float)$rm['unit_price'], 2) ?></td>
+                            <td class="right fw-bold">₹<?= number_format((float)$rm['total_price'], 2) ?></td>
+                            <td><?= htmlspecialchars($rm['hsn_code'] ?: '-') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Third Party Products -->
+    <?php if (in_array('third_party_products', $selectedModules, true) && !empty($data['third_party_products'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Third-Party Finished Products &amp; Catalog Mapping</h3>
+                <span class="section-count"><?= count($data['third_party_products']) ?> items</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Product / SKU</th>
+                        <th>Color / Size</th>
+                        <th class="right">Quantity</th>
+                        <th class="right">Cost (₹)</th>
+                        <th class="right">MRP / SP (₹)</th>
+                        <th class="right">Total (₹)</th>
+                        <th>Catalog Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['third_party_products'] as $tp): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($tp['purchase_number']) ?></strong></td>
+                            <td><?= !empty($tp['purchase_date']) ? date('d M Y', strtotime($tp['purchase_date'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($tp['supplier_company'] ?: ($tp['supplier_name'] ?? '-')) ?></td>
+                            <td><strong><?= htmlspecialchars($tp['item_name']) ?></strong><br><small class="text-muted"><?= htmlspecialchars($tp['vendor_sku'] ?: '-') ?></small></td>
+                            <td><?= htmlspecialchars(trim(($tp['color'] ?? '') . ' ' . ($tp['size'] ?? ''))) ?: '-' ?></td>
+                            <td class="right"><?= number_format((float)$tp['quantity']) ?> <?= htmlspecialchars($tp['unit'] ?? '') ?></td>
+                            <td class="right">₹<?= number_format((float)$tp['unit_price'], 2) ?></td>
+                            <td class="right">₹<?= number_format((float)$tp['mrp'], 2) ?> / ₹<?= number_format((float)$tp['selling_price'], 2) ?></td>
+                            <td class="right fw-bold">₹<?= number_format((float)$tp['total_price'], 2) ?></td>
+                            <td>
+                                <?php if (!empty($tp['is_mapped'])): ?>
+                                    <span class="badge badge-success">Mapped</span>
+                                <?php else: ?>
+                                    <span class="badge badge-warning">Pending</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Suppliers Directory -->
+    <?php if (in_array('suppliers', $selectedModules, true) && !empty($data['suppliers'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Suppliers &amp; Mills Directory</h3>
+                <span class="section-count"><?= count($data['suppliers']) ?> vendors</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Supplier Name</th>
+                        <th>Company</th>
+                        <th>Type</th>
+                        <th>Phone</th>
+                        <th>GSTIN</th>
+                        <th>City / State</th>
+                        <th class="center">Total POs</th>
+                        <th class="right">Inward Value (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['suppliers'] as $sup): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($sup['name']) ?></strong></td>
+                            <td><?= htmlspecialchars($sup['company'] ?: '-') ?></td>
+                            <td><span class="badge badge-info"><?= htmlspecialchars($sup['seller_type'] ?? 'MILL') ?></span></td>
+                            <td><?= htmlspecialchars($sup['phone'] ?: '-') ?></td>
+                            <td><?= htmlspecialchars($sup['gstin'] ?: ($sup['gst_number'] ?? '-')) ?></td>
+                            <td><?= htmlspecialchars(trim(($sup['city'] ?? '') . ' ' . ($sup['state'] ?? ''))) ?: '-' ?></td>
+                            <td class="center"><?= (int)($sup['total_orders'] ?? 0) ?></td>
+                            <td class="right fw-bold">₹<?= number_format((float)($sup['total_order_value'] ?? 0), 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Goods Inward (GRN) -->
+    <?php if (in_array('goods_inward', $selectedModules, true) && !empty($data['goods_inward'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Goods Inward Notes (GRN)</h3>
+                <span class="section-count"><?= count($data['goods_inward']) ?> receipts</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>GRN #</th>
+                        <th>Received Date</th>
+                        <th>Invoice / Challan</th>
+                        <th>Destination Warehouse</th>
+                        <th class="right">Received Qty</th>
+                        <th class="right">Accepted Qty</th>
+                        <th class="right">Rejected Qty</th>
+                        <th>Status</th>
+                        <th>Received By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['goods_inward'] as $grn): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($grn['grn_number']) ?></strong></td>
+                            <td><?= !empty($grn['received_date']) ? date('d M Y', strtotime($grn['received_date'])) : '-' ?></td>
+                            <td><?= htmlspecialchars($grn['invoice_number'] ?: '-') ?></td>
+                            <td><?= htmlspecialchars($grn['warehouse_name'] ?? 'Main Warehouse') ?></td>
+                            <td class="right"><?= number_format((float)$grn['total_received_qty'], 2) ?></td>
+                            <td class="right text-success"><?= number_format((float)$grn['total_accepted_qty'], 2) ?></td>
+                            <td class="right text-danger"><?= number_format((float)$grn['total_rejected_qty'], 2) ?></td>
+                            <td><span class="badge badge-success"><?= htmlspecialchars($grn['status'] ?? 'COMPLETED') ?></span></td>
+                            <td><?= htmlspecialchars($grn['received_by_name'] ?: '-') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Damages -->
+    <?php if (in_array('damages', $selectedModules, true) && !empty($data['damages'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Damage &amp; Rejection Management</h3>
+                <span class="section-count"><?= count($data['damages']) ?> logs</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Damage Report #</th>
+                        <th>Type</th>
+                        <th>Item / Roll #</th>
+                        <th>Supplier</th>
+                        <th class="right">Qty / Weight</th>
+                        <th class="right">Loss Amount (₹)</th>
+                        <th>Reason / Notes</th>
+                        <th>Status</th>
+                        <th>Resolution</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['damages'] as $dm): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($dm['damage_number']) ?></strong></td>
+                            <td><span class="badge badge-warning"><?= htmlspecialchars($dm['item_type'] ?? 'ROLL') ?></span></td>
+                            <td><?= htmlspecialchars($dm['product_name'] ?: ($dm['roll_number'] ?? '-')) ?></td>
+                            <td><?= htmlspecialchars($dm['supplier_company'] ?: ($dm['supplier_name'] ?? '-')) ?></td>
+                            <td class="right"><?= number_format((float)($dm['damaged_weight'] ?: $dm['damaged_quantity']), 2) ?></td>
+                            <td class="right text-danger fw-bold">₹<?= number_format((float)($dm['loss_amount'] ?? 0), 2) ?></td>
+                            <td><?= htmlspecialchars($dm['damage_reason'] ?: ($dm['defect_notes'] ?? '-')) ?></td>
+                            <td><span class="badge badge-info"><?= htmlspecialchars($dm['status'] ?? 'PENDING') ?></span></td>
+                            <td><?= htmlspecialchars($dm['resolution_type'] ?: '-') ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Catalog Master -->
+    <?php if (in_array('catalog', $selectedModules, true) && !empty($data['catalog'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Product Catalog &amp; Style Master</h3>
+                <span class="section-count"><?= count($data['catalog']) ?> styles</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Product / Style Name</th>
+                        <th>Style Code</th>
+                        <th>Source</th>
+                        <th>Category Path</th>
+                        <th>HSN</th>
+                        <th class="center">Variants</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['catalog'] as $cat): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($cat['product_name']) ?></strong></td>
+                            <td><code><?= htmlspecialchars($cat['product_code'] ?: '-') ?></code></td>
+                            <td><?= htmlspecialchars($cat['source_type'] ?? 'MANUFACTURED') ?></td>
+                            <td><?= htmlspecialchars(implode(' > ', array_filter([$cat['category_name'] ?? '', $cat['subcategory_name'] ?? '', $cat['sub_subcategory_name'] ?? '']))) ?: '-' ?></td>
+                            <td><?= htmlspecialchars($cat['hsn_code'] ?: '-') ?></td>
+                            <td class="center"><?= (int)($cat['variant_count'] ?? 0) ?></td>
+                            <td>
+                                <?php if (!empty($cat['is_active'])): ?>
+                                    <span class="badge badge-success">Active</span>
+                                <?php else: ?>
+                                    <span class="badge badge-secondary">Inactive</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Finished Goods Inventory -->
+    <?php if (in_array('inventory', $selectedModules, true) && !empty($data['inventory'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Finished Goods Inventory (On-Hand)</h3>
+                <span class="section-count"><?= count($data['inventory']) ?> SKUs</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Product Name</th>
+                        <th>SKU</th>
+                        <th>Size / Color</th>
+                        <th>Location</th>
+                        <th>Stock State</th>
+                        <th class="right">On-Hand Qty</th>
+                        <th class="right">Selling Price (₹)</th>
+                        <th class="right">MRP (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['inventory'] as $inv): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($inv['product_name']) ?></strong></td>
+                            <td><code><?= htmlspecialchars($inv['sku']) ?></code></td>
+                            <td><?= htmlspecialchars(trim(($inv['size_name'] ?? '') . ' ' . ($inv['color_name'] ?? ''))) ?: '-' ?></td>
+                            <td><?= htmlspecialchars($inv['location_name'] ?: 'Central Facility') ?></td>
+                            <td><span class="badge badge-success"><?= htmlspecialchars($inv['stock_state'] ?? 'AVAILABLE') ?></span></td>
+                            <td class="right fw-bold"><?= number_format((float)$inv['quantity'], 2) ?></td>
+                            <td class="right">₹<?= number_format((float)($inv['selling_price'] ?? 0), 2) ?></td>
+                            <td class="right">₹<?= number_format((float)($inv['mrp'] ?? 0), 2) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Fixed Assets -->
+    <?php if (in_array('assets', $selectedModules, true) && !empty($data['assets'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Fixed Assets &amp; Machinery Register</h3>
+                <span class="section-count"><?= count($data['assets']) ?> machinery</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Asset Code</th>
+                        <th>Asset Name</th>
+                        <th>Category</th>
+                        <th>Brand / Model</th>
+                        <th>Purchase Date</th>
+                        <th class="right">Cost (₹)</th>
+                        <th class="right">Book Value (₹)</th>
+                        <th>Condition</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['assets'] as $ast): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($ast['asset_code']) ?></strong></td>
+                            <td><?= htmlspecialchars($ast['name']) ?></td>
+                            <td><?= htmlspecialchars($ast['category_name'] ?: '-') ?></td>
+                            <td><?= htmlspecialchars(trim(($ast['brand'] ?? '') . ' ' . ($ast['model_number'] ?? ''))) ?: '-' ?></td>
+                            <td><?= !empty($ast['purchase_date']) ? date('d M Y', strtotime($ast['purchase_date'])) : '-' ?></td>
+                            <td class="right">₹<?= number_format((float)($ast['purchase_cost'] ?? 0), 2) ?></td>
+                            <td class="right fw-bold">₹<?= number_format((float)($ast['current_book_value'] ?? 0), 2) ?></td>
+                            <td><span class="badge badge-info"><?= htmlspecialchars($ast['condition_state'] ?? 'GOOD') ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
+    <!-- Asset Maintenance -->
+    <?php if (in_array('asset_maintenance', $selectedModules, true) && !empty($data['asset_maintenance'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Asset Maintenance &amp; Service Logs</h3>
+                <span class="section-count"><?= count($data['asset_maintenance']) ?> logs</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Log #</th>
+                        <th>Asset</th>
+                        <th>Service Type</th>
+                        <th>Technician / Vendor</th>
+                        <th>Service Date</th>
+                        <th class="right">Cost (₹)</th>
+                        <th class="right">Downtime (hrs)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['asset_maintenance'] as $am): ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($am['log_number']) ?></strong></td>
+                            <td><?= htmlspecialchars($am['asset_name']) ?> <small class="text-muted">(<?= htmlspecialchars($am['asset_code']) ?>)</small></td>
+                            <td><?= htmlspecialchars($am['service_type'] ?? 'PREVENTIVE') ?></td>
+                            <td><?= htmlspecialchars($am['technician_name'] ?: ($am['serviced_by_vendor'] ?? '-')) ?></td>
+                            <td><?= !empty($am['service_date']) ? date('d M Y', strtotime($am['service_date'])) : '-' ?></td>
+                            <td class="right fw-bold">₹<?= number_format((float)($am['service_cost'] ?? 0), 2) ?></td>
+                            <td class="right"><?= number_format((float)($am['downtime_hours'] ?? 0), 1) ?></td>
+                            <td><span class="badge badge-success"><?= htmlspecialchars($am['status'] ?? 'COMPLETED') ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
     <footer style="text-align: center; border-top: 1px solid #cbd5e1; padding-top: 18px; margin-top: 30px; font-size: 11px; color: #64748b;">
         <?= htmlspecialchars($prodUnit['name'] ?? 'Production Facility') ?> &nbsp;·&nbsp; Confidential Production ERP &amp; Financial Intelligence Report &nbsp;·&nbsp; Generated on <?= date('d M Y, h:i A') ?> IST
     </footer>
