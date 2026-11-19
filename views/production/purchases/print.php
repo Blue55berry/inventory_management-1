@@ -147,8 +147,7 @@ $taxLabels = ['SGST' => 'SGST', 'CGST' => 'CGST', 'IGST' => 'IGST'];
                 $igstVal = (float)($item['igst_value'] ?? 0);
 
                 $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
-                $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
-                $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+                $gross = (float)$item['unit_price'] * (float)$item['quantity'];
                 $itemBase = isset($item['base_amount']) ? (float)$item['base_amount'] : ($taxTreatment === 'INCLUDED' ? max(0, (float)$item['total_price'] - $itemTax) : $gross);
             ?>
             <tr>

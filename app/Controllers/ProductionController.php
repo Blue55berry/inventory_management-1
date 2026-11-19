@@ -1428,8 +1428,7 @@ class ProductionController {
         ];
         foreach ($items as &$item) {
             $taxTreatment = $item['tax_treatment'] ?? 'INCLUDED';
-            $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
-            $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+            $gross = (float)$item['unit_price'] * (float)$item['quantity'];
             $itemTax = (float)($item['sgst_amount'] ?? 0) + (float)($item['cgst_amount'] ?? 0) + (float)($item['igst_amount'] ?? 0);
             if ($taxTreatment === 'INCLUDED') {
                 $base = max(0, (float)$item['total_price'] - $itemTax);
@@ -1762,7 +1761,7 @@ class ProductionController {
                 return;
             }
 
-            $baseAmount = round($itemType === 'FABRIC_ROLL' ? $unitPrice : $quantity * $unitPrice, 2);
+            $baseAmount = round($quantity * $unitPrice, 2);
             if ($itemType === 'FABRIC_ROLL') {
                 $rollNumber = mb_strtoupper(trim((string)($submitted['roll_number'] ?? $oldItem['roll_number'] ?? '')));
                 $color = mb_strtoupper(trim((string)($submitted['color'] ?? $oldItem['color'] ?? '')));
@@ -1882,7 +1881,7 @@ class ProductionController {
             if (!in_array($taxTreatment, ['INCLUDED', 'EXCLUDED'], true)) $taxTreatment = 'INCLUDED';
 
             $hsnCode = trim((string)($submitted['hsn_code'] ?? $oldItem['hsn_code'] ?? ''));
-            $grossAmount = round($itemType === 'FABRIC_ROLL' ? $unitPrice : $quantity * $unitPrice, 2);
+            $grossAmount = round($quantity * $unitPrice, 2);
             $lineTaxes = $calculateLineTaxes($grossAmount, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
             $baseAmount = $lineTaxes['base'];
             $sgstAmount = $lineTaxes['sgst'];
@@ -2378,7 +2377,8 @@ class ProductionController {
                     return;
                 }
                 $quantity = (int)$quantity;
-                $lineTaxes = $calculateLineTaxes($unitPrice, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
+                $grossTotal = round($quantity * $unitPrice, 2);
+                $lineTaxes = $calculateLineTaxes($grossTotal, $taxTreatment, $gstType, $taxMode, $taxValue, $cgstTaxValue);
                 $sgstAmount = $lineTaxes['sgst'];
                 $cgstAmount = $lineTaxes['cgst'];
                 $igstAmount = $lineTaxes['igst'];
@@ -6729,16 +6729,17 @@ class ProductionController {
             $cgstValue = $cgstAmount;
             $igstValue = $igstAmount;
         } else {
+            $baseLine = round($price * max(1, (float)$quantity), 2);
             if ($gstType === 'BOTH') {
                 $sgstValue = $taxRate;
                 $cgstValue = $cgstRate > 0 ? $cgstRate : $taxRate;
-                $sgstAmount = round($price * ($sgstValue / 100), 2);
-                $cgstAmount = round($price * ($cgstValue / 100), 2);
+                $sgstAmount = round($baseLine * ($sgstValue / 100), 2);
+                $cgstAmount = round($baseLine * ($cgstValue / 100), 2);
                 $igstAmount = 0.0;
                 $taxAmount = $sgstAmount + $cgstAmount;
                 $igstValue = 0.0;
             } else {
-                $taxAmount = round($price * ($taxRate / 100), 2);
+                $taxAmount = round($baseLine * ($taxRate / 100), 2);
                 $sgstAmount = $gstType === 'SGST' ? $taxAmount : 0.0;
                 $cgstAmount = $gstType === 'CGST' ? $taxAmount : 0.0;
                 $igstAmount = $gstType === 'IGST' ? $taxAmount : 0.0;
@@ -6746,8 +6747,8 @@ class ProductionController {
                 $cgstValue = $gstType === 'CGST' ? $taxRate : 0.0;
                 $igstValue = $gstType === 'IGST' ? $taxRate : 0.0;
             }
+            $totalPrice = $baseLine + $sgstAmount + $cgstAmount + $igstAmount;
         }
-        $totalPrice = $price + $sgstAmount + $cgstAmount + $igstAmount;
 
         $itemName = $materialType !== '' ? $materialType : 'STANDARD FABRIC';
         $hasItemHsn = (bool)Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'hsn_code'");
