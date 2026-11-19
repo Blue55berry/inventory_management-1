@@ -1102,6 +1102,52 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
         </div>
     <?php endif; ?>
 
+    <!-- Product Variants & SKUs -->
+    <?php if (in_array('variants', $selectedModules, true) && !empty($data['variants'])): ?>
+        <div class="section">
+            <div class="section-header">
+                <h3 class="section-title">Product Variants &amp; SKUs</h3>
+                <span class="section-count"><?= count($data['variants']) ?> variants</span>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Variant SKU</th>
+                        <th>Product Variant Code</th>
+                        <th>Product / Style Name</th>
+                        <th>Size</th>
+                        <th>Color</th>
+                        <th>Category Path</th>
+                        <th class="right">MRP</th>
+                        <th class="right">Selling Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($data['variants'] as $v): ?>
+                        <tr>
+                            <td><code><?= htmlspecialchars($v['sku'] ?: ($v['variant_code'] ?: '-')) ?></code></td>
+                            <td><code><?= htmlspecialchars($v['variant_code'] ?: '-') ?></code></td>
+                            <td><strong><?= htmlspecialchars($v['product_name']) ?></strong></td>
+                            <td><?= htmlspecialchars($v['size_name'] ?: '-') ?></td>
+                            <td><?= htmlspecialchars($v['color_name'] ?: '-') ?></td>
+                            <td><?= htmlspecialchars(implode(' > ', array_filter([$v['category_name'] ?? '', $v['subcategory_name'] ?? '', $v['sub_subcategory_name'] ?? '']))) ?: '-' ?></td>
+                            <td class="right">₹<?= number_format((float)($v['mrp'] ?? 0), 2) ?></td>
+                            <td class="right">₹<?= number_format((float)($v['selling_price'] ?? 0), 2) ?></td>
+                            <td>
+                                <?php if (!empty($v['is_active'])): ?>
+                                    <span class="badge badge-success">Active</span>
+                                <?php else: ?>
+                                    <span class="badge badge-secondary">Inactive</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    <?php endif; ?>
+
     <!-- Finished Goods Inventory -->
     <?php if (in_array('inventory', $selectedModules, true) && !empty($data['inventory'])): ?>
         <div class="section">
