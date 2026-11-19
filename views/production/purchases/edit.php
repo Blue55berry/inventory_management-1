@@ -131,7 +131,6 @@ $taxValueForItem = static function (array $item, string $type): float {
         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h5 class="mb-0 fw-bold"><i class="bi bi-boxes me-2 text-warning"></i>Raw Materials Supply Details</h5>
-                <small class="text-muted">Manage yarn, threads, trims, and raw material inward counts for production.</small>
             </div>
             <button type="button" class="btn btn-sm btn-warning text-dark fw-bold" id="btnAddRawMaterialItem">
                 <i class="bi bi-plus-circle me-1"></i> Add Raw Material
@@ -140,7 +139,6 @@ $taxValueForItem = static function (array $item, string $type): float {
         <div class="card-body">
             <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-warning"></i>Individual Raw Materials (<span id="rmCountBadge"><?= count($rawMaterialItems) ?></span>)</h6>
-                <span class="text-muted small">Configure raw material specifications, units, HSN codes, and purchase costs.</span>
             </div>
 
             <div id="rawMaterialContainer" class="d-flex flex-column gap-3 mb-4">
@@ -318,7 +316,6 @@ $taxValueForItem = static function (array $item, string $type): float {
             <div class="p-3 bg-warning-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div>
                     <strong class="text-warning-emphasis"><i class="bi bi-calculator me-1"></i>Raw Materials Summary</strong>
-                    <small class="d-block text-muted">Totals calculated from individual raw materials and their specific GST rates.</small>
                 </div>
                 <div class="d-flex flex-wrap gap-4 align-items-center">
                     <div><small class="text-muted d-block">Total Materials</small><strong id="summaryRmItems">0 Items</strong></div>
@@ -338,7 +335,6 @@ $taxValueForItem = static function (array $item, string $type): float {
         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
                 <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-info"></i>Third-Party Finished Products Inward</h5>
-                <small class="text-muted">Enter items received from external brands/vendors with individual item GST and pricing.</small>
             </div>
             <button type="button" class="btn btn-sm btn-info text-white fw-semibold" id="btnAddThirdPartyItem">
                 <i class="bi bi-plus-circle me-1"></i> Add Third-Party Product
@@ -348,7 +344,6 @@ $taxValueForItem = static function (array $item, string $type): float {
             <!-- Individual Cards Header -->
             <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-boxes me-1 text-info"></i>Individual Third-Party Products (<span id="tpCountBadge"><?= count($thirdPartyItems) ?></span>)</h6>
-                <span class="text-muted small">Configure individual products with separate GST rates and vendor pricing.</span>
             </div>
 
             <!-- Pre-rendered Third-Party Cards -->
@@ -530,7 +525,6 @@ $taxValueForItem = static function (array $item, string $type): float {
             <div class="p-3 bg-info-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
                 <div>
                     <strong class="text-info-emphasis"><i class="bi bi-calculator me-1"></i>Third-Party Inward Summary</strong>
-                    <small class="d-block text-muted">Totals calculated from individual products and their specific GST rates.</small>
                 </div>
                 <div class="d-flex flex-wrap gap-4 align-items-center">
                     <div><small class="text-muted d-block">Total Products</small><strong id="summaryTpProducts">0 Products</strong></div>
@@ -547,17 +541,14 @@ $taxValueForItem = static function (array $item, string $type): float {
     <div class="card shadow-sm border mb-4" id="sectionFabricRoll">
         <div class="card-header bg-white py-3">
             <h5 class="mb-0 fw-bold"><i class="bi bi-layers-half me-2 text-primary"></i>Fabric Roll &amp; Material Supply Details</h5>
-            <small class="text-muted">Sticker ranges for existing rolls stay unchanged.</small>
         </div>
         <div class="card-body">
             <div class="mb-3">
                 <label class="form-label required">Fabric / Material Description *</label>
                 <input type="text" id="editFabricDescription" class="form-control text-uppercase" maxlength="150" value="<?= e($fabricDescription) ?>" <?= $fabricItems ? 'required' : '' ?>>
-                <small class="text-muted">The description is applied to all fabric rolls in this purchase.</small>
             </div>
             <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2 flex-wrap gap-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-stack me-1 text-primary"></i>Individual Fabric Rolls (<span id="rollCountBadge"><?= count($fabricItems) ?></span>)</h6>
-                <span class="text-muted small">Edit roll details, quantity (RQ), and specifications.</span>
             </div>
             <div id="rollsContainer" class="d-flex flex-column gap-3 mb-4">
                 <?php foreach ($fabricItems as $index => $item): ?>
@@ -674,10 +665,7 @@ $taxValueForItem = static function (array $item, string $type): float {
             <div class="card border shadow-sm mb-4">
                 <div class="card-header bg-light py-2 px-3 d-flex align-items-center justify-content-between">
                     <span class="fw-bold small"><i class="bi bi-table me-1 text-primary"></i>Fabric Rolls Inventory &amp; Details Table</span>
-                    <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-dark" id="previewPurchaseLabels"><i class="bi bi-qr-code text-warning me-1"></i>Preview Labels</button>
-                        <span class="badge bg-secondary-subtle text-secondary border" id="tableRollCountBadge"><?= count($fabricItems) ?> <?= count($fabricItems) === 1 ? 'Roll' : 'Rolls' ?></span>
-                    </div>
+                    
                 </div>
                 <div class="table-responsive"><table class="table table-hover table-bordered align-middle mb-0" style="font-size:13px">
                     <thead class="table-light small text-uppercase"><tr><th class="text-center">#</th><th>Photo</th><th>Roll Code</th><th>HSN</th><th>Color / Shade</th><th>Design / Pattern</th><th class="text-center">Designs</th><th class="text-end">Total RQ</th><th class="text-end">Weight</th><th class="text-end">Purchase Price (₹)</th><th>GST Type</th><th class="text-end">Tax</th><th class="text-end bg-success-subtle text-success">Total Value</th><th class="text-center">Status</th></tr></thead>
@@ -685,7 +673,7 @@ $taxValueForItem = static function (array $item, string $type): float {
                 </table></div>
             </div>
             <div class="p-3 bg-primary-subtle rounded border d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div><strong class="text-primary"><i class="bi bi-calculator me-1"></i>Batch Metrics Summary</strong><small class="d-block text-muted">Totals are calculated from the rolls in this purchase.</small></div>
+                <div><strong class="text-primary"><i class="bi bi-calculator me-1"></i>Batch Metrics Summary</strong></div>
                 <div class="d-flex flex-wrap gap-4">
                     <div><small class="text-muted d-block">Total Rolls</small><strong id="summaryTotalRolls">0 Rolls</strong></div>
                     <div><small class="text-muted d-block">Total RQ</small><strong id="summaryTotalRQ">0 RQ</strong></div>
