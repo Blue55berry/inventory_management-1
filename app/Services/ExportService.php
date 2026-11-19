@@ -438,6 +438,29 @@ class ExportService
             );
         }
 
+        // 18b. Product Variants & SKUs
+        if (in_array('variants', $selectedModules, true)) {
+            $data['variants'] = Database::fetchAll(
+                "SELECT pv.id, pv.sku, pv.variant_code, pv.hsn_code, pv.gst_rate, pv.qr_code,
+                        pv.mrp, pv.selling_price, pv.purchase_price, pv.production_cost,
+                        pv.weight, pv.is_active, pv.created_at,
+                        p.name AS product_name, p.code AS parent_sku,
+                        c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                        col.name AS color_name, d.name AS design_name, s.name AS size_name
+                 FROM product_variants pv
+                 JOIN products p ON p.id = pv.product_id
+                 LEFT JOIN categories c ON c.id = p.category_id
+                 LEFT JOIN subcategories sc ON sc.id = p.subcategory_id
+                 LEFT JOIN sub_subcategories ssc ON ssc.id = p.sub_subcategory_id
+                 LEFT JOIN colors col ON col.id = pv.color_id
+                 LEFT JOIN designs d ON d.id = pv.design_id
+                 LEFT JOIN sizes s ON s.id = pv.size_id
+                 WHERE (pv.created_at >= ? AND pv.created_at <= ?) OR pv.is_active = 1
+                 ORDER BY pv.id DESC",
+                [$startDateTime, $endDateTime]
+            );
+        }
+
         // 19. QR Code Generations
         if (in_array('qr_generations', $selectedModules, true)) {
             $data['qr_generations'] = Database::fetchAll(
@@ -1283,6 +1306,51 @@ class ExportService
                     (int)($cat['variant_count'] ?? 0),
                     !empty($cat['is_active']) ? 'ACTIVE' : 'INACTIVE',
                     !empty($cat['created_at']) ? date('d M Y', strtotime($cat['created_at'])) : '-',
+                ]);
+            }
+            fputcsv($out, []);
+        }
+
+        // 19b. Product Variants & SKUs
+        if (!empty($data['variants'])) {
+            fputcsv($out, ['=== PRODUCT VARIANTS & SKUS ===']);
+            fputcsv($out, [
+                'Variant SKU',
+                'Product Variant Code',
+                'Product / Style Name',
+                'Parent Style Code',
+                'Size',
+                'Color',
+                'Design',
+                'Category Path',
+                'HSN Code',
+                'GST Rate (%)',
+                'MRP (INR)',
+                'Selling Price (INR)',
+                'Cost Per Piece (INR)',
+                'QR Code / Barcode',
+                'Status',
+                'Created Date'
+            ]);
+            foreach ($data['variants'] as $v) {
+                $categoryPath = implode(' > ', array_filter([$v['category_name'] ?? '', $v['subcategory_name'] ?? '', $v['sub_subcategory_name'] ?? ''])) ?: '-';
+                fputcsv($out, [
+                    $v['sku'] ?: ($v['variant_code'] ?: '-'),
+                    $v['variant_code'] ?: '-',
+                    $v['product_name'] ?: '-',
+                    $v['parent_sku'] ?: '-',
+                    $v['size_name'] ?: '-',
+                    $v['color_name'] ?: '-',
+                    $v['design_name'] ?: '-',
+                    $categoryPath,
+                    $v['hsn_code'] ?: '-',
+                    number_format((float)($v['gst_rate'] ?? 0), 2, '.', ''),
+                    number_format((float)($v['mrp'] ?? 0), 2, '.', ''),
+                    number_format((float)($v['selling_price'] ?? 0), 2, '.', ''),
+                    number_format((float)($v['production_cost'] ?: ($v['purchase_price'] ?? 0)), 2, '.', ''),
+                    $v['qr_code'] ?: '-',
+                    !empty($v['is_active']) ? 'ACTIVE' : 'INACTIVE',
+                    !empty($v['created_at']) ? date('d M Y', strtotime($v['created_at'])) : '-',
                 ]);
             }
             fputcsv($out, []);

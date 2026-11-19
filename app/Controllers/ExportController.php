@@ -7,6 +7,8 @@ require_once BASE_PATH . '/app/Services/ExportService.php';
 require_once BASE_PATH . '/app/Services/SettingsService.php';
 require_once BASE_PATH . '/app/Models/ProductionUnit.php';
 
+use App\Services\ExportService;
+
 class ExportController {
 
     /**
@@ -108,6 +110,13 @@ class ExportController {
                 'desc' => 'Master finished garment styles, category hierarchy, HSN codes, default specs & active variant counts',
                 'icon' => 'bi bi-grid-3x3-gap',
                 'color' => 'primary',
+                'category' => 'Manufacturing'
+            ],
+            'variants' => [
+                'name' => 'Product Variants & SKUs',
+                'desc' => 'Garment sizes, colors, design names, SKU codes, barcodes, MRP, selling price & cost per piece',
+                'icon' => 'bi bi-tags',
+                'color' => 'info',
                 'category' => 'Manufacturing'
             ],
             'qr_generations' => [
@@ -254,7 +263,7 @@ class ExportController {
 
         $allModules = [
             'purchases', 'rolls', 'raw_materials', 'third_party_products', 'suppliers', 'goods_inward',
-            'programs', 'cuttings', 'stitching', 'qc', 'damages', 'catalog', 'qr_generations',
+            'programs', 'cuttings', 'stitching', 'qc', 'damages', 'catalog', 'variants', 'qr_generations',
             'batches', 'outward', 'inventory', 'stock_ledger', 'stock_requests', 'warehouse_rework',
             'billing', 'returns', 'wastage', 'expenses', 'assets', 'asset_maintenance'
         ];
