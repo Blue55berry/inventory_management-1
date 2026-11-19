@@ -697,7 +697,7 @@ $taxValueForItem = static function (array $item, string $type): float {
     </div>
     <div class="d-flex justify-content-end gap-2 mb-4">
         <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase Changes</button>
+        <button type="submit" id="saveEditPurchaseSubmitBtn" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase Changes</button>
     </div>
 </form>
 
@@ -2599,7 +2599,37 @@ $taxValueForItem = static function (array $item, string $type): float {
     // =========================================================================
     // FORM SUBMISSION VALIDATION & PAYLOAD PACKING
     // =========================================================================
+    function resetEditSubmitState() {
+        form.removeAttribute('data-submitting');
+        const submitBtn = document.getElementById('saveEditPurchaseSubmitBtn') || form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.style.pointerEvents = '';
+            submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Save Purchase Changes';
+        }
+    }
+
+    function lockEditSubmitState() {
+        form.dataset.submitting = 'true';
+        const submitBtn = document.getElementById('saveEditPurchaseSubmitBtn') || form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.style.pointerEvents = 'none';
+            setTimeout(() => {
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving Changes...';
+                }
+            }, 10);
+        }
+    }
+
     form.addEventListener('submit', event => {
+        if (form.dataset.submitting === 'true') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return false;
+        }
+
         if (currentPurchaseType === 'RAW_MATERIAL' || currentPurchaseType === 'OWN_PRODUCT') {
             const container = document.getElementById('rawMaterialContainer');
             const cards = container ? Array.from(container.querySelectorAll('.rm-card')) : [];
@@ -2678,6 +2708,7 @@ $taxValueForItem = static function (array $item, string $type): float {
             if (hasError) {
                 event.preventDefault();
                 alert(errorMessage);
+                resetEditSubmitState();
                 return;
             }
 
@@ -2690,6 +2721,7 @@ $taxValueForItem = static function (array $item, string $type): float {
                 form.appendChild(payloadInput);
             }
             payloadInput.value = JSON.stringify(itemsPayload);
+            lockEditSubmitState();
             return;
         }
 
@@ -2771,6 +2803,7 @@ $taxValueForItem = static function (array $item, string $type): float {
             if (hasError) {
                 event.preventDefault();
                 alert(errorMessage);
+                resetEditSubmitState();
                 return;
             }
 
@@ -2783,6 +2816,7 @@ $taxValueForItem = static function (array $item, string $type): float {
                 form.appendChild(payloadInput);
             }
             payloadInput.value = JSON.stringify(itemsPayload);
+            lockEditSubmitState();
             return;
         }
 
@@ -2792,6 +2826,7 @@ $taxValueForItem = static function (array $item, string $type): float {
             if (!hasRoll) {
                 event.preventDefault();
                 alert('Add at least one fabric roll.');
+                resetEditSubmitState();
                 return;
             }
 
@@ -2802,6 +2837,7 @@ $taxValueForItem = static function (array $item, string $type): float {
                     photoInput.removeAttribute('name');
                 }
             });
+            lockEditSubmitState();
         }
     });
 

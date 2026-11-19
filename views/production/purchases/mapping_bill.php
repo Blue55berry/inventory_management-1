@@ -1,897 +1,1472 @@
 <?php
-$totalQty = 0.0;
-$totalAmount = 0.0;
-$mappedCount = 0;
-foreach ($items as $summaryItem) {
-    $totalQty += (float)($summaryItem['quantity'] ?? 0);
-    $totalAmount += (float)($summaryItem['total_price'] ?? 0);
-    if (!empty($summaryItem['is_mapped'])) {
-        $mappedCount++;
-    }
+/**
+ * Modern ERP Product Mapping Workspace — Map Purchase Bill Lines
+ * Matches Image 2, 3, 4 & 5 Format with User Refinements:
+ *  1. Purchased Product Baseline Details (Financial Valuation & Supplier Profile)
+ *  2. Category Hierarchy (3-Tier) & HSN Classification (Tier 1/2/3, Short Codes, QR Key) - Level Purpose removed
+ *  3. Product Attributes & Variations (Style Code, Title, Multi-Color Pills, Size Pills) - Description column removed
+ *  4. Product Variants Matrix Table Container (Auto SKU, Allocation, MRP, SP, Margin %)
+ */
+
+// Active Item Baseline Metrics
+$activeItemId = (int)($activeItem['id'] ?? 0);
+$purchasedQty = (float)($activeItem['quantity'] ?? 0);
+$unitPrice = (float)($activeItem['unit_price'] ?? 0);
+$taxAmount = (float)($activeItem['tax_amount'] ?? 0);
+$totalValuation = (float)($activeItem['total_price'] ?? ($purchasedQty * $unitPrice + $taxAmount));
+if ($totalValuation <= 0) {
+    $totalValuation = $purchasedQty * $unitPrice + $taxAmount;
 }
 
-$qrTabForType = static function (string $itemType): string {
-    switch (strtoupper($itemType)) {
-        case 'FABRIC_ROLL':
-            return 'fabric';
-        case 'RAW_MATERIAL':
-            return 'raw_material';
-        case 'OWN_PRODUCT':
-            return '';
-        default:
-            return 'third_party';
-    }
-};
+$gstRate = (float)($activeItem['cgst_value'] ?? 0) + (float)($activeItem['sgst_value'] ?? 0) + (float)($activeItem['igst_value'] ?? 0);
+if ($gstRate <= 0 && $taxAmount > 0 && ($purchasedQty * $unitPrice) > 0) {
+    $gstRate = round(($taxAmount / ($purchasedQty * $unitPrice)) * 100, 2);
+}
 
-$firstQrTab = '';
-foreach ($items as $billItem) {
-    $candidateTab = $qrTabForType((string)($billItem['item_type'] ?? ''));
-    if ($candidateTab !== '') {
-        $firstQrTab = $candidateTab;
+$taxModeLabel = ($activeItem['tax_treatment'] ?? '') === 'INCLUDED' ? 'Include GST' : 'Exclude GST';
+$activeHsn = !empty($activeItem['hsn_code']) ? trim((string)$activeItem['hsn_code']) : '';
+
+// Active Item Existing Mapped Configuration
+$activeCatId = (int)($activeItem['mapped_third_party_category_id'] ?? 0);
+$activeSubcatId = (int)($activeItem['mapped_third_party_subcategory_id'] ?? 0);
+$activeSubSubcatId = (int)($activeItem['mapped_third_party_sub_subcategory_id'] ?? 0);
+
+// Find short codes
+$activeCatCode = '';
+foreach ($categories as $cat) {
+    if ((int)$cat['id'] === $activeCatId) {
+        $activeCatCode = (string)($cat['code'] ?? '');
         break;
     }
 }
+$activeSubcatCode = '';
+foreach ($subcategories as $sc) {
+    if ((int)$sc['id'] === $activeSubcatId) {
+        $activeSubcatCode = (string)($sc['code'] ?? '');
+        break;
+    }
+}
+$activeSubSubcatCode = '';
+foreach ($subSubcategories as $ssc) {
+    if ((int)$ssc['id'] === $activeSubSubcatId) {
+        $activeSubSubcatCode = (string)($ssc['code'] ?? '');
+        break;
+    }
+}
+
+$initialQrKey = strtoupper(trim($activeCatCode . $activeSubcatCode . $activeSubSubcatCode));
+
+// Attributes
+$parsedAttrs = $activeItem['parsed_attributes'] ?? [];
+$activeStyleCode = $parsedAttrs['style_code'] ?? ($activeItem['product_code'] ?: ($activeItem['vendor_sku'] ?: 'GRM-STY-' . sprintf('%04d', $activeItemId)));
+$activeStyleName = $parsedAttrs['style_name'] ?? $activeItem['item_name'];
+
+// Parse multiple colors if present
+$activeColors = [];
+if (!empty($parsedAttrs['colors']) && is_array($parsedAttrs['colors'])) {
+    $activeColors = $parsedAttrs['colors'];
+} elseif (!empty($activeItem['color'])) {
+    $activeColors = array_filter(array_map('trim', explode(',', $activeItem['color'])));
+} elseif (!empty($existingVariants)) {
+    foreach ($existingVariants as $ev) {
+        if (!empty($ev['color']) && !in_array($ev['color'], $activeColors, true)) {
+            $activeColors[] = $ev['color'];
+        }
+    }
+}
+if (empty($activeColors)) {
+    $activeColors = [!empty($activeItem['color']) ? trim($activeItem['color']) : 'Blue'];
+}
+
+// Parse sizes
+$selectedSizes = [];
+if (!empty($parsedAttrs['sizes']) && is_array($parsedAttrs['sizes'])) {
+    $selectedSizes = $parsedAttrs['sizes'];
+} elseif (!empty($activeItem['size'])) {
+    $selectedSizes = array_map('trim', explode(',', $activeItem['size']));
+} elseif (!empty($existingVariants)) {
+    foreach ($existingVariants as $ev) {
+        if (!empty($ev['size']) && !in_array($ev['size'], $selectedSizes, true)) {
+            $selectedSizes[] = $ev['size'];
+        }
+    }
+}
+if (empty($selectedSizes)) {
+    $selectedSizes = ['S', 'M', 'L'];
+}
+
+$defaultMrp = (float)($activeItem['mrp'] ?? 0);
+if ($defaultMrp <= 0 && !empty($existingVariants[0]['mrp'])) {
+    $defaultMrp = (float)$existingVariants[0]['mrp'];
+}
+if ($defaultMrp <= 0) {
+    $defaultMrp = round($unitPrice > 0 ? ($unitPrice * 1.8) : 599, 2);
+}
+
+$defaultSp = (float)($activeItem['selling_price'] ?? 0);
+if ($defaultSp <= 0 && !empty($existingVariants[0]['selling_price'])) {
+    $defaultSp = (float)$existingVariants[0]['selling_price'];
+}
+if ($defaultSp <= 0) {
+    $defaultSp = round($unitPrice > 0 ? ($unitPrice * 1.5) : 499, 2);
+}
 ?>
 
-<div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
-    <div>
-        <h2 class="mb-1"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Map Purchase Bill</h2>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left me-1"></i>Back to Mapping List
-        </a>
-    </div>
-</div>
+<div class="container-fluid px-3 px-md-4 py-3">
 
-<!-- Bill header — mirrors the purchase bill create/view layout -->
-<div class="card border shadow-sm mb-4">
-    <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-receipt me-2 text-primary"></i>Purchase Bill &amp; Supplier Details</h5>
-        <span class="badge bg-primary-subtle text-primary border fs-6">
-            <?= e($purchase['purchase_number']) ?>
-        </span>
+    <!-- Top Breadcrumbs & Action Bar (Image 4: Scan/Labels button removed) -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="<?= url('purchases') ?>" class="text-decoration-none text-muted">Purchases</a></li>
+                <li class="breadcrumb-item"><a href="<?= url('purchases/mapping') ?>" class="text-decoration-none text-muted">Product Mapping</a></li>
+                <li class="breadcrumb-item"><a href="<?= url('purchases/mapping/bill/' . (int)$purchase['id']) ?>" class="text-decoration-none text-muted"><?= e($purchase['purchase_number']) ?></a></li>
+                <li class="breadcrumb-item active text-primary fw-semibold" aria-current="page">Map Finished Good</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-2">
+            <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1.5 shadow-sm">
+                <i class="bi bi-arrow-left"></i> Back to Register
+            </a>
+        </div>
     </div>
-    <div class="card-body p-4">
-        <div class="row g-3 align-items-stretch">
-            <div class="col-lg-3">
-                <div class="border rounded-3 bg-light h-100 p-3">
-                    <div class="text-muted small fw-semibold text-uppercase">Purchase Date</div>
-                    <div class="fw-bold fs-6 mt-1"><?= e(date('d M Y', strtotime($purchase['purchase_date']))) ?></div>
-                    <div class="small text-muted mt-2">Invoice / Bill No.</div>
-                    <div class="fw-semibold"><?= e($purchase['invoice_number'] ?: '—') ?></div>
-                </div>
-            </div>
-            <div class="col-lg-4">
-                <div class="border rounded-3 bg-light h-100 p-3">
-                    <div class="text-muted small fw-semibold text-uppercase">Supplier / Vendor</div>
-                    <div class="fw-bold fs-6 mt-1"><?= e($purchase['seller_company'] ?: $purchase['seller_name']) ?></div>
-                    <?php if (!empty($purchase['seller_company'])): ?>
-                        <div class="small text-muted"><?= e($purchase['seller_name']) ?></div>
-                    <?php endif; ?>
-                    <?php if (!empty($purchase['notes'])): ?>
-                        <div class="small text-muted mt-2 fst-italic">“<?= e($purchase['notes']) ?>”</div>
-                    <?php endif; ?>
-                </div>
-            </div>
-            <div class="col-lg-2">
-                <div class="border rounded-3 bg-white h-100 p-3 text-center">
-                    <div class="text-muted small fw-semibold text-uppercase">Bill Lines</div>
-                    <div class="fw-bold fs-3 text-primary mt-1"><?= count($items) ?></div>
-                    <div class="small text-muted"><?= $mappedCount ?> mapped</div>
-                </div>
-            </div>
-            <div class="col-lg-3">
-                <div class="border rounded-3 bg-success-subtle h-100 p-3 text-center">
-                    <div class="text-muted small fw-semibold text-uppercase">Purchased Quantity</div>
-                    <div class="fw-bold fs-3 text-success mt-1"><?= number_format($totalQty, 2) ?></div>
-                    <div class="small text-muted">Line total: ₹<?= number_format($totalAmount, 2) ?></div>
-                </div>
-            </div>
-        </div>
 
-        <?php if (!empty($items)): ?>
-        <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
-            <button type="button" class="btn btn-outline-info btn-sm"
-                    data-bs-toggle="collapse" data-bs-target="#complementaryProductPanel"
-                    aria-expanded="false" aria-controls="complementaryProductPanel">
-                <i class="bi bi-gift me-1"></i>Select Complementary Products
-            </button>
-            <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Complementary products are packed with the main product and do not change the bill total.</span>
-        </div>
-        <div class="collapse mt-3" id="complementaryProductPanel">
-            <div class="border rounded-3 bg-light p-3">
-                <div class="row g-2">
-                    <?php foreach ($items as $item): ?>
-                        <?php $itemId = (int)$item['id']; ?>
-                        <div class="col-md-4 col-xl-3">
-                            <div class="form-check border rounded bg-white p-2 ps-5 h-100">
-                                <input class="form-check-input" type="checkbox"
-                                       name="items[<?= $itemId ?>][is_complementary]"
-                                       id="bill_complementary_<?= $itemId ?>" value="1"
-                                       form="formSavePurchaseBillMapping"
-                                       data-complementary-item="<?= $itemId ?>"
-                                       <?= !empty($item['is_complementary']) ? 'checked' : '' ?>>
-                                <label class="form-check-label" for="bill_complementary_<?= $itemId ?>">
-                                    <span class="fw-semibold"><?= e($item['item_name']) ?></span>
-                                    <small class="text-muted d-block">Qty: <?= number_format((float)$item['quantity']) ?> <?= e($item['unit']) ?></small>
-                                </label>
-                            </div>
+    <!-- Header Banner -->
+    <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #ffffff 0%, #f8faff 100%); border-left: 4px solid #0d6efd !important;">
+        <div class="card-body p-3 p-md-4">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-3 bg-primary-subtle text-primary p-3 d-flex align-items-center justify-content-center" style="width: 52px; height: 52px;">
+                        <i class="bi bi-diagram-3-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                            <h4 class="mb-0 fw-bold text-dark">Map Finished Good to Catalog: <span class="text-primary"><?= e($activeItem['item_name']) ?></span></h4>
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle small">Master Catalog Mapping</span>
                         </div>
+                        <p class="text-muted small mb-0">Define 3-tier category hierarchy, attributes (sizes, colors), HSN classification, retail pricing, and variant matrix for purchased product <strong><?= e($activeItem['item_name']) ?></strong>.</p>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1.5 font-monospace fs-7">
+                        <i class="bi bi-receipt me-1"></i>Purchase Bill #<?= e($purchase['purchase_number']) ?>
+                    </span>
+                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1.5 fs-7">
+                        <i class="bi bi-file-earmark-text me-1"></i>Supplier Inv: <?= e($purchase['invoice_number'] ?: '—') ?>
+                    </span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 fs-7">
+                        <i class="bi bi-check-circle-fill me-1"></i>Paid
+                    </span>
+                    <span class="badge <?= !empty($purchase['is_inwarded']) ? 'bg-info-subtle text-info border-info-subtle' : 'bg-warning-subtle text-warning border-warning-subtle' ?> border px-2.5 py-1.5 fs-7">
+                        <i class="bi bi-box-seam me-1"></i><?= !empty($purchase['is_inwarded']) ? 'Inwarded' : 'Pending Inward' ?>
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Multi-Item Bill Line Stepper (when bill has multiple items) -->
+    <?php if (count($items) > 1): ?>
+        <div class="card border shadow-sm mb-4 bg-light-subtle">
+            <div class="card-body p-2.5 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <span class="text-uppercase text-muted fw-bold small me-1"><i class="bi bi-list-ol me-1"></i>Bill Lines (<?= count($items) ?>):</span>
+                    <?php foreach ($items as $idx => $lineItem): ?>
+                        <?php
+                            $isThisActive = ((int)$lineItem['id'] === $activeItemId);
+                            $isLineMapped = !empty($lineItem['is_mapped']);
+                        ?>
+                        <a href="<?= url('purchases/mapping/bill/' . (int)$purchase['id'] . '?item_id=' . (int)$lineItem['id']) ?>"
+                           class="btn btn-sm d-inline-flex align-items-center gap-1.5 <?= $isThisActive ? 'btn-primary shadow-xs fw-semibold' : 'btn-outline-secondary bg-white' ?>">
+                            <span class="badge rounded-pill <?= $isThisActive ? 'bg-white text-primary' : 'bg-secondary-subtle text-secondary' ?>"><?= $idx + 1 ?></span>
+                            <span><?= e($lineItem['item_name']) ?></span>
+                            <small class="opacity-75">(<?= (float)$lineItem['quantity'] ?> <?= e($lineItem['unit']) ?>)</small>
+                            <?php if ($isLineMapped): ?>
+                                <i class="bi bi-check2-circle text-success" title="Mapped"></i>
+                            <?php else: ?>
+                                <span class="badge bg-warning text-dark py-0.5 px-1.5" style="font-size: 0.65rem;">Pending</span>
+                            <?php endif; ?>
+                        </a>
                     <?php endforeach; ?>
                 </div>
+                <div class="small text-muted">
+                    Switch product lines to map them individually
+                </div>
             </div>
         </div>
-        <?php endif; ?>
-    </div>
-</div>
+    <?php endif; ?>
 
-<?php if (empty($items)): ?>
-    <div class="alert alert-warning">This purchase bill has no product lines to map.</div>
-<?php else: ?>
-    <form method="POST" action="<?= url('purchases/mapping/save') ?>" id="formSavePurchaseBillMapping">
+    <!-- Main Mapping Form -->
+    <form method="POST" action="<?= url('purchases/mapping/save') ?>" id="formMapProductBill">
         <?= CSRF::field() ?>
         <input type="hidden" name="purchase_id" value="<?= (int)$purchase['id'] ?>">
+        <input type="hidden" name="item_id" id="hiddenItemId" value="<?= $activeItemId ?>">
+        <input type="hidden" name="mapping_action" value="create_new">
+        <input type="hidden" name="save_mode" id="hiddenSaveMode" value="complete">
 
+        <!-- ========================================================================= -->
+        <!-- SECTION 1: PURCHASED PRODUCT BASELINE DETAILS (Image 2)                  -->
+        <!-- ========================================================================= -->
         <div class="card border shadow-sm mb-4">
-            <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div>
-                    <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-success"></i>Product Lines &amp; Catalog Mapping</h5>
-                    <span class="small text-muted">Category is required. MRP and selling price are saved with the mapped catalog variant.</span>
-                </div>
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <?php if (hasPermission('production_purchase_mapping', 'view')): ?>
-                    <a href="<?= url('production/purchases/mapping/catalog') ?>" target="_blank" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1.5">
-                        <i class="bi bi-collection"></i> Third-Party Catalog
-                    </a>
-                    <?php endif; ?>
-                    <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#modalAddBillProduct">
-                        <i class="bi bi-plus-circle-fill"></i> Add Product Line to Bill
-                    </button>
+                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">1</span>
+                    <h5 class="mb-0 fw-bold text-dark">Purchased Product Baseline Details</h5>
                 </div>
+                <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Procurement baseline from Supplier Bill</span>
             </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0 bill-mapping-table">
-                        <thead class="table-light">
+            <div class="card-body p-4">
+                <!-- 3 Top Reference Panels -->
+                <div class="row g-3 mb-4">
+                    <!-- Column 1: Product Identity -->
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 bg-light-subtle h-100">
+                            <div class="d-flex align-items-center gap-1.5 text-uppercase text-muted fw-bold small mb-2">
+                                <i class="bi bi-box-seam text-primary"></i> Product Identity
+                            </div>
+                            <div class="fw-bold fs-5 text-dark mb-1"><?= e($activeItem['item_name']) ?></div>
+                            <div class="d-flex flex-wrap gap-1.5 align-items-center mt-2">
+                                <span class="badge bg-light text-dark border font-monospace">
+                                    Item Code: <?= e($activeItem['product_code'] ?: ($activeItem['vendor_sku'] ?: 'FG-' . sprintf('%04d', $activeItemId))) ?>
+                                </span>
+                                <span class="badge bg-secondary-subtle text-secondary border">Unit: <?= e($activeItem['unit'] ?: 'Pieces') ?></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 2: Supplier Profile -->
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 bg-light-subtle h-100">
+                            <div class="d-flex align-items-center gap-1.5 text-uppercase text-muted fw-bold small mb-2">
+                                <i class="bi bi-building text-info"></i> Supplier Profile
+                            </div>
+                            <div class="fw-bold fs-6 text-dark mb-1">
+                                <?= e($purchase['seller_company'] ?: $purchase['seller_name']) ?>
+                            </div>
+                            <div class="small text-muted d-flex align-items-center gap-2 flex-wrap">
+                                <?php if (!empty($purchase['seller_phone'])): ?>
+                                    <span><i class="bi bi-telephone me-1"></i><?= e($purchase['seller_phone']) ?></span>
+                                <?php endif; ?>
+                                <span><i class="bi bi-shield-check me-1"></i>GSTIN: <?= e($purchase['seller_gst'] ?: 'Unregistered') ?></span>
+                            </div>
+                            <div class="small text-muted mt-1 text-truncate" title="<?= e($purchase['seller_address'] ?: '—') ?>">
+                                <i class="bi bi-geo-alt me-1"></i><?= e(trim(($purchase['seller_city'] ?? '') . ', ' . ($purchase['seller_state'] ?? ''), ', ') ?: ($purchase['seller_address'] ?: '—')) ?>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Column 3: Invoice & Accounting References -->
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 bg-light-subtle h-100">
+                            <div class="d-flex align-items-center gap-1.5 text-uppercase text-muted fw-bold small mb-2">
+                                <i class="bi bi-receipt-cutoff text-success"></i> Invoice &amp; Accounting References
+                            </div>
+                            <div class="small mb-1">
+                                <span class="text-muted">Purchase Date:</span> <strong><?= date('d M Y', strtotime($purchase['purchase_date'])) ?></strong>
+                                <span class="mx-1 text-muted">·</span>
+                                <span class="text-muted">Bill Ref:</span> <strong class="text-primary">#<?= e($purchase['purchase_number']) ?></strong>
+                            </div>
+                            <div class="small mb-1">
+                                <span class="text-muted">Payment:</span> <span class="badge bg-success-subtle text-success border border-success-subtle py-0.5 px-1.5">Cash / Paid</span>
+                                <span class="mx-1 text-muted">·</span>
+                                <span class="text-muted">Bill Total:</span> <strong class="text-success">₹<?= number_format((float)$purchase['total_amount'], 2) ?></strong>
+                            </div>
+                            <div class="small text-muted">
+                                <span class="text-muted">Vendor Inv:</span> <strong><?= e($purchase['invoice_number'] ?: '—') ?></strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8-Column Valuation Table (Image 2) -->
+                <div class="table-responsive rounded-3 border">
+                    <table class="table table-bordered align-middle text-center mb-0">
+                        <thead class="table-light small text-uppercase text-muted">
                             <tr>
-                                <th style="width:40px;">#</th>
-                                <th style="min-width:230px;">Product / Bill Line</th>
-                                <th class="text-end" style="min-width:90px;">Bill Qty</th>
-                                <th class="text-end" style="min-width:100px;">Purchase Rate</th>
-                                <th class="text-end" style="min-width:110px;">Line Amount</th>
-                                <th class="text-end" style="min-width:110px;">MRP (₹) *</th>
-                                <th class="text-end" style="min-width:110px;">Selling (₹) *</th>
-                                <th style="min-width:165px;">Category *</th>
-                                <th style="min-width:165px;">Subcategory</th>
-                                <th style="min-width:165px;">Sub-Subcategory</th>
-                                <th class="text-center" style="min-width:105px;">Attributes</th>
-                                <th style="min-width:130px;">QR / GRN</th>
-                                <th class="text-center" style="min-width:70px;">Compl.</th>
-                                <th class="text-center" style="width:50px;">Action</th>
+                                <th style="min-width: 110px;">Purchased Qty</th>
+                                <th style="min-width: 90px;">Unit</th>
+                                <th style="min-width: 140px;">Supplier Unit Cost</th>
+                                <th style="min-width: 120px;">Tax Mode</th>
+                                <th style="min-width: 110px;">HSN Code</th>
+                                <th style="min-width: 110px;">GST Rate</th>
+                                <th style="min-width: 120px;">Tax Amount</th>
+                                <th style="min-width: 170px;" class="bg-success-subtle text-success fw-bold">Total Line Valuation</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($items as $index => $item): ?>
-                                <?php
-                                    $itemId = (int)$item['id'];
-                                    $itemTab = $qrTabForType((string)($item['item_type'] ?? 'THIRD_PARTY'));
-                                    $itemTypeLabel = str_replace('_', ' ', (string)$item['item_type']);
-                                ?>
-                                <tr data-mapping-item data-item-id="<?= $itemId ?>" class="fw-normal">
-                                    <td class="text-muted fw-bold"><?= $index + 1 ?></td>
-                                    <td>
-                                        <div class="fw-bold text-dark"><?= e($item['item_name']) ?></div>
-                                        <div class="d-flex flex-wrap gap-1 mt-1">
-                                            <span class="badge bg-secondary-subtle text-secondary border"><?= e($itemTypeLabel) ?></span>
-                                            <?php if (!empty($item['vendor_sku'])): ?>
-                                                <span class="badge bg-primary-subtle text-primary border font-monospace">SKU: <?= e($item['vendor_sku']) ?></span>
-                                            <?php elseif (!empty($item['product_code'])): ?>
-                                                <span class="badge bg-primary-subtle text-primary border font-monospace"><?= e($item['product_code']) ?></span>
-                                            <?php endif; ?>
-                                            <?php if (!empty($item['roll_number'])): ?>
-                                                <span class="badge bg-light text-dark border">Roll: <?= e($item['roll_number']) ?></span>
-                                            <?php endif; ?>
-                                            <?php if (!empty($item['color'])): ?><span class="badge bg-light text-dark border"><?= e($item['color']) ?></span><?php endif; ?>
-                                            <?php if (!empty($item['size'])): ?><span class="badge bg-light text-dark border"><?= e($item['size']) ?></span><?php endif; ?>
-                                            <?php if (!empty($item['is_mapped'])): ?>
-                                                <span class="badge bg-success-subtle text-success border"><i class="bi bi-check2-circle me-1"></i>Mapped</span>
-                                            <?php else: ?>
-                                                <span class="badge bg-warning-subtle text-warning border"><i class="bi bi-clock-history me-1"></i>Pending</span>
-                                            <?php endif; ?>
-                                            <span class="badge bg-info-subtle text-info border <?= !empty($item['is_complementary']) ? '' : 'd-none' ?>"
-                                                  data-complementary-status="<?= $itemId ?>">Complementary</span>
-                                        </div>
-                                        <?php if (!empty($item['roll_number']) && (!empty($item['start_code']) || !empty($item['end_code']))): ?>
-                                            <div class="small text-muted mt-1 font-monospace">
-                                                QR Range: <?= e($item['start_code'] ?: '—') ?> → <?= e($item['end_code'] ?: '—') ?>
-                                            </div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="text-end fw-bold"><?= number_format((float)$item['quantity'], 2) ?> <small class="text-muted"><?= e($item['unit']) ?></small></td>
-                                    <td class="text-end">₹<?= number_format((float)$item['unit_price'], 2) ?></td>
-                                    <td class="text-end fw-semibold">₹<?= number_format((float)$item['total_price'], 2) ?></td>
-                                    <td>
-                                        <input type="number" name="items[<?= $itemId ?>][mrp]" id="mrp_<?= $itemId ?>"
-                                               class="form-control form-control-sm text-end" min="0.01" step="0.01" required
-                                               value="<?= (float)$item['mrp'] > 0 ? e(number_format((float)$item['mrp'], 2, '.', '')) : '' ?>"
-                                               placeholder="0.00">
-                                    </td>
-                                    <td>
-                                        <input type="number" name="items[<?= $itemId ?>][selling_price]" id="selling_price_<?= $itemId ?>"
-                                               class="form-control form-control-sm text-end" min="0.01" step="0.01" required
-                                               value="<?= (float)$item['selling_price'] > 0 ? e(number_format((float)$item['selling_price'], 2, '.', '')) : '' ?>"
-                                               placeholder="0.00">
-                                    </td>
-                                    <td>
-                                        <select name="items[<?= $itemId ?>][category_id]" id="category_<?= $itemId ?>"
-                                                class="form-select form-select-sm" data-category required>
-                                            <option value="">-- Select Category --</option>
-                                            <?php foreach ($categories as $cat): ?>
-                                                <option value="<?= (int)$cat['id'] ?>" <?= ((int)$item['mapped_third_party_category_id'] === (int)$cat['id']) ? 'selected' : '' ?>>
-                                                    <?= e($cat['name']) ?> (<?= e($cat['code']) ?>)
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select name="items[<?= $itemId ?>][subcategory_id]" id="subcategory_<?= $itemId ?>"
-                                                class="form-select form-select-sm" data-subcategory disabled>
-                                            <option value="">-- Select Subcategory --</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select name="items[<?= $itemId ?>][sub_subcategory_id]" id="subsubcategory_<?= $itemId ?>"
-                                                class="form-select form-select-sm" data-subsubcategory disabled>
-                                            <option value="">-- Select Sub-Subcategory --</option>
-                                        </select>
-                                    </td>
-                                    <td class="text-center">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" data-toggle-attributes="<?= $itemId ?>"
-                                                title="View / Edit Attributes &amp; Specifications">
-                                            <i class="bi bi-sliders"></i>Specs
-                                        </button>
-                                    </td>
-                                    <td>
-                                        <?php if (strtoupper((string)($item['item_type'] ?? '')) !== 'OWN_PRODUCT'): ?>
-                                        <?php if (!empty($item['qr_generation_id'])): ?>
-                                            <a href="<?= url('production/qr-generations/view/' . (int)$item['qr_generation_id'] . ($itemTab !== '' ? '?tab=' . e($itemTab) : '')) ?>"
-                                               class="badge bg-dark-subtle text-dark border text-decoration-none d-block mb-1">
-                                                <i class="bi bi-qr-code me-1"></i><?= e($item['qr_batch_code'] ?: 'QR #' . (int)$item['qr_generation_id']) ?>
-                                            </a>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary border d-block mb-1">No QR batch</span>
-                                        <?php endif; ?>
-                                        <?php endif; ?>
-                                        <?php if (!empty($item['grn_id'])): ?>
-                                            <a href="<?= url('production/inwards/view/' . (int)$item['grn_id']) ?>"
-                                               class="badge bg-primary-subtle text-primary border text-decoration-none">
-                                                <i class="bi bi-truck me-1"></i><?= e($item['grn_number'] ?: 'GRN #' . (int)$item['grn_id']) ?>
-                                            </a>
-                                        <?php else: ?>
-                                            <span class="badge bg-secondary-subtle text-secondary border">No GRN</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td class="text-center">
-                                        <input class="form-check-input" type="checkbox"
-                                               name="items[<?= $itemId ?>][is_complementary]"
-                                               id="row_complementary_<?= $itemId ?>" value="1"
-                                               data-complementary-item="<?= $itemId ?>"
-                                               <?= !empty($item['is_complementary']) ? 'checked' : '' ?>>
-                                    </td>
-                                    <td class="text-center">
-                                        <?php if (empty($item['is_mapped'])): ?>
-                                            <button type="button" class="btn btn-sm btn-outline-danger p-1" title="Remove line from purchase bill" onclick="deleteBillProduct(<?= $itemId ?>, '<?= e(addslashes($item['item_name'])) ?>')">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-
-                                <tr id="attr_row_<?= $itemId ?>" class="d-none" data-attribute-row="<?= $itemId ?>">
-                                    <td colspan="14" class="bg-light p-3">
-                                        <div class="border rounded-3 p-3 bg-white shadow-xs">
-                                            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
-                                                <h6 class="fw-bold mb-0 text-dark">
-                                                    <i class="bi bi-sliders text-success me-1.5"></i>Category Attributes &amp; Specifications for <span class="text-primary"><?= e($item['item_name']) ?></span>
-                                                </h6>
-                                                <button type="button" class="btn-close btn-sm" aria-label="Close" onclick="document.getElementById('attr_row_<?= $itemId ?>').classList.add('d-none')"></button>
-                                            </div>
-                                            <div data-attributes-notice class="text-muted small text-center py-2">
-                                                <i class="bi bi-info-circle me-1"></i>Select a category above to load configured specifications.
-                                            </div>
-                                            <div data-attributes-fields class="row g-3 d-none"></div>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                        <tfoot class="table-light">
                             <tr>
-                                <th colspan="2" class="text-end">Bill Totals</th>
-                                <th class="text-end"><?= number_format($totalQty, 2) ?></th>
-                                <th colspan="2"></th>
-                                <th colspan="9" class="text-start">
-                                    <span class="small text-muted">Total line value: <strong class="text-dark">₹<?= number_format($totalAmount, 2) ?></strong></span>
-                                </th>
+                                <td class="fw-bold fs-5 text-primary"><?= number_format($purchasedQty, 3) ?></td>
+                                <td class="fw-semibold text-secondary"><?= e($activeItem['unit'] ?: 'Pieces') ?></td>
+                                <td class="fw-semibold text-dark fs-6">₹<?= number_format($unitPrice, 2) ?></td>
+                                <td>
+                                    <span class="badge <?= ($activeItem['tax_treatment'] ?? '') === 'INCLUDED' ? 'bg-info-subtle text-info border-info-subtle' : 'bg-secondary-subtle text-secondary' ?> border">
+                                        <?= e($taxModeLabel) ?>
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="font-monospace fw-semibold"><?= e($activeHsn ?: '—') ?></span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border"><?= $gstRate > 0 ? number_format($gstRate, 2) . '% GST' : 'Exempted' ?></span>
+                                </td>
+                                <td class="fw-semibold text-dark">₹<?= number_format($taxAmount, 2) ?></td>
+                                <td class="fw-bold fs-5 text-success" style="background-color: #e8f5e9;">
+                                    ₹<?= number_format($totalValuation, 2) ?>
+                                </td>
                             </tr>
-                        </tfoot>
+                        </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-5">
-            <div class="small text-muted">
-                <i class="bi bi-shield-check me-1 text-success"></i>
-                Saving creates/reuses GRNs. Mapped items are available for manual QR generation; inventory is posted later from the QR batch’s <strong>Add to Stock</strong> button.
+        <!-- ========================================================================= -->
+        <!-- SECTION 2: CATEGORY HIERARCHY (3-TIER) & HSN CLASSIFICATION (Image 1 Refined) -->
+        <!-- ========================================================================= -->
+        <div class="card border shadow-sm mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">2</span>
+                    <h5 class="mb-0 fw-bold text-dark">Category Hierarchy (3-Tier) &amp; HSN Classification</h5>
+                </div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Required</span>
             </div>
-            <div class="d-flex gap-2">
-                <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">Cancel</a>
-                <button type="submit" class="btn btn-primary fw-semibold btn-lg">
-                    <i class="bi bi-check-circle me-1"></i>Save All Mappings
-                </button>
+            <div class="card-body p-4">
+                <!-- 3-Tier Hierarchy Table (Level Purpose removed as per Image 1) -->
+                <div class="table-responsive rounded-3 border mb-3">
+                    <table class="table table-bordered align-middle mb-0">
+                        <thead class="table-light small text-uppercase text-muted">
+                            <tr>
+                                <th style="width: 260px;"><i class="bi bi-diagram-2 me-1"></i>Hierarchy Tier</th>
+                                <th><i class="bi bi-check2-square me-1"></i>Category Selection</th>
+                                <th style="width: 180px;"><i class="bi bi-upc-scan me-1"></i>Short Code</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Tier 1: Main Category -->
+                            <tr>
+                                <td>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 me-1">Tier 1</span>
+                                    <strong class="text-dark">Main Category</strong> <span class="text-danger">*</span>
+                                </td>
+                                <td>
+                                    <div class="input-group">
+                                        <select class="form-select" id="selectTier1" name="category_id" required>
+                                            <option value="">-- Select Main Category --</option>
+                                            <?php foreach ($categories as $cat): ?>
+                                                <option value="<?= (int)$cat['id'] ?>"
+                                                        data-code="<?= e($cat['code'] ?? '') ?>"
+                                                        <?= ($activeCatId === (int)$cat['id']) ? 'selected' : '' ?>>
+                                                    <?= e($cat['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn btn-outline-primary" type="button" data-bs-toggle="modal" data-bs-target="#modalQuickAddCategory" title="Quick Add Category">
+                                            <i class="bi bi-plus-circle me-1"></i>New
+                                        </button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control text-uppercase font-monospace text-center fw-bold"
+                                           id="inputTier1Code" name="category_code" maxlength="10" placeholder="e.g. NF"
+                                           value="<?= e($activeCatCode) ?>">
+                                </td>
+                            </tr>
+
+                            <!-- Tier 2: Sub Category -->
+                            <tr>
+                                <td>
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle px-2.5 py-1 me-1">Tier 2</span>
+                                    <strong class="text-dark">Sub Category</strong>
+                                </td>
+                                <td>
+                                    <div class="input-group">
+                                        <select class="form-select" id="selectTier2" name="subcategory_id">
+                                            <option value="">-- Select Sub Category --</option>
+                                            <?php foreach ($subcategories as $sc): ?>
+                                                <option value="<?= (int)$sc['id'] ?>"
+                                                        data-code="<?= e($sc['code'] ?? '') ?>"
+                                                        <?= ($activeSubcatId === (int)$sc['id']) ? 'selected' : '' ?>>
+                                                    <?= e($sc['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn btn-outline-info" type="button" data-bs-toggle="modal" data-bs-target="#modalQuickAddSubcategory" title="Quick Add Subcategory">
+                                            <i class="bi bi-plus-circle me-1"></i>New
+                                        </button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control text-uppercase font-monospace text-center fw-bold"
+                                           id="inputTier2Code" name="subcategory_code" maxlength="10" placeholder="e.g. FL"
+                                           value="<?= e($activeSubcatCode) ?>">
+                                </td>
+                            </tr>
+
+                            <!-- Tier 3: Sub Sub Category -->
+                            <tr>
+                                <td>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 me-1">Tier 3</span>
+                                    <strong class="text-dark">Sub Sub Category</strong>
+                                </td>
+                                <td>
+                                    <div class="input-group">
+                                        <select class="form-select" id="selectTier3" name="sub_subcategory_id">
+                                            <option value="">-- Select Sub Sub Category --</option>
+                                            <?php foreach ($subSubcategories as $ssc): ?>
+                                                <option value="<?= (int)$ssc['id'] ?>"
+                                                        data-code="<?= e($ssc['code'] ?? '') ?>"
+                                                        <?= ($activeSubSubcatId === (int)$ssc['id']) ? 'selected' : '' ?>>
+                                                    <?= e($ssc['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn btn-outline-success" type="button" data-bs-toggle="modal" data-bs-target="#modalQuickAddSubSubcategory" title="Quick Add Sub-Subcategory">
+                                            <i class="bi bi-plus-circle me-1"></i>New
+                                        </button>
+                                    </div>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control text-uppercase font-monospace text-center fw-bold"
+                                           id="inputTier3Code" name="sub_subcategory_code" maxlength="10" placeholder="e.g. NS"
+                                           value="<?= e($activeSubSubcatCode) ?>">
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Hierarchy Summary Strip -->
+                <div class="rounded-3 p-3 bg-light border d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-folder2-open text-primary fs-5"></i>
+                        <span class="fw-bold text-dark small text-uppercase">Full Hierarchy Path:</span>
+                        <span class="text-primary fw-semibold" id="labelHierarchyPath">
+                            <?= e($activeCatCode ? ($activeCatCode . ' > ' . ($activeSubcatCode ?: '—') . ' > ' . ($activeSubSubcatCode ?: '—')) : 'Select categories to build path') ?>
+                        </span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="inputQrKey" class="fw-bold text-dark small text-uppercase mb-0">QR Key:</label>
+                        <input type="text" class="form-control form-control-sm font-monospace fw-bold text-uppercase text-center"
+                               style="width: 140px; letter-spacing: 1.5px;" id="inputQrKey" name="qr_key"
+                               value="<?= e($initialQrKey) ?>" placeholder="e.g. NFFLNS">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 3: PRODUCT ATTRIBUTES & VARIATIONS (Image 2 Refined)              -->
+        <!-- ========================================================================= -->
+        <div class="card border shadow-sm mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">3</span>
+                    <h5 class="mb-0 fw-bold text-dark">Product Attributes &amp; Variations</h5>
+                </div>
+                <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Required</span>
+            </div>
+            <div class="card-body p-4">
+                <!-- 2-Column Table (Attribute Description & Usage removed as per Image 2) -->
+                <div class="table-responsive rounded-3 border mb-0">
+                    <table class="table table-bordered align-middle mb-0">
+                        <thead class="table-light small text-uppercase text-muted">
+                            <tr>
+                                <th style="width: 280px;"><i class="bi bi-sliders me-1"></i>Attribute Name</th>
+                                <th><i class="bi bi-input-cursor me-1"></i>Configured Value / Selection Input</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Product Style Code -->
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">Product Style Code <span class="text-danger">*</span></div>
+                                    <small class="text-muted">(Master Parent SKU Ref)</small>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control font-monospace fw-bold text-uppercase"
+                                           id="inputStyleCode" name="style_code" required
+                                           value="<?= e($activeStyleCode) ?>" placeholder="e.g. GRM-STY-0001">
+                                </td>
+                            </tr>
+
+                            <!-- Product Style Name -->
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">Product Style Name <span class="text-danger">*</span></div>
+                                    <small class="text-muted">(Retail Catalog Title)</small>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control fw-semibold"
+                                           id="inputStyleName" name="style_name" required
+                                           value="<?= e($activeStyleName) ?>" placeholder="e.g. Maxi Dress">
+                                </td>
+                            </tr>
+
+                            <!-- HSN Code -->
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">HSN Code</div>
+                                    <small class="text-muted">(GST Classification)</small>
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control font-monospace"
+                                           id="inputHsnCode" name="hsn_code"
+                                           value="<?= e($activeHsn) ?>" placeholder="e.g. 6543">
+                                </td>
+                            </tr>
+
+                            <!-- Color / Fabric Variation (Multi-select + Custom Add Input) -->
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">Color / Fabric Variation <span class="text-danger">*</span></div>
+                                    <small class="text-muted">(Visual / Aesthetic Attr)</small>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="small fw-bold text-uppercase text-muted">Choose Colors (Multiple Selection):</div>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btnSelectAllColors">Select All</button>
+                                            <span class="text-muted">|</span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" id="btnClearColors">Clear</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Standard Color Toggle Buttons -->
+                                    <div class="d-flex flex-wrap gap-1.5 mb-3" id="containerColorPills">
+                                        <?php foreach ($standardColors as $col): ?>
+                                            <?php $isColChecked = in_array(strtolower($col), array_map('strtolower', $activeColors), true); ?>
+                                            <div class="form-check form-check-inline m-0">
+                                                <input class="btn-check color-checkbox" type="checkbox"
+                                                       id="color_pill_<?= md5($col) ?>" name="colors[]"
+                                                       value="<?= e($col) ?>" autocomplete="off"
+                                                       <?= $isColChecked ? 'checked' : '' ?>>
+                                                <label class="btn btn-sm <?= $isColChecked ? 'btn-primary' : 'btn-outline-secondary' ?> px-3 py-1 fw-bold"
+                                                       for="color_pill_<?= md5($col) ?>">
+                                                    <?= e($col) ?>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+
+                                    <!-- Custom Color Adder Input Field -->
+                                    <div class="input-group input-group-sm" style="max-width: 400px;">
+                                        <input type="text" class="form-control" id="inputCustomColor" placeholder="Add custom color name (e.g. Lavender, Mint, Peach)">
+                                        <button class="btn btn-outline-primary fw-semibold" type="button" id="btnAddCustomColor">
+                                            <i class="bi bi-plus-circle me-1"></i>Add Color
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+
+                            <!-- Size Attributes & Sizing Matrix -->
+                            <tr>
+                                <td>
+                                    <div class="fw-bold text-dark">Size Attributes <span class="text-danger">*</span></div>
+                                    <small class="text-muted">(Variant Sizing Matrix)</small>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="small fw-bold text-uppercase text-muted">Choose Sizes:</div>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btnSelectAllSizes">Select All</button>
+                                            <span class="text-muted">|</span>
+                                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none text-danger" id="btnClearSizes">Clear</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Standard Size Toggle Buttons -->
+                                    <div class="d-flex flex-wrap gap-1.5 mb-3" id="containerSizePills">
+                                        <?php foreach ($standardSizes as $size): ?>
+                                            <?php $isSizeChecked = in_array($size, $selectedSizes, true); ?>
+                                            <div class="form-check form-check-inline m-0">
+                                                <input class="btn-check size-checkbox" type="checkbox"
+                                                       id="size_pill_<?= md5($size) ?>" name="sizes[]"
+                                                       value="<?= e($size) ?>" autocomplete="off"
+                                                       <?= $isSizeChecked ? 'checked' : '' ?>>
+                                                <label class="btn btn-sm <?= $isSizeChecked ? 'btn-primary' : 'btn-outline-secondary' ?> px-3 py-1 fw-bold"
+                                                       for="size_pill_<?= md5($size) ?>">
+                                                    <?= e($size) ?>
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+
+                                    <!-- Custom Size Adder -->
+                                    <div class="input-group input-group-sm" style="max-width: 400px;">
+                                        <input type="text" class="form-control" id="inputCustomSize" placeholder="Add custom size (e.g. 4XL, 32, 34)">
+                                        <button class="btn btn-outline-primary fw-semibold" type="button" id="btnAddCustomSize">
+                                            <i class="bi bi-plus-circle me-1"></i>Add Size
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- SECTION 4: PRODUCT VARIANTS MATRIX TABLE CONTAINER                        -->
+        <!-- ========================================================================= -->
+        <div class="card border shadow-sm mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-primary text-white rounded-pill px-2.5 py-1">4</span>
+                    <h5 class="mb-0 fw-bold text-dark">Product Variants Matrix Table Container</h5>
+                </div>
+                <!-- Batch Price Replicator Controls -->
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <div class="input-group input-group-sm" style="width: 170px;">
+                        <span class="input-group-text bg-light text-muted">MRP ₹</span>
+                        <input type="number" class="form-control text-end" id="batchInputMrp" step="0.01" min="0" value="<?= number_format($defaultMrp, 2, '.', '') ?>">
+                    </div>
+                    <div class="input-group input-group-sm" style="width: 180px;">
+                        <span class="input-group-text bg-light text-muted">SP ₹</span>
+                        <input type="number" class="form-control text-end" id="batchInputSp" step="0.01" min="0" value="<?= number_format($defaultSp, 2, '.', '') ?>">
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnReplicatePricing" title="Copy MRP & Selling Price to all variant rows">
+                        <i class="bi bi-arrow-repeat me-1"></i>Replicate to All
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0 text-center" id="tableVariantMatrix">
+                        <thead class="table-light small text-uppercase text-muted">
+                            <tr>
+                                <th style="width: 40px;">#</th>
+                                <th style="width: 100px;">Size</th>
+                                <th style="width: 130px;">Color</th>
+                                <th style="min-width: 190px;">Variant SKU</th>
+                                <th style="width: 120px;">Allocated Qty</th>
+                                <th style="width: 130px;">Purchase Rate (₹)</th>
+                                <th style="width: 130px;">MRP (₹) <span class="text-danger">*</span></th>
+                                <th style="width: 130px;">Selling Price (₹) <span class="text-danger">*</span></th>
+                                <th style="width: 110px;">Margin (%)</th>
+                                <th style="min-width: 140px;">Barcode / QR Status</th>
+                                <th style="width: 60px;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyVariantMatrix">
+                            <!-- Populated dynamically via JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Live Quantity & Margin Allocation Verification Bar -->
+                <div class="p-3 bg-light-subtle border-top d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="small fw-bold text-uppercase text-muted">Allocation Summary:</div>
+                        <div class="fs-6" id="labelAllocationStatus">
+                            <!-- JS updates this -->
+                        </div>
+                    </div>
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle me-1"></i>Variant SKUs and pricing will sync to the Third-Party Master Catalog upon save.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================================= -->
+        <!-- ACTION FOOTER BAR (Image 3: Save Draft removed)                           -->
+        <!-- ========================================================================= -->
+        <div class="card border shadow-sm mb-4 bg-white sticky-bottom" style="z-index: 10;">
+            <div class="card-body p-3 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" name="is_complementary" id="checkIsComplementary" value="1"
+                           <?= !empty($activeItem['is_complementary']) ? 'checked' : '' ?>>
+                    <label class="form-check-label fw-semibold text-dark" for="checkIsComplementary">
+                        <i class="bi bi-gift text-info me-1"></i>Complementary Product (Packed with main good, no extra cost)
+                    </label>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="<?= url('purchases/mapping/bill/' . (int)$purchase['id']) ?>" class="btn btn-outline-secondary">
+                        <i class="bi bi-x-circle me-1"></i>Cancel
+                    </a>
+                    <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm" id="btnSaveComplete">
+                        <i class="bi bi-check-circle-fill me-1"></i>Save &amp; Complete Mapping
+                    </button>
+                </div>
             </div>
         </div>
     </form>
-<?php endif; ?>
+</div>
 
 <!-- ========================================================================= -->
-<!-- MODAL: ADD PRODUCT LINE DIRECTLY TO PURCHASE BILL -->
+<!-- MODALS FOR QUICK ADDING 3-TIER CATEGORIES (AJAX)                          -->
 <!-- ========================================================================= -->
-<div class="modal fade" id="modalAddBillProduct" tabindex="-1" aria-labelledby="modalAddBillProductLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <form class="modal-content" id="formAddBillProduct" onsubmit="submitAddBillProduct(event)">
-            <?= CSRF::field() ?>
-            <input type="hidden" name="purchase_id" value="<?= (int)$purchase['id'] ?>">
-            <div class="modal-header bg-light py-3">
-                <h5 class="modal-title fw-bold" id="modalAddBillProductLabel">
-                    <i class="bi bi-plus-circle text-primary me-2"></i>Add Product Line to Purchase Bill
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+
+<!-- Quick Add Tier 1 Category Modal -->
+<div class="modal fade" id="modalQuickAddCategory" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-folder-plus me-2"></i>New Main Category (Tier 1)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <div id="addBillProductAlert" class="alert alert-danger d-none py-2 px-3 small"></div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-7">
-                        <label class="form-label fw-semibold small">Product / Item Name <span class="text-danger">*</span></label>
-                        <input type="text" name="new_item_name" id="new_item_name" class="form-control" placeholder="e.g. Men's Cotton Polo T-Shirt" required>
-                    </div>
-                    <div class="col-md-5">
-                        <label class="form-label fw-semibold small">Vendor SKU / Code</label>
-                        <input type="text" name="new_vendor_sku" id="new_vendor_sku" class="form-control font-monospace text-uppercase" placeholder="e.g. TP-POLO-NAVY-M">
-                    </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Category Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="modalTier1Name" placeholder="e.g. Non Feeding, Menswear">
                 </div>
-
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold small">Color / Shade</label>
-                        <input type="text" name="new_color" id="new_color" class="form-control" placeholder="e.g. Navy Blue">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold small">Size</label>
-                        <input type="text" name="new_size" id="new_size" class="form-control font-monospace" placeholder="e.g. M / 38 / Free Size">
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold small">HSN Code</label>
-                        <input type="text" name="new_hsn_code" id="new_hsn_code" class="form-control font-monospace" placeholder="e.g. 61091000">
-                    </div>
-                </div>
-
-                <div class="card bg-light border-0 p-3 mb-3">
-                    <h6 class="fw-bold mb-2 small text-dark"><i class="bi bi-currency-rupee text-success me-1"></i>Pricing, Quantity &amp; Taxes</h6>
-                    <div class="row g-2">
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold small">Bill Quantity <span class="text-danger">*</span></label>
-                            <input type="number" name="new_quantity" id="new_quantity" class="form-control font-monospace text-end" min="0.01" step="0.01" value="1.00" required oninput="calcNewProductTotals()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold small">Unit</label>
-                            <select name="new_unit" id="new_unit" class="form-select">
-                                <option value="PCS" selected>PCS</option>
-                                <option value="MTR">MTR</option>
-                                <option value="KGS">KGS</option>
-                                <option value="SET">SET</option>
-                                <option value="BOX">BOX</option>
-                                <option value="DOZEN">DOZEN</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold small">Purchase Rate (₹) <span class="text-danger">*</span></label>
-                            <input type="number" name="new_unit_price" id="new_unit_price" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required oninput="calcNewProductTotals()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold small">MRP (₹) <span class="text-danger">*</span></label>
-                            <input type="number" name="new_mrp" id="new_mrp" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required oninput="calcNewProductTotals()">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-semibold small">Selling (₹) <span class="text-danger">*</span></label>
-                            <input type="number" name="new_selling_price" id="new_selling_price" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required>
-                        </div>
-                    </div>
-
-                    <div class="row g-2 mt-2 align-items-center">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold small mb-1">GST Tax Rate</label>
-                            <select name="new_gst_rate" id="new_gst_rate" class="form-select form-select-sm" onchange="calcNewProductTotals()">
-                                <option value="5" selected>5% GST (Standard Garments)</option>
-                                <option value="12">12% GST</option>
-                                <option value="18">18% GST</option>
-                                <option value="0">0% (Exempted)</option>
-                            </select>
-                        </div>
-                        <div class="col-md-8 text-end">
-                            <span class="small text-muted me-3">Base: <strong id="newProductBaseDisplay">₹0.00</strong></span>
-                            <span class="small text-muted me-3">Tax: <strong id="newProductTaxDisplay">₹0.00</strong></span>
-                            <span class="fw-bold text-dark">Line Total: <span class="text-success fs-6" id="newProductTotalDisplay">₹0.00</span></span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-10 p-3 mb-3">
-                    <h6 class="fw-bold mb-2 small text-primary"><i class="bi bi-diagram-3 me-1"></i>Catalog Category Assignment</h6>
-                    <div class="row g-2">
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold small">Category <span class="text-danger">*</span></label>
-                            <select name="new_category_id" id="new_category_id" class="form-select form-select-sm" required onchange="loadNewProductSubcategories()">
-                                <option value="">-- Select Category --</option>
-                                <?php foreach ($categories as $c): ?>
-                                    <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= e($c['code']) ?>)</option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold small">Subcategory</label>
-                            <select name="new_subcategory_id" id="new_subcategory_id" class="form-select form-select-sm" disabled onchange="loadNewProductSubSubcategories()">
-                                <option value="">-- Select Subcategory --</option>
-                            </select>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold small">Sub-Subcategory</label>
-                            <select name="new_sub_subcategory_id" id="new_sub_subcategory_id" class="form-select form-select-sm" disabled>
-                                <option value="">-- Select Sub-Subcategory --</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" name="new_is_complementary" id="new_is_complementary" value="1">
-                    <label class="form-check-label small" for="new_is_complementary">
-                        This is a complementary / gift product (packed with main product, does not affect primary pricing)
-                    </label>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Short Code (2-4 Characters)</label>
+                    <input type="text" class="form-control text-uppercase font-monospace" id="modalTier1Code" placeholder="e.g. NF, MW">
+                    <small class="text-muted">Used for the QR Key and SKU prefix.</small>
                 </div>
             </div>
-            <div class="modal-footer bg-light py-2.5">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="submit" class="btn btn-primary fw-bold" id="btnSubmitNewBillProduct">
-                    <i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill
-                </button>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btnSubmitModalTier1">Add Main Category</button>
             </div>
-        </form>
+        </div>
     </div>
 </div>
 
-<style>
-.bill-mapping-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: 2;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: .03em;
-}
-.bill-mapping-table tbody tr[data-mapping-item]:hover > td {
-    background-color: rgba(13, 110, 253, .035);
-}
-</style>
+<!-- Quick Add Tier 2 Subcategory Modal -->
+<div class="modal fade" id="modalQuickAddSubcategory" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-folder-plus me-2"></i>New Sub Category (Tier 2)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Sub Category Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="modalTier2Name" placeholder="e.g. Full Length, Shirt, Trousers">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Short Code (2-4 Characters)</label>
+                    <input type="text" class="form-control text-uppercase font-monospace" id="modalTier2Code" placeholder="e.g. FL, SH">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-info text-white" id="btnSubmitModalTier2">Add Sub Category</button>
+            </div>
+        </div>
+    </div>
+</div>
 
+<!-- Quick Add Tier 3 Sub-Subcategory Modal -->
+<div class="modal fade" id="modalQuickAddSubSubcategory" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-folder-plus me-2"></i>New Sub Sub Category (Tier 3)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Sub Sub Category Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="modalTier3Name" placeholder="e.g. Normal Sleeve, Slim Fit, Party Wear">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">Short Code (2-4 Characters)</label>
+                    <input type="text" class="form-control text-uppercase font-monospace" id="modalTier3Code" placeholder="e.g. NS, SF">
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="btnSubmitModalTier3">Add Sub Sub Category</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- CLIENT-SIDE ENGINE (JAVASCRIPT)                                           -->
+<!-- ========================================================================= -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const itemData = <?= json_encode($items, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+document.addEventListener('DOMContentLoaded', function () {
+    const BASE_URL = '<?= rtrim(url(), '/') ?>';
+    const purchasedQty = <?= json_encode($purchasedQty) ?>;
+    const supplierUnitCost = <?= json_encode($unitPrice) ?>;
 
-    document.querySelectorAll('[data-complementary-item]').forEach(checkbox => {
-        checkbox.addEventListener('change', function() {
-            const id = this.dataset.complementaryItem;
-            const isChecked = this.checked;
-            document.querySelectorAll(`[data-complementary-item="${id}"]`).forEach(input => {
-                input.checked = isChecked;
-            });
-            const badge = document.querySelector(`[data-complementary-status="${id}"]`);
-            if (badge) badge.classList.toggle('d-none', !isChecked);
-        });
+    // Existing variants loaded from database
+    const preExistingVariants = <?= json_encode($existingVariants) ?>;
+
+    // Elements
+    const selectTier1 = document.getElementById('selectTier1');
+    const selectTier2 = document.getElementById('selectTier2');
+    const selectTier3 = document.getElementById('selectTier3');
+    const inputTier1Code = document.getElementById('inputTier1Code');
+    const inputTier2Code = document.getElementById('inputTier2Code');
+    const inputTier3Code = document.getElementById('inputTier3Code');
+    const inputQrKey = document.getElementById('inputQrKey');
+    const labelHierarchyPath = document.getElementById('labelHierarchyPath');
+
+    const inputStyleCode = document.getElementById('inputStyleCode');
+    const inputStyleName = document.getElementById('inputStyleName');
+    const containerColorPills = document.getElementById('containerColorPills');
+    const containerSizePills = document.getElementById('containerSizePills');
+
+    const tbodyVariantMatrix = document.getElementById('tbodyVariantMatrix');
+    const labelAllocationStatus = document.getElementById('labelAllocationStatus');
+
+    const batchInputMrp = document.getElementById('batchInputMrp');
+    const batchInputSp = document.getElementById('batchInputSp');
+    const btnReplicatePricing = document.getElementById('btnReplicatePricing');
+
+    // 1. Hierarchy Change Handlers
+    function updateHierarchySummary() {
+        const t1Text = selectTier1.options[selectTier1.selectedIndex]?.text?.replace(/\s*\([^)]*\)/, '') || '';
+        const t2Text = selectTier2.options[selectTier2.selectedIndex]?.text?.replace(/\s*\([^)]*\)/, '') || '';
+        const t3Text = selectTier3.options[selectTier3.selectedIndex]?.text?.replace(/\s*\([^)]*\)/, '') || '';
+
+        const parts = [];
+        if (t1Text && selectTier1.value) parts.push(t1Text.trim());
+        if (t2Text && selectTier2.value) parts.push(t2Text.trim());
+        if (t3Text && selectTier3.value) parts.push(t3Text.trim());
+
+        labelHierarchyPath.textContent = parts.length > 0 ? parts.join(' > ') : 'Select categories to build path';
+
+        const c1 = (inputTier1Code.value || '').trim();
+        const c2 = (inputTier2Code.value || '').trim();
+        const c3 = (inputTier3Code.value || '').trim();
+        inputQrKey.value = (c1 + c2 + c3).toUpperCase();
+    }
+
+    selectTier1.addEventListener('change', function () {
+        const opt = this.options[this.selectedIndex];
+        const code = opt ? (opt.getAttribute('data-code') || '') : '';
+        inputTier1Code.value = code;
+
+        const catId = this.value;
+        selectTier2.innerHTML = '<option value="">-- Select Sub Category --</option>';
+        selectTier3.innerHTML = '<option value="">-- Select Sub Sub Category --</option>';
+        inputTier2Code.value = '';
+        inputTier3Code.value = '';
+
+        if (catId) {
+            loadSubcategories(catId);
+        }
+        updateHierarchySummary();
     });
 
-    document.querySelectorAll('[data-edit-mapping], [data-toggle-attributes]').forEach(button => {
-        button.addEventListener('click', function() {
-            const id = this.dataset.editMapping || this.dataset.toggleAttributes;
-            const row = document.getElementById('attr_row_' + id);
-            if (!row) return;
-            row.classList.toggle('d-none');
-        });
+    selectTier2.addEventListener('change', function () {
+        const opt = this.options[this.selectedIndex];
+        const code = opt ? (opt.getAttribute('data-code') || '') : '';
+        inputTier2Code.value = code;
+
+        const subcatId = this.value;
+        selectTier3.innerHTML = '<option value="">-- Select Sub Sub Category --</option>';
+        inputTier3Code.value = '';
+
+        if (subcatId) {
+            loadSubSubcategories(subcatId);
+        }
+        updateHierarchySummary();
     });
 
-    document.querySelectorAll('[data-mapping-item]').forEach(row => {
-        const itemId = row.dataset.itemId;
-        const savedItem = itemData.find(item => String(item.id) === itemId) || {};
-        const detailRow = document.getElementById('attr_row_' + itemId);
-        const category = row.querySelector('[data-category]');
-        const subcategory = row.querySelector('[data-subcategory]');
-        const subsubcategory = row.querySelector('[data-subsubcategory]');
-        const notice = detailRow ? detailRow.querySelector('[data-attributes-notice]') : null;
-        const fields = detailRow ? detailRow.querySelector('[data-attributes-fields]') : null;
-        const mrp = row.querySelector(`#mrp_${itemId}`);
-        const sellingPrice = row.querySelector(`#selling_price_${itemId}`);
+    selectTier3.addEventListener('change', function () {
+        const opt = this.options[this.selectedIndex];
+        const code = opt ? (opt.getAttribute('data-code') || '') : '';
+        inputTier3Code.value = code;
+        updateHierarchySummary();
+    });
 
-        function validatePrices() {
-            if (!mrp || !sellingPrice) return;
-            const mrpValue = Number(mrp.value);
-            const sellingValue = Number(sellingPrice.value);
-            sellingPrice.setCustomValidity(
-                sellingValue > 0 && mrpValue > 0 && sellingValue > mrpValue
-                    ? 'Selling price cannot be greater than MRP.'
-                    : ''
-            );
-        }
+    inputTier1Code.addEventListener('input', updateHierarchySummary);
+    inputTier2Code.addEventListener('input', updateHierarchySummary);
+    inputTier3Code.addEventListener('input', updateHierarchySummary);
 
-        if (mrp) mrp.addEventListener('input', validatePrices);
-        if (sellingPrice) sellingPrice.addEventListener('input', validatePrices);
-
-        if (category) {
-            category.addEventListener('change', () => loadHierarchy(0, 0));
-        }
-        if (subcategory) {
-            subcategory.addEventListener('change', () => loadSubSubcategories(0));
-        }
-        if (subsubcategory) {
-            subsubcategory.addEventListener('change', () => {
-                loadAttributes(parseInt(category.value, 10) || 0, parseInt(subcategory.value, 10) || 0, parseInt(subsubcategory.value, 10) || 0);
-            });
-        }
-
-        function loadHierarchy(preselectedSubcategory, preselectedSubSubcategory) {
-            const categoryId = parseInt(category.value, 10) || 0;
-            if (subcategory) {
-                subcategory.innerHTML = '<option value="">-- Select Subcategory --</option>';
-                subcategory.disabled = true;
-            }
-            if (subsubcategory) {
-                subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-                subsubcategory.disabled = true;
-            }
-
-            if (!categoryId) {
-                if (notice) {
-                    notice.classList.remove('d-none');
-                    notice.innerHTML = '<i class="bi bi-info-circle me-1"></i>Select a category above to load configured specifications.';
-                }
-                if (fields) {
-                    fields.classList.add('d-none');
-                    fields.innerHTML = '';
-                }
-                return;
-            }
-
-            fetch('<?= url("api/subcategories") ?>/' + categoryId + '?catalog_source=THIRD_PARTY')
-                .then(response => response.json())
-                .then(data => {
-                    if (!Array.isArray(data) || !subcategory) return;
-                    data.forEach(sub => {
-                        const option = document.createElement('option');
-                        option.value = sub.id;
-                        option.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
-                        option.selected = Number(sub.id) === Number(preselectedSubcategory);
-                        subcategory.appendChild(option);
-                    });
-                    if (data.length > 0) {
-                        subcategory.disabled = false;
-                    } else {
-                        subcategory.innerHTML = '<option value="">-- No Subcategories --</option>';
-                        subcategory.disabled = true;
-                    }
-                    if (preselectedSubcategory) {
-                        loadSubSubcategories(preselectedSubSubcategory);
-                    }
-                })
-                .catch(error => console.error(error));
-
-            loadAttributes(categoryId, preselectedSubcategory, preselectedSubSubcategory);
-        }
-
-        function loadSubSubcategories(preselectedSubSubcategory) {
-            const subcategoryId = subcategory ? (parseInt(subcategory.value, 10) || 0) : 0;
-            if (subsubcategory) {
-                subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-                subsubcategory.disabled = true;
-            }
-            if (!subcategoryId) {
-                loadAttributes(parseInt(category.value, 10) || 0, 0, 0);
-                return;
-            }
-
-            fetch('<?= url("api/sub-subcategories") ?>/' + subcategoryId + '?catalog_source=THIRD_PARTY')
-                .then(response => response.json())
-                .then(data => {
-                    if (!Array.isArray(data) || !subsubcategory) return;
-                    data.forEach(sub => {
-                        const option = document.createElement('option');
-                        option.value = sub.id;
-                        option.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
-                        option.selected = Number(sub.id) === Number(preselectedSubSubcategory);
-                        subsubcategory.appendChild(option);
-                    });
-                    if (data.length > 0) {
-                        subsubcategory.disabled = false;
-                    } else {
-                        subsubcategory.innerHTML = '<option value="">-- No Sub-Subcategories --</option>';
-                        subsubcategory.disabled = true;
-                    }
-                })
-                .catch(error => console.error(error));
-
-            loadAttributes(parseInt(category.value, 10) || 0, subcategoryId, preselectedSubSubcategory);
-        }
-
-        function loadAttributes(categoryId, subcategoryId, subSubcategoryId) {
-            if (!categoryId || !notice || !fields) return;
-            notice.classList.remove('d-none');
-            notice.innerHTML = '<span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>Loading category attributes...';
-            fields.classList.add('d-none');
-            fields.innerHTML = '';
-
-            let endpoint = '<?= url("api/categories/attributes") ?>/' + categoryId;
-            const params = ['catalog_source=THIRD_PARTY'];
-            if (subcategoryId) params.push('subcategory_id=' + subcategoryId);
-            if (subSubcategoryId) params.push('sub_subcategory_id=' + subSubcategoryId);
-            if (params.length) endpoint += '?' + params.join('&');
-
-            fetch(endpoint)
-                .then(response => response.json())
-                .then(result => {
-                    const attributes = result.attributes || result;
-                    if (!Array.isArray(attributes) || attributes.length === 0) {
-                        notice.innerHTML = '<i class="bi bi-check-circle text-muted me-1"></i>No custom attributes configured for this category hierarchy.';
-                        return;
-                    }
-
-                    notice.classList.add('d-none');
-                    fields.classList.remove('d-none');
-                    const savedValues = savedItem.parsed_attributes || {};
-
-                    attributes.forEach(attribute => {
-                        const col = document.createElement('div');
-                        col.className = 'col-md-6';
-                        const label = document.createElement('label');
-                        label.className = 'form-label fw-bold small';
-                        label.textContent = attribute.attr_name + (attribute.is_required ? ' *' : '');
-                        col.appendChild(label);
-
-                        const savedValue = savedValues[attribute.attr_name] !== undefined ? savedValues[attribute.attr_name] : '';
-                        const fieldName = `items[${itemId}][attributes][${attribute.attr_name}]`;
-                        if (attribute.attr_type === 'SELECT') {
-                            const select = document.createElement('select');
-                            select.name = fieldName;
-                            select.className = 'form-select form-select-sm';
-                            if (attribute.is_required) select.required = true;
-                            const placeholder = document.createElement('option');
-                            placeholder.value = '';
-                            placeholder.textContent = `-- Select ${attribute.attr_name} --`;
-                            select.appendChild(placeholder);
-                            (attribute.attr_options || '').split(',').map(value => value.trim()).filter(Boolean).forEach(value => {
-                                const option = document.createElement('option');
-                                option.value = value;
-                                option.textContent = value;
-                                option.selected = savedValue == value;
-                                select.appendChild(option);
-                            });
-                            col.appendChild(select);
-                        } else if (attribute.attr_type === 'MULTI_SELECT') {
-                            const values = (attribute.attr_options || '').split(',').map(value => value.trim()).filter(Boolean);
-                            const selectedValues = Array.isArray(savedValue) ? savedValue : [savedValue];
-                            const wrapper = document.createElement('div');
-                            wrapper.className = 'border rounded p-2 bg-white d-flex flex-wrap gap-2';
-                            values.forEach((value, index) => {
-                                const checkbox = document.createElement('input');
-                                checkbox.type = 'checkbox';
-                                checkbox.className = 'form-check-input';
-                                checkbox.name = fieldName + '[]';
-                                checkbox.value = value;
-                                checkbox.id = `attr_${itemId}_${attribute.id}_${index}`;
-                                checkbox.checked = selectedValues.includes(value);
-                                const optionLabel = document.createElement('label');
-                                optionLabel.className = 'form-check-label small';
-                                optionLabel.htmlFor = checkbox.id;
-                                optionLabel.textContent = value;
-                                const group = document.createElement('div');
-                                group.className = 'form-check form-check-inline mb-0';
-                                group.append(checkbox, optionLabel);
-                                wrapper.appendChild(group);
-                            });
-                            col.appendChild(wrapper);
-                        } else {
-                            const input = document.createElement('input');
-                            input.type = attribute.attr_type === 'NUMBER' ? 'number' : 'text';
-                            if (attribute.attr_type === 'NUMBER') input.step = 'any';
-                            input.name = fieldName;
-                            input.className = 'form-control form-control-sm';
-                            input.value = savedValue;
-                            if (attribute.is_required) input.required = true;
-                            col.appendChild(input);
+    function loadSubcategories(catId, preselectId, callback) {
+        fetch(`${BASE_URL}/api/subcategories/${catId}?catalog_source=THIRD_PARTY`)
+            .then(res => res.json())
+            .then(data => {
+                selectTier2.innerHTML = '<option value="">-- Select Sub Category --</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.name;
+                        opt.setAttribute('data-code', item.code || '');
+                        if (preselectId && parseInt(item.id, 10) === parseInt(preselectId, 10)) {
+                            opt.selected = true;
                         }
-                        fields.appendChild(col);
+                        selectTier2.appendChild(opt);
                     });
-                })
-                .catch(error => {
-                    console.error(error);
-                    notice.innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-1"></i>Failed to load attributes.';
-                });
-        }
+                }
+                if (callback) callback();
+            })
+            .catch(err => console.error('Error loading subcategories:', err));
+    }
 
-        validatePrices();
-        const initialCategory = parseInt(savedItem.mapped_third_party_category_id, 10) || 0;
-        if (initialCategory && category) {
-            category.value = initialCategory;
-            loadHierarchy(
-                parseInt(savedItem.mapped_third_party_subcategory_id, 10) || 0,
-                parseInt(savedItem.mapped_third_party_sub_subcategory_id, 10) || 0
-            );
+    function loadSubSubcategories(subcatId, preselectId, callback) {
+        fetch(`${BASE_URL}/api/sub-subcategories/${subcatId}?catalog_source=THIRD_PARTY`)
+            .then(res => res.json())
+            .then(data => {
+                selectTier3.innerHTML = '<option value="">-- Select Sub Sub Category --</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item.id;
+                        opt.textContent = item.name;
+                        opt.setAttribute('data-code', item.code || '');
+                        if (preselectId && parseInt(item.id, 10) === parseInt(preselectId, 10)) {
+                            opt.selected = true;
+                        }
+                        selectTier3.appendChild(opt);
+                    });
+                }
+                if (callback) callback();
+            })
+            .catch(err => console.error('Error loading sub-subcategories:', err));
+    }
+
+    // 2. Color Selection & Custom Color Add Handlers
+    function getSelectedColors() {
+        const colors = [];
+        containerColorPills.querySelectorAll('.color-checkbox:checked').forEach(cb => {
+            colors.push(cb.value);
+        });
+        return colors;
+    }
+
+    function updateColorPillStyles() {
+        containerColorPills.querySelectorAll('.color-checkbox').forEach(cb => {
+            const label = containerColorPills.querySelector(`label[for="${cb.id}"]`);
+            if (label) {
+                if (cb.checked) {
+                    label.classList.remove('btn-outline-secondary');
+                    label.classList.add('btn-primary');
+                } else {
+                    label.classList.remove('btn-primary');
+                    label.classList.add('btn-outline-secondary');
+                }
+            }
+        });
+    }
+
+    containerColorPills.addEventListener('change', function (e) {
+        if (e.target.classList.contains('color-checkbox')) {
+            updateColorPillStyles();
+            rebuildVariantMatrix();
         }
     });
-});
 
-// Modal: Calculate live totals for new product
-function calcNewProductTotals() {
-    const qty = parseFloat(document.getElementById('new_quantity').value) || 0;
-    const rate = parseFloat(document.getElementById('new_unit_price').value) || 0;
-    const gstRate = parseFloat(document.getElementById('new_gst_rate').value) || 0;
+    document.getElementById('btnSelectAllColors').addEventListener('click', function () {
+        containerColorPills.querySelectorAll('.color-checkbox').forEach(cb => { cb.checked = true; });
+        updateColorPillStyles();
+        rebuildVariantMatrix();
+    });
 
-    const base = qty * rate;
-    const tax = base * (gstRate / 100);
-    const total = base + tax;
+    document.getElementById('btnClearColors').addEventListener('click', function () {
+        containerColorPills.querySelectorAll('.color-checkbox').forEach(cb => { cb.checked = false; });
+        updateColorPillStyles();
+        rebuildVariantMatrix();
+    });
 
-    document.getElementById('newProductBaseDisplay').textContent = '₹' + base.toFixed(2);
-    document.getElementById('newProductTaxDisplay').textContent = '₹' + tax.toFixed(2);
-    document.getElementById('newProductTotalDisplay').textContent = '₹' + total.toFixed(2);
+    // Custom Color Adder
+    document.getElementById('btnAddCustomColor').addEventListener('click', function () {
+        const input = document.getElementById('inputCustomColor');
+        const val = input.value.trim();
+        if (!val) return;
 
-    // Auto-suggest selling price if empty
-    const mrpInput = document.getElementById('new_mrp');
-    const spInput = document.getElementById('new_selling_price');
-    if (mrpInput && mrpInput.value && (!spInput.value || parseFloat(spInput.value) <= 0)) {
-        spInput.value = mrpInput.value;
-    }
-}
+        // Proper capitalization
+        const formatted = val.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-// Modal: Load Subcategories for new product
-function loadNewProductSubcategories() {
-    const catId = document.getElementById('new_category_id').value;
-    const subSelect = document.getElementById('new_subcategory_id');
-    const subSubSelect = document.getElementById('new_sub_subcategory_id');
-
-    subSelect.innerHTML = '<option value="">-- Select Subcategory --</option>';
-    subSelect.disabled = true;
-    subSubSelect.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-    subSubSelect.disabled = true;
-
-    if (!catId) return;
-
-    fetch('<?= url("api/subcategories") ?>/' + catId + '?catalog_source=THIRD_PARTY')
-        .then(res => res.json())
-        .then(data => {
-            if (Array.isArray(data) && data.length > 0) {
-                data.forEach(sub => {
-                    const opt = document.createElement('option');
-                    opt.value = sub.id;
-                    opt.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
-                    subSelect.appendChild(opt);
-                });
-                subSelect.disabled = false;
-            } else {
-                subSelect.innerHTML = '<option value="">-- No Subcategories --</option>';
-            }
-        })
-        .catch(err => console.error(err));
-}
-
-// Modal: Load Sub-Subcategories for new product
-function loadNewProductSubSubcategories() {
-    const subId = document.getElementById('new_subcategory_id').value;
-    const subSubSelect = document.getElementById('new_sub_subcategory_id');
-
-    subSubSelect.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-    subSubSelect.disabled = true;
-
-    if (!subId) return;
-
-    fetch('<?= url("api/sub-subcategories") ?>/' + subId + '?catalog_source=THIRD_PARTY')
-        .then(res => res.json())
-        .then(data => {
-            if (Array.isArray(data) && data.length > 0) {
-                data.forEach(sub => {
-                    const opt = document.createElement('option');
-                    opt.value = sub.id;
-                    opt.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
-                    subSubSelect.appendChild(opt);
-                });
-                subSubSelect.disabled = false;
-            } else {
-                subSubSelect.innerHTML = '<option value="">-- No Sub-Subcategories --</option>';
-            }
-        })
-        .catch(err => console.error(err));
-}
-
-// Submit Modal form to add product to bill
-async function submitAddBillProduct(e) {
-    e.preventDefault();
-    const alertBox = document.getElementById('addBillProductAlert');
-    const btn = document.getElementById('btnSubmitNewBillProduct');
-    alertBox.classList.add('d-none');
-    alertBox.textContent = '';
-
-    const mrp = parseFloat(document.getElementById('new_mrp').value) || 0;
-    const sp = parseFloat(document.getElementById('new_selling_price').value) || 0;
-    if (sp > mrp) {
-        alertBox.textContent = 'Selling price (₹' + sp.toFixed(2) + ') cannot exceed MRP (₹' + mrp.toFixed(2) + ').';
-        alertBox.classList.remove('d-none');
-        return;
-    }
-
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Adding...';
-
-    const formData = new FormData(document.getElementById('formAddBillProduct'));
-
-    try {
-        const resp = await fetch('<?= url("purchases/mapping/add-product") ?>', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        let exists = false;
+        containerColorPills.querySelectorAll('.color-checkbox').forEach(cb => {
+            if (cb.value.toLowerCase() === formatted.toLowerCase()) exists = true;
         });
-        const result = await resp.json();
 
-        if (result.success) {
-            // Reload page to reflect updated bill items and totals
-            window.location.reload();
+        if (!exists) {
+            const safeId = 'color_pill_' + btoa(formatted).replace(/=/g, '');
+            const div = document.createElement('div');
+            div.className = 'form-check form-check-inline m-0';
+            div.innerHTML = `
+                <input class="btn-check color-checkbox" type="checkbox" id="${safeId}" name="colors[]" value="${formatted}" checked autocomplete="off">
+                <label class="btn btn-sm btn-primary px-3 py-1 fw-bold" for="${safeId}">${formatted}</label>
+            `;
+            containerColorPills.appendChild(div);
+            input.value = '';
+            updateColorPillStyles();
+            rebuildVariantMatrix();
         } else {
-            alertBox.textContent = result.message || 'Error adding product.';
-            alertBox.classList.remove('d-none');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill';
+            input.value = '';
         }
-    } catch (err) {
-        alertBox.textContent = 'Network or server error: ' + err.message;
-        alertBox.classList.remove('d-none');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill';
-    }
-}
+    });
 
-// Delete an unmapped product from the bill
-async function deleteBillProduct(itemId, itemName) {
-    if (!confirm('Are you sure you want to remove product "' + itemName + '" from this purchase bill?')) {
-        return;
+    // 3. Size Selection Handlers
+    function getSelectedSizes() {
+        const sizes = [];
+        containerSizePills.querySelectorAll('.size-checkbox:checked').forEach(cb => {
+            sizes.push(cb.value);
+        });
+        return sizes;
     }
 
-    try {
-        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+    function updateSizePillStyles() {
+        containerSizePills.querySelectorAll('.size-checkbox').forEach(cb => {
+            const label = containerSizePills.querySelector(`label[for="${cb.id}"]`);
+            if (label) {
+                if (cb.checked) {
+                    label.classList.remove('btn-outline-secondary');
+                    label.classList.add('btn-primary');
+                } else {
+                    label.classList.remove('btn-primary');
+                    label.classList.add('btn-outline-secondary');
+                }
+            }
+        });
+    }
+
+    containerSizePills.addEventListener('change', function (e) {
+        if (e.target.classList.contains('size-checkbox')) {
+            updateSizePillStyles();
+            rebuildVariantMatrix();
+        }
+    });
+
+    document.getElementById('btnSelectAllSizes').addEventListener('click', function () {
+        containerSizePills.querySelectorAll('.size-checkbox').forEach(cb => { cb.checked = true; });
+        updateSizePillStyles();
+        rebuildVariantMatrix();
+    });
+
+    document.getElementById('btnClearSizes').addEventListener('click', function () {
+        containerSizePills.querySelectorAll('.size-checkbox').forEach(cb => { cb.checked = false; });
+        updateSizePillStyles();
+        rebuildVariantMatrix();
+    });
+
+    // Custom Size Adder
+    document.getElementById('btnAddCustomSize').addEventListener('click', function () {
+        const input = document.getElementById('inputCustomSize');
+        const val = input.value.trim().toUpperCase();
+        if (!val) return;
+
+        let exists = false;
+        containerSizePills.querySelectorAll('.size-checkbox').forEach(cb => {
+            if (cb.value.toUpperCase() === val) exists = true;
+        });
+
+        if (!exists) {
+            const safeId = 'size_pill_' + btoa(val).replace(/=/g, '');
+            const div = document.createElement('div');
+            div.className = 'form-check form-check-inline m-0';
+            div.innerHTML = `
+                <input class="btn-check size-checkbox" type="checkbox" id="${safeId}" name="sizes[]" value="${val}" checked autocomplete="off">
+                <label class="btn btn-sm btn-primary px-3 py-1 fw-bold" for="${safeId}">${val}</label>
+            `;
+            containerSizePills.appendChild(div);
+            input.value = '';
+            updateSizePillStyles();
+            rebuildVariantMatrix();
+        } else {
+            input.value = '';
+        }
+    });
+
+    inputStyleCode.addEventListener('input', rebuildVariantMatrix);
+
+    // 4. Variant Matrix Generator & Calculations
+    function computeMargin(cost, selling) {
+        if (!selling || selling <= 0) return 0;
+        return (((selling - cost) / selling) * 100);
+    }
+
+    function rebuildVariantMatrix() {
+        const sizes = getSelectedSizes();
+        const colors = getSelectedColors();
+        const baseStyleCode = (inputStyleCode.value || 'STY').trim();
+        const defaultRate = supplierUnitCost > 0 ? supplierUnitCost : 0;
+        const defaultMrp = parseFloat(batchInputMrp.value) || 0;
+        const defaultSp = parseFloat(batchInputSp.value) || 0;
+
+        // Preserve current user-entered values keyed by `${size}__${color}`
+        const stateMap = {};
+        tbodyVariantMatrix.querySelectorAll('tr[data-key]').forEach(tr => {
+            const key = tr.getAttribute('data-key');
+            stateMap[key] = {
+                sku: tr.querySelector('.matrix-sku')?.value || '',
+                qty: parseFloat(tr.querySelector('.matrix-qty')?.value) || 0,
+                rate: parseFloat(tr.querySelector('.matrix-rate')?.value) || defaultRate,
+                mrp: parseFloat(tr.querySelector('.matrix-mrp')?.value) || defaultMrp,
+                sp: parseFloat(tr.querySelector('.matrix-sp')?.value) || defaultSp,
+                barcode: tr.querySelector('.matrix-barcode')?.value || '',
+            };
+        });
+
+        tbodyVariantMatrix.innerHTML = '';
+
+        if (sizes.length === 0 || colors.length === 0) {
+            tbodyVariantMatrix.innerHTML = `
+                <tr>
+                    <td colspan="11" class="text-center py-4 text-muted">
+                        <i class="bi bi-exclamation-circle text-warning me-1"></i>
+                        ${sizes.length === 0 ? 'No sizes selected. ' : ''}${colors.length === 0 ? 'No colors selected. ' : ''}Check options above to generate the variant matrix table.
+                    </td>
+                </tr>
+            `;
+            updateAllocationStatus();
+            return;
+        }
+
+        const totalCombinations = sizes.length * colors.length;
+        const autoSplitQty = totalCombinations > 0 ? Math.max(1, Math.round(purchasedQty / totalCombinations)) : 1;
+
+        let rowIndex = 0;
+        colors.forEach(col => {
+            const colShort = col.replace(/[^A-Za-z0-9]/g, '').substring(0, 3).toUpperCase();
+            sizes.forEach(sz => {
+                const rowKey = `${sz}__${col}`;
+                const existingState = stateMap[rowKey];
+                const preExisting = preExistingVariants.find(v => v.size === sz && (!v.color || v.color.toLowerCase() === col.toLowerCase()));
+
+                let defaultSku = `${baseStyleCode}-${sz}`;
+                if (colors.length > 1) {
+                    defaultSku = `${baseStyleCode}-${colShort}-${sz}`;
+                }
+
+                const vSku = existingState?.sku || preExisting?.sku || defaultSku;
+                const vQty = existingState?.qty || preExisting?.allocated_qty || autoSplitQty;
+                const vRate = existingState?.rate || preExisting?.purchase_rate || defaultRate;
+                const vMrp = existingState?.mrp || preExisting?.mrp || defaultMrp;
+                const vSp = existingState?.sp || preExisting?.selling_price || defaultSp;
+                const vBarcode = existingState?.barcode || preExisting?.barcode || vSku;
+
+                const margin = computeMargin(vRate, vSp);
+                let marginClass = 'bg-success-subtle text-success border border-success-subtle';
+                if (margin <= 0) {
+                    marginClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+                } else if (margin < 20) {
+                    marginClass = 'bg-warning-subtle text-warning border border-warning-subtle';
+                }
+
+                const tr = document.createElement('tr');
+                tr.setAttribute('data-key', rowKey);
+                tr.setAttribute('data-size', sz);
+                tr.setAttribute('data-color', col);
+                tr.innerHTML = `
+                    <td class="text-muted fw-bold">${rowIndex + 1}</td>
+                    <td>
+                        <span class="badge bg-primary px-2.5 py-1 fw-bold fs-7">${sz}</span>
+                        <input type="hidden" name="variants[${rowIndex}][size]" value="${sz}">
+                    </td>
+                    <td>
+                        <span class="badge bg-secondary-subtle text-dark border px-2.5 py-1 fw-semibold">${col}</span>
+                        <input type="hidden" name="variants[${rowIndex}][color]" value="${col}">
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm font-monospace matrix-sku"
+                               name="variants[${rowIndex}][sku]" value="${vSku}" required>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end fw-bold text-primary matrix-qty"
+                               name="variants[${rowIndex}][allocated_qty]" min="0" step="1" value="${vQty}" required>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end matrix-rate"
+                               name="variants[${rowIndex}][purchase_rate]" min="0" step="0.01" value="${parseFloat(vRate).toFixed(2)}" required>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end fw-semibold matrix-mrp"
+                               name="variants[${rowIndex}][mrp]" min="0.01" step="0.01" value="${parseFloat(vMrp).toFixed(2)}" required>
+                    </td>
+                    <td>
+                        <input type="number" class="form-control form-control-sm text-end fw-bold text-dark matrix-sp"
+                               name="variants[${rowIndex}][selling_price]" min="0.01" step="0.01" value="${parseFloat(vSp).toFixed(2)}" required>
+                    </td>
+                    <td>
+                        <span class="badge ${marginClass} matrix-margin fw-bold px-2 py-1">${margin.toFixed(2)}%</span>
+                    </td>
+                    <td>
+                        <span class="badge bg-info-subtle text-info border border-info-subtle small">
+                            <i class="bi bi-barcode me-1"></i>Auto on Save
+                        </span>
+                        <input type="hidden" class="matrix-barcode" name="variants[${rowIndex}][barcode]" value="${vBarcode}">
+                    </td>
+                    <td>
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0.5 px-1.5 btn-remove-variant" title="Remove Variant">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbodyVariantMatrix.appendChild(tr);
+                rowIndex++;
+            });
+        });
+
+        attachMatrixEventListeners();
+        updateAllocationStatus();
+    }
+
+    function attachMatrixEventListeners() {
+        tbodyVariantMatrix.querySelectorAll('.matrix-qty').forEach(input => {
+            input.addEventListener('input', updateAllocationStatus);
+        });
+
+        tbodyVariantMatrix.querySelectorAll('.matrix-rate, .matrix-sp').forEach(input => {
+            input.addEventListener('input', function () {
+                const tr = this.closest('tr');
+                const rate = parseFloat(tr.querySelector('.matrix-rate').value) || 0;
+                const sp = parseFloat(tr.querySelector('.matrix-sp').value) || 0;
+                const margin = computeMargin(rate, sp);
+
+                const marginBadge = tr.querySelector('.matrix-margin');
+                marginBadge.textContent = `${margin.toFixed(2)}%`;
+                marginBadge.className = 'badge matrix-margin fw-bold px-2 py-1 ' +
+                    (margin <= 0 ? 'bg-danger-subtle text-danger border border-danger-subtle' :
+                    (margin < 20 ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-success-subtle text-success border border-success-subtle'));
+            });
+        });
+
+        tbodyVariantMatrix.querySelectorAll('.btn-remove-variant').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const tr = this.closest('tr');
+                tr.remove();
+                updateAllocationStatus();
+            });
+        });
+    }
+
+    function updateAllocationStatus() {
+        let totalAllocated = 0;
+        tbodyVariantMatrix.querySelectorAll('.matrix-qty').forEach(input => {
+            totalAllocated += (parseFloat(input.value) || 0);
+        });
+
+        const isMatch = Math.abs(totalAllocated - purchasedQty) < 0.001;
+
+        if (isMatch) {
+            labelAllocationStatus.innerHTML = `
+                <span class="badge bg-success text-white py-1.5 px-3">
+                    <i class="bi bi-check-circle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${purchasedQty} Pieces (Exact Match)
+                </span>
+            `;
+        } else {
+            labelAllocationStatus.innerHTML = `
+                <span class="badge bg-warning text-dark py-1.5 px-3">
+                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${purchasedQty} Pieces (${(totalAllocated > purchasedQty ? '+' : '') + (totalAllocated - purchasedQty)} variance)
+                </span>
+            `;
+        }
+    }
+
+    // Batch Replicate Pricing
+    btnReplicatePricing.addEventListener('click', function () {
+        const mrp = parseFloat(batchInputMrp.value) || 0;
+        const sp = parseFloat(batchInputSp.value) || 0;
+
+        tbodyVariantMatrix.querySelectorAll('tr').forEach(tr => {
+            const mrpInput = tr.querySelector('.matrix-mrp');
+            const spInput = tr.querySelector('.matrix-sp');
+            if (mrpInput && mrp > 0) mrpInput.value = mrp.toFixed(2);
+            if (spInput && sp > 0) spInput.value = sp.toFixed(2);
+
+            const rate = parseFloat(tr.querySelector('.matrix-rate')?.value) || supplierUnitCost;
+            const margin = computeMargin(rate, sp);
+            const marginBadge = tr.querySelector('.matrix-margin');
+            if (marginBadge) {
+                marginBadge.textContent = `${margin.toFixed(2)}%`;
+                marginBadge.className = 'badge matrix-margin fw-bold px-2 py-1 ' +
+                    (margin <= 0 ? 'bg-danger-subtle text-danger border border-danger-subtle' :
+                    (margin < 20 ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-success-subtle text-success border border-success-subtle'));
+            }
+        });
+    });
+
+    // 5. Quick Add Modals (AJAX Integration)
+    // Tier 1 Modal
+    document.getElementById('btnSubmitModalTier1').addEventListener('click', function () {
+        const nameInput = document.getElementById('modalTier1Name');
+        const codeInput = document.getElementById('modalTier1Code');
+        const name = nameInput.value.trim();
+        const code = codeInput.value.trim().toUpperCase();
+        if (!name) {
+            alert('Please enter a Category name.');
+            return;
+        }
+
         const formData = new FormData();
-        formData.append('csrf_token', csrfToken);
+        formData.append('name', name);
+        formData.append('code', code);
+        formData.append('catalog_source', 'THIRD_PARTY');
+        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
 
-        const resp = await fetch('<?= url("purchases/mapping/delete-product") ?>/' + itemId, {
+        fetch(`${BASE_URL}/api/categories/quick-add`, {
             method: 'POST',
             body: formData,
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        });
-        const result = await resp.json();
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const opt = document.createElement('option');
+                opt.value = data.id;
+                opt.textContent = data.name;
+                opt.setAttribute('data-code', data.code || code);
+                opt.selected = true;
+                selectTier1.appendChild(opt);
 
-        if (result.success) {
-            window.location.reload();
-        } else {
-            alert(result.message || 'Error removing product line.');
+                inputTier1Code.value = data.code || code;
+                updateHierarchySummary();
+                bootstrap.Modal.getInstance(document.getElementById('modalQuickAddCategory')).hide();
+                nameInput.value = '';
+                codeInput.value = '';
+            } else {
+                alert(data.message || 'Error creating category.');
+            }
+        })
+        .catch(err => alert('Failed to create category: ' + err.message));
+    });
+
+    // Tier 2 Modal
+    document.getElementById('btnSubmitModalTier2').addEventListener('click', function () {
+        const catId = selectTier1.value;
+        if (!catId) {
+            alert('Please select a Main Category (Tier 1) first.');
+            return;
         }
-    } catch (err) {
-        alert('Error: ' + err.message);
-    }
-}
+        const nameInput = document.getElementById('modalTier2Name');
+        const codeInput = document.getElementById('modalTier2Code');
+        const name = nameInput.value.trim();
+        const code = codeInput.value.trim().toUpperCase();
+        if (!name) {
+            alert('Please enter a Sub Category name.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('category_id', catId);
+        formData.append('name', name);
+        formData.append('code', code);
+        formData.append('catalog_source', 'THIRD_PARTY');
+        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
+
+        fetch(`${BASE_URL}/api/subcategories/quick-add`, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const opt = document.createElement('option');
+                opt.value = data.id;
+                opt.textContent = data.name;
+                opt.setAttribute('data-code', data.code || code);
+                opt.selected = true;
+                selectTier2.appendChild(opt);
+
+                inputTier2Code.value = data.code || code;
+                updateHierarchySummary();
+                bootstrap.Modal.getInstance(document.getElementById('modalQuickAddSubcategory')).hide();
+                nameInput.value = '';
+                codeInput.value = '';
+            } else {
+                alert(data.message || 'Error creating subcategory.');
+            }
+        })
+        .catch(err => alert('Failed to create subcategory: ' + err.message));
+    });
+
+    // Tier 3 Modal
+    document.getElementById('btnSubmitModalTier3').addEventListener('click', function () {
+        const subcatId = selectTier2.value;
+        if (!subcatId) {
+            alert('Please select a Sub Category (Tier 2) first.');
+            return;
+        }
+        const nameInput = document.getElementById('modalTier3Name');
+        const codeInput = document.getElementById('modalTier3Code');
+        const name = nameInput.value.trim();
+        const code = codeInput.value.trim().toUpperCase();
+        if (!name) {
+            alert('Please enter a Sub Sub Category name.');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('subcategory_id', subcatId);
+        formData.append('name', name);
+        formData.append('code', code);
+        formData.append('catalog_source', 'THIRD_PARTY');
+        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
+
+        fetch(`${BASE_URL}/api/sub-subcategories/quick-add`, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const opt = document.createElement('option');
+                opt.value = data.id;
+                opt.textContent = data.name;
+                opt.setAttribute('data-code', data.code || code);
+                opt.selected = true;
+                selectTier3.appendChild(opt);
+
+                inputTier3Code.value = data.code || code;
+                updateHierarchySummary();
+                bootstrap.Modal.getInstance(document.getElementById('modalQuickAddSubSubcategory')).hide();
+                nameInput.value = '';
+                codeInput.value = '';
+            } else {
+                alert(data.message || 'Error creating sub-subcategory.');
+            }
+        })
+        .catch(err => alert('Failed to create sub-subcategory: ' + err.message));
+    });
+
+    // 6. Submit Validation
+    const formMapProductBill = document.getElementById('formMapProductBill');
+
+    formMapProductBill.addEventListener('submit', function (e) {
+        if (!selectTier1.value) {
+            e.preventDefault();
+            alert('Please select Tier 1 Main Category.');
+            selectTier1.focus();
+            return false;
+        }
+
+        const variants = tbodyVariantMatrix.querySelectorAll('tr[data-key]');
+        if (variants.length === 0) {
+            e.preventDefault();
+            alert('Please configure at least one variant combination in the matrix.');
+            return false;
+        }
+
+        let totalAllocated = 0;
+        let pricingValid = true;
+        variants.forEach(tr => {
+            const q = parseFloat(tr.querySelector('.matrix-qty')?.value) || 0;
+            const mrp = parseFloat(tr.querySelector('.matrix-mrp')?.value) || 0;
+            const sp = parseFloat(tr.querySelector('.matrix-sp')?.value) || 0;
+            totalAllocated += q;
+
+            if (mrp <= 0 || sp <= 0) pricingValid = false;
+            if (sp > mrp) {
+                pricingValid = false;
+                alert(`Selling price (₹${sp}) cannot exceed MRP (₹${mrp}) for variant ${tr.getAttribute('data-size')} - ${tr.getAttribute('data-color')}`);
+            }
+        });
+
+        if (!pricingValid) {
+            e.preventDefault();
+            return false;
+        }
+
+        if (Math.abs(totalAllocated - purchasedQty) > 0.001) {
+            const proceed = confirm(`The allocated variant quantity (${totalAllocated}) differs from the purchased bill quantity (${purchasedQty}). Proceed anyway?`);
+            if (!proceed) {
+                e.preventDefault();
+                return false;
+            }
+        }
+
+        return true;
+    });
+
+    // Initial Matrix Render
+    updateColorPillStyles();
+    updateSizePillStyles();
+    rebuildVariantMatrix();
+    updateHierarchySummary();
+});
 </script>

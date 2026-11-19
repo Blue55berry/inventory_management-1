@@ -467,7 +467,7 @@
     </div>
     <div class="d-flex justify-content-end gap-2 mb-4">
         <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary">Cancel</a>
-        <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase</button>
+        <button type="submit" id="savePurchaseSubmitBtn" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Save Purchase</button>
     </div>
 </form>
 
@@ -1188,6 +1188,13 @@
         if (invalidInput) {
             event.preventDefault();
             invalidInput.reportValidity();
+            form.removeAttribute('data-submitting');
+            const submitBtn = document.getElementById('savePurchaseSubmitBtn');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.style.pointerEvents = '';
+                submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Save Purchase';
+            }
         }
     }, true);
 
@@ -2512,11 +2519,42 @@
         })
         .catch(error => { console.error(error); alert('Could not load the next fabric roll code. Refresh the page before recording the purchase.'); });
 
+    function resetPurchaseSubmitState() {
+        form.removeAttribute('data-submitting');
+        const submitBtn = document.getElementById('savePurchaseSubmitBtn') || form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.style.pointerEvents = '';
+            submitBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Save Purchase';
+        }
+    }
+
+    function lockPurchaseSubmitState() {
+        form.dataset.submitting = 'true';
+        const submitBtn = document.getElementById('savePurchaseSubmitBtn') || form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+            submitBtn.style.pointerEvents = 'none';
+            setTimeout(() => {
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Saving...';
+                }
+            }, 10);
+        }
+    }
+
     form.addEventListener('submit', event => {
+        if (form.dataset.submitting === 'true') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return false;
+        }
+
         if (!supplierSelect || !supplierSelect.value) {
             event.preventDefault();
             alert('Please select a registered supplier before saving.');
             document.getElementById('supplierDropdownBtn')?.focus();
+            resetPurchaseSubmitState();
             return;
         }
 
@@ -2525,6 +2563,7 @@
             event.preventDefault();
             alert('Please choose a valid purchase date.');
             purchaseDateInput?.focus();
+            resetPurchaseSubmitState();
             return;
         }
 
@@ -2535,6 +2574,7 @@
             if (rmCards.length === 0) {
                 event.preventDefault();
                 alert('Add at least one raw material before saving.');
+                resetPurchaseSubmitState();
                 return;
             }
 
@@ -2612,6 +2652,7 @@
             if (hasError) {
                 event.preventDefault();
                 alert(errorMessage || 'Please check the raw material fields and correct any errors.');
+                resetPurchaseSubmitState();
                 return;
             }
 
@@ -2624,6 +2665,7 @@
                 form.appendChild(payloadInput);
             }
             payloadInput.value = JSON.stringify(itemsPayload);
+            lockPurchaseSubmitState();
             return;
         }
 
@@ -2632,6 +2674,7 @@
             if (tpCards.length === 0) {
                 event.preventDefault();
                 alert('Add at least one third-party product before saving.');
+                resetPurchaseSubmitState();
                 return;
             }
 
@@ -2710,6 +2753,7 @@
             if (hasError) {
                 event.preventDefault();
                 alert(errorMessage || 'Please check the third-party product fields and correct any errors.');
+                resetPurchaseSubmitState();
                 return;
             }
 
@@ -2722,6 +2766,7 @@
                 form.appendChild(payloadInput);
             }
             payloadInput.value = JSON.stringify(itemsPayload);
+            lockPurchaseSubmitState();
             return;
         }
 
@@ -2730,12 +2775,14 @@
         if (!hasRoll) {
             event.preventDefault();
             alert('Add at least one fabric roll before saving.');
+            resetPurchaseSubmitState();
             return;
         }
         if (!document.getElementById('fabricDescription').value.trim()) {
             event.preventDefault();
             alert('Please enter a fabric / material description.');
             document.getElementById('fabricDescription').focus();
+            resetPurchaseSubmitState();
             return;
         }
 
@@ -2776,6 +2823,7 @@
             form.appendChild(payloadInput);
         }
         payloadInput.value = JSON.stringify(itemsPayload);
+        lockPurchaseSubmitState();
     });
 
     // Tax Invoice Document Preview

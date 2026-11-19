@@ -87,6 +87,62 @@ class PurchaseMappingFulfillmentService {
                 FOREIGN KEY (subcategory_id) REFERENCES third_party_subcategories (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+        Database::execute("CREATE TABLE IF NOT EXISTS third_party_products (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            concern_id INT NULL,
+            name VARCHAR(255) NOT NULL,
+            code VARCHAR(100) NOT NULL,
+            vendor_sku VARCHAR(100) DEFAULT NULL,
+            category_id INT UNSIGNED DEFAULT NULL,
+            subcategory_id INT UNSIGNED DEFAULT NULL,
+            sub_subcategory_id INT UNSIGNED DEFAULT NULL,
+            third_party_category_id INT UNSIGNED DEFAULT NULL,
+            third_party_subcategory_id INT UNSIGNED DEFAULT NULL,
+            third_party_sub_subcategory_id INT UNSIGNED DEFAULT NULL,
+            category_code VARCHAR(50) DEFAULT NULL,
+            subcategory_code VARCHAR(50) DEFAULT NULL,
+            sub_subcategory_code VARCHAR(50) DEFAULT NULL,
+            seller_id INT UNSIGNED DEFAULT NULL,
+            color VARCHAR(100) DEFAULT NULL,
+            size VARCHAR(100) DEFAULT NULL,
+            unit VARCHAR(30) DEFAULT 'Pieces',
+            hsn_code VARCHAR(20) DEFAULT NULL,
+            mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            selling_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            purchase_rate DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            attributes TEXT DEFAULT NULL,
+            description TEXT DEFAULT NULL,
+            is_complementary TINYINT(1) NOT NULL DEFAULT 0,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_by INT UNSIGNED DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_tp_code (code),
+            INDEX idx_tp_name (name),
+            INDEX idx_tp_category (third_party_category_id),
+            INDEX idx_tp_concern (concern_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        Database::execute("CREATE TABLE IF NOT EXISTS third_party_product_variants (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            third_party_product_id INT UNSIGNED NOT NULL,
+            purchase_item_id INT UNSIGNED DEFAULT NULL,
+            sku VARCHAR(100) NOT NULL,
+            size VARCHAR(50) NOT NULL,
+            color VARCHAR(50) DEFAULT NULL,
+            allocated_qty DECIMAL(12,3) NOT NULL DEFAULT 0.000,
+            purchase_rate DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            mrp DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            selling_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            barcode VARCHAR(100) DEFAULT NULL,
+            is_active TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_tppv_product (third_party_product_id),
+            INDEX idx_tppv_item (purchase_item_id),
+            INDEX idx_tppv_sku (sku)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
         Database::ensureColumn('third_party_products', 'third_party_category_id', 'INT UNSIGNED DEFAULT NULL AFTER sub_subcategory_id');
         Database::ensureColumn('third_party_products', 'third_party_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER third_party_category_id');
         Database::ensureColumn('third_party_products', 'third_party_sub_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER third_party_subcategory_id');
@@ -103,6 +159,36 @@ class PurchaseMappingFulfillmentService {
                AND mapped_category_id IS NULL
                AND mapped_third_party_category_id IS NULL"
         );
+
+        // Seed default third-party categories if empty so ERP taxonomy is immediately operational
+        $tpCatCount = (int)(Database::fetchOne("SELECT COUNT(*) AS cnt FROM third_party_categories")['cnt'] ?? 0);
+        if ($tpCatCount === 0) {
+            Database::execute("INSERT INTO third_party_categories (name, code, slug, sort_order, is_active) VALUES
+                ('Non Feeding', 'NF', 'non-feeding', 1, 1),
+                ('Feeding', 'FD', 'feeding', 2, 1),
+                ('Kids Wear', 'KW', 'kids-wear', 3, 1),
+                ('Women Ethnic', 'WE', 'women-ethnic', 4, 1),
+                ('Men Casual', 'MC', 'men-casual', 5, 1)
+            ");
+
+            $nfCat = Database::fetchOne("SELECT id FROM third_party_categories WHERE code = 'NF' LIMIT 1");
+            if ($nfCat) {
+                Database::execute("INSERT INTO third_party_subcategories (category_id, name, code, slug, sort_order, is_active) VALUES
+                    (?, 'Full Length', 'FL', 'full-length', 1, 1),
+                    (?, 'Midi Dress', 'MD', 'midi-dress', 2, 1),
+                    (?, 'Short Top', 'ST', 'short-top', 3, 1)
+                ", [(int)$nfCat['id'], (int)$nfCat['id'], (int)$nfCat['id']]);
+
+                $flSubcat = Database::fetchOne("SELECT id FROM third_party_subcategories WHERE code = 'FL' AND category_id = ? LIMIT 1", [(int)$nfCat['id']]);
+                if ($flSubcat) {
+                    Database::execute("INSERT INTO third_party_sub_subcategories (subcategory_id, name, code, slug, sort_order, is_active) VALUES
+                        (?, 'Normal Sleeve', 'NS', 'normal-sleeve', 1, 1),
+                        (?, 'Sleeveless', 'SL', 'sleeveless', 2, 1),
+                        (?, '3/4th Sleeve', 'TQS', '3-4th-sleeve', 3, 1)
+                    ", [(int)$flSubcat['id'], (int)$flSubcat['id'], (int)$flSubcat['id']]);
+                }
+            }
+        }
 
         if (session_status() === PHP_SESSION_ACTIVE) {
             $_SESSION['_pmf_schema_ensured_20261119'] = 1;

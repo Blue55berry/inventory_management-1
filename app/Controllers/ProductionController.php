@@ -2125,6 +2125,20 @@ class ProductionController {
 
         try {
             Database::beginTransaction();
+
+            // Revert stock balances and transactions for variant items if any
+            $ppiItems = Database::fetchAll("SELECT variant_id, quantity FROM production_purchase_items WHERE purchase_id = ?", [$purchaseId]);
+            foreach ($ppiItems as $pi) {
+                if (!empty($pi['variant_id']) && (float)$pi['quantity'] > 0) {
+                    Database::execute(
+                        "UPDATE stock_balances SET quantity = GREATEST(0, quantity - ?) WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT' AND location_id = 1 AND stock_state = 'AVAILABLE'",
+                        [(float)$pi['quantity'], (int)$pi['variant_id']]
+                    );
+                }
+            }
+            Database::execute("DELETE FROM stock_transactions WHERE reference_type = 'production_purchases' AND reference_id = ?", [$purchaseId]);
+            Database::execute("DELETE FROM audit_logs WHERE reference_type = 'production_purchases' AND reference_id = ?", [$purchaseId]);
+
             Database::execute(
                 "DELETE sr FROM seller_rolls sr
                  JOIN production_purchase_items ppi ON ppi.seller_roll_id = sr.id
@@ -2785,6 +2799,33 @@ class ProductionController {
         $notes = trim((string)($_POST['notes'] ?? ''));
         $userId = (int)(Session::get('user_id') ?? 0);
 
+        // Server-Side Duplicate Submission / Idempotency Guard
+        // Prevents duplicate purchase orders from rapid double-clicks or repeated POST requests
+        $recentDuplicate = Database::fetchOne(
+            "SELECT id, purchase_number FROM production_purchases
+             WHERE seller_id = ?
+               AND purchase_date = ?
+               AND purchase_type = ?
+               AND ROUND(total_amount, 2) = ROUND(?, 2)
+               AND ((invoice_number = ?) OR (invoice_number IS NULL AND ? IS NULL) OR (? = '' AND (invoice_number IS NULL OR invoice_number = '')))
+               AND created_at >= (NOW() - INTERVAL 15 SECOND)
+             ORDER BY id DESC LIMIT 1",
+            [
+                $sellerId,
+                $purchaseDate,
+                $purchaseType,
+                $totalAmount,
+                $invoiceNumber !== '' ? $invoiceNumber : null,
+                $invoiceNumber !== '' ? $invoiceNumber : null,
+                $invoiceNumber
+            ]
+        );
+        if ($recentDuplicate) {
+            Session::flash('info', "Purchase order {$recentDuplicate['purchase_number']} was already recorded just now.");
+            Response::redirect(url('purchases'));
+            return;
+        }
+
         try {
             Database::beginTransaction();
             $activeConcernId = currentConcernId();
@@ -3222,11 +3263,14 @@ class ProductionController {
 
         $purchaseId = (int)$id;
         $purchase = Database::fetchOne(
-            "SELECT pp.id, pp.purchase_number, pp.purchase_date, pp.invoice_number, pp.seller_id,
-                    pp.total_amount, pp.notes,
-                    s.name AS seller_name, s.company AS seller_company
+            "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.purchase_date, pp.invoice_number, pp.seller_id,
+                    pp.total_amount, pp.notes, pp.document_url, pp.is_inwarded, pp.created_at,
+                    s.name AS seller_name, s.company AS seller_company, s.phone AS seller_phone,
+                    s.email AS seller_email, COALESCE(s.gstin, s.gst_number) AS seller_gst,
+                    s.address AS seller_address, s.city AS seller_city, s.state AS seller_state,
+                    s.seller_type
              FROM production_purchases pp
-             INNER JOIN sellers s ON s.id = pp.seller_id
+             LEFT JOIN sellers s ON s.id = pp.seller_id
              WHERE pp.id = ?",
             [$purchaseId]
         );
@@ -3245,6 +3289,12 @@ class ProductionController {
             [$purchaseId]
         );
 
+        if (empty($items)) {
+            Session::flash('info', 'No third-party product items found on this purchase bill to map.');
+            Response::redirect(url('purchases/mapping'));
+            return;
+        }
+
         foreach ($items as &$item) {
             $item['parsed_attributes'] = [];
             if (!empty($item['mapped_attributes'])) {
@@ -3253,21 +3303,95 @@ class ProductionController {
         }
         unset($item);
 
+        // Identify active item to map
+        $activeItemId = !empty($_GET['item_id']) ? (int)$_GET['item_id'] : 0;
+        $activeItem = null;
+        if ($activeItemId > 0) {
+            foreach ($items as $it) {
+                if ((int)$it['id'] === $activeItemId) {
+                    $activeItem = $it;
+                    break;
+                }
+            }
+        }
+        if (!$activeItem) {
+            foreach ($items as $it) {
+                if (empty($it['is_mapped'])) {
+                    $activeItem = $it;
+                    break;
+                }
+            }
+            if (!$activeItem) {
+                $activeItem = $items[0];
+            }
+        }
+
+        // Fetch categories
         $categories = Database::fetchAll(
-            "SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC"
+            "SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC"
         );
 
+        // Subcategories for active item
+        $subcategories = [];
+        $activeCatId = (int)($activeItem['mapped_third_party_category_id'] ?? 0);
+        if ($activeCatId > 0) {
+            $subcategories = Database::fetchAll(
+                "SELECT id, category_id, name, code FROM third_party_subcategories WHERE category_id = ? AND is_active = 1 ORDER BY sort_order ASC, name ASC",
+                [$activeCatId]
+            );
+        }
+
+        // Sub-subcategories for active item
+        $subSubcategories = [];
+        $activeSubcatId = (int)($activeItem['mapped_third_party_subcategory_id'] ?? 0);
+        if ($activeSubcatId > 0) {
+            $subSubcategories = Database::fetchAll(
+                "SELECT id, subcategory_id, name, code FROM third_party_sub_subcategories WHERE subcategory_id = ? AND is_active = 1 ORDER BY sort_order ASC, name ASC",
+                [$activeSubcatId]
+            );
+        }
+
+        // Existing styles from third_party_products for linking
+        $existingStyles = Database::fetchAll(
+            "SELECT id, name, code, third_party_category_id, third_party_subcategory_id, third_party_sub_subcategory_id,
+                    category_code, subcategory_code, sub_subcategory_code, color, size, mrp, selling_price, purchase_rate, hsn_code
+             FROM third_party_products
+             WHERE is_active = 1
+             ORDER BY id DESC
+             LIMIT 100"
+        );
+
+        // Pre-existing variants for active item
+        $existingVariants = Database::fetchAll(
+            "SELECT id, sku, size, color, allocated_qty, purchase_rate, mrp, selling_price, barcode, is_active
+             FROM third_party_product_variants
+             WHERE purchase_item_id = ?
+             ORDER BY id ASC",
+            [(int)$activeItem['id']]
+        );
+
+        $standardSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'Free Size', '4XL'];
+        $standardColors = ['Red', 'Blue', 'Black', 'White', 'Green', 'Yellow', 'Navy Blue', 'Maroon', 'Grey', 'Pink', 'Purple', 'Orange', 'Beige', 'Brown'];
+
         Response::view('production.purchases.mapping_bill', [
-            'pageTitle' => 'Map Purchase Bill',
+            'pageTitle' => 'Map Finished Good to Catalog: ' . ($activeItem['item_name'] ?? 'Item'),
             'activeModule' => 'purchases',
             'activeMenu' => 'purchases-mapping',
             'purchase' => $purchase,
             'items' => $items,
+            'activeItem' => $activeItem,
             'categories' => $categories,
+            'subcategories' => $subcategories,
+            'subSubcategories' => $subSubcategories,
+            'existingStyles' => $existingStyles,
+            'existingVariants' => $existingVariants,
+            'standardSizes' => $standardSizes,
+            'standardColors' => $standardColors,
             'breadcrumb' => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
-                ['label' => 'Purchase Item Mapping', 'url' => url('purchases/mapping')],
-                ['label' => $purchase['purchase_number']],
+                ['label' => 'Product Mapping', 'url' => url('purchases/mapping')],
+                ['label' => $purchase['purchase_number'], 'url' => url('purchases/mapping/bill/' . $purchase['id'])],
+                ['label' => 'Map Finished Good'],
             ],
         ]);
     }
@@ -3286,11 +3410,11 @@ class ProductionController {
             return;
         }
 
-        Response::redirect(url('purchases/mapping/bill/' . (int)$item['purchase_id']));
+        Response::redirect(url('purchases/mapping/bill/' . (int)$item['purchase_id'] . '?item_id=' . (int)$id));
     }
 
     /**
-     * Third-Party Product Mapping: Save Category, Subcategory, Sub-subcategory, and Attributes.
+     * Third-Party Product Mapping: Save Category Hierarchy, Attributes, and Variant Matrix.
      */
     public function saveThirdPartyMapping(): void {
         PurchaseMappingFulfillmentService::ensureSchema();
@@ -3306,19 +3430,14 @@ class ProductionController {
         }
 
         $purchaseId = (int)($_POST['purchase_id'] ?? 0);
-        if ($purchaseId > 0) {
+        if ($purchaseId > 0 && isset($_POST['items']) && is_array($_POST['items'])) {
             $this->savePurchaseBillMappingItems($purchaseId);
             return;
         }
 
         $itemId = (int)($_POST['item_id'] ?? 0);
-        $categoryId = (int)($_POST['category_id'] ?? 0);
-        $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
-        $subSubcategoryId = !empty($_POST['sub_subcategory_id']) ? (int)$_POST['sub_subcategory_id'] : null;
-        $rawAttributes = $_POST['attributes'] ?? [];
-
-        if ($itemId <= 0 || $categoryId <= 0) {
-            $msg = 'Please select a valid item and master category.';
+        if ($itemId <= 0) {
+            $msg = 'Please select a valid purchase item to map.';
             if (Request::isAjax()) {
                 Response::json(['success' => false, 'message' => $msg], 422);
                 return;
@@ -3329,7 +3448,10 @@ class ProductionController {
         }
 
         $item = Database::fetchOne(
-            "SELECT id, purchase_id, item_name, item_type, product_id, variant_id FROM production_purchase_items WHERE id = ?",
+            "SELECT ppi.*, pp.purchase_number, pp.seller_id AS purchase_seller_id
+             FROM production_purchase_items ppi
+             INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+             WHERE ppi.id = ?",
             [$itemId]
         );
         if (!$item) {
@@ -3342,46 +3464,67 @@ class ProductionController {
             Response::back();
             return;
         }
-        if (strtoupper((string)$item['item_type']) !== 'THIRD_PARTY') {
-            $msg = 'Only third-party purchase items can be mapped to the external product catalog.';
-            if (Request::isAjax()) {
-                Response::json(['success' => false, 'message' => $msg], 422);
-                return;
-            }
-            Session::flash('error', $msg);
-            Response::back();
-            return;
-        }
 
-        $category = Database::fetchOne(
-            "SELECT id, name FROM third_party_categories WHERE id = ? AND is_active = 1",
-            [$categoryId]
-        );
-        if (!$category) {
-            $msg = 'Selected category does not exist.';
-            if (Request::isAjax()) {
-                Response::json(['success' => false, 'message' => $msg], 422);
-                return;
-            }
-            Session::flash('error', $msg);
-            Response::back();
-            return;
-        }
-
+        $purchaseId = (int)$item['purchase_id'];
+        $mappingAction = trim((string)($_POST['mapping_action'] ?? 'create_new'));
+        $saveMode = trim((string)($_POST['save_mode'] ?? 'complete')); // 'complete' or 'draft'
         $userId = (int)(Session::get('user_id') ?? 0);
 
-        try {
-            $result = PurchaseMappingFulfillmentService::fulfill($itemId, [
-                'category_id'          => $categoryId,
-                'subcategory_id'       => $subcategoryId,
-                'sub_subcategory_id'   => $subSubcategoryId,
-                'attributes'           => $rawAttributes,
-                'is_complementary'     => !empty($_POST['is_complementary']) ? 1 : 0,
-                'mrp'                  => $_POST['mrp'] ?? null,
-                'selling_price'        => $_POST['selling_price'] ?? null,
-            ], $userId);
-        } catch (Throwable $e) {
-            $msg = 'Mapping could not be completed: ' . $e->getMessage();
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+        $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
+        $subSubcategoryId = !empty($_POST['sub_subcategory_id']) ? (int)$_POST['sub_subcategory_id'] : null;
+
+        $categoryCode = trim((string)($_POST['category_code'] ?? ''));
+        $subcategoryCode = trim((string)($_POST['subcategory_code'] ?? ''));
+        $subSubcategoryCode = trim((string)($_POST['sub_subcategory_code'] ?? ''));
+        $qrKey = trim((string)($_POST['qr_key'] ?? ''));
+
+        $styleCode = mb_strtoupper(trim((string)($_POST['style_code'] ?? '')));
+        $styleName = trim((string)($_POST['style_name'] ?? ''));
+        if ($styleName === '') {
+            $styleName = $item['item_name'];
+        }
+        if ($styleCode === '') {
+            $styleCode = 'TP-' . strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $styleName), 0, 10)) . '-' . $itemId;
+        }
+
+        $submittedColors = $_POST['colors'] ?? [];
+        if (is_array($submittedColors)) {
+            $submittedColors = array_values(array_filter(array_map('trim', $submittedColors)));
+        } else {
+            $submittedColors = [];
+        }
+        if (!empty($submittedColors)) {
+            $color = implode(', ', $submittedColors);
+        } else {
+            $color = trim((string)($_POST['color'] ?? ''));
+        }
+        $hsnCode = trim((string)($_POST['hsn_code'] ?? ($item['hsn_code'] ?? '')));
+
+        // Check if linking to existing third-party style
+        $existingTpId = (int)($_POST['existing_tp_product_id'] ?? 0);
+        $tpProductId = 0;
+
+        if ($mappingAction === 'link_existing' && $existingTpId > 0) {
+            $existingTp = Database::fetchOne(
+                "SELECT * FROM third_party_products WHERE id = ? AND is_active = 1",
+                [$existingTpId]
+            );
+            if ($existingTp) {
+                $tpProductId = (int)$existingTp['id'];
+                $categoryId = (int)$existingTp['third_party_category_id'];
+                $subcategoryId = !empty($existingTp['third_party_subcategory_id']) ? (int)$existingTp['third_party_subcategory_id'] : null;
+                $subSubcategoryId = !empty($existingTp['third_party_sub_subcategory_id']) ? (int)$existingTp['third_party_sub_subcategory_id'] : null;
+                $categoryCode = $existingTp['category_code'] ?: $categoryCode;
+                $subcategoryCode = $existingTp['subcategory_code'] ?: $subcategoryCode;
+                $subSubcategoryCode = $existingTp['sub_subcategory_code'] ?: $subSubcategoryCode;
+                $styleCode = $existingTp['code'];
+                $styleName = $existingTp['name'];
+            }
+        }
+
+        if ($categoryId <= 0) {
+            $msg = 'Tier 1 Main Category is required.';
             if (Request::isAjax()) {
                 Response::json(['success' => false, 'message' => $msg], 422);
                 return;
@@ -3391,32 +3534,224 @@ class ProductionController {
             return;
         }
 
-        $itemQrTab = self::qrTabForItemType((string)($item['item_type'] ?? 'THIRD_PARTY'));
-        $message = "Product '{$item['item_name']}' mapped to {$category['name']}. "
-            . "GRN {$result['grn']['grn_number']} linked.";
-        if ($itemQrTab === '') {
-            $message .= " QR generation is not available for Own Product items.";
+        // Update short codes in master tables if provided
+        if ($categoryCode !== '' && $categoryId > 0) {
+            Database::execute("UPDATE third_party_categories SET code = ? WHERE id = ?", [$categoryCode, $categoryId]);
+        }
+        if ($subcategoryCode !== '' && $subcategoryId > 0) {
+            Database::execute("UPDATE third_party_subcategories SET code = ? WHERE id = ?", [$subcategoryCode, $subcategoryId]);
+        }
+        if ($subSubcategoryCode !== '' && $subSubcategoryId > 0) {
+            Database::execute("UPDATE third_party_sub_subcategories SET code = ? WHERE id = ?", [$subSubcategoryCode, $subSubcategoryId]);
+        }
+
+        // Process Submitted Variants
+        $submittedVariants = $_POST['variants'] ?? [];
+        $selectedSizes = [];
+        $firstMrp = (float)($item['mrp'] ?? 0);
+        $firstSp = (float)($item['selling_price'] ?? 0);
+
+        if (is_array($submittedVariants) && !empty($submittedVariants)) {
+            foreach ($submittedVariants as $v) {
+                $sName = trim($v['size'] ?? '');
+                if ($sName !== '' && !in_array($sName, $selectedSizes, true)) {
+                    $selectedSizes[] = $sName;
+                }
+                if ($firstMrp <= 0 && !empty($v['mrp'])) {
+                    $firstMrp = (float)$v['mrp'];
+                }
+                if ($firstSp <= 0 && !empty($v['selling_price'])) {
+                    $firstSp = (float)$v['selling_price'];
+                }
+            }
+        }
+
+        if ($firstMrp <= 0 && !empty($_POST['default_mrp'])) {
+            $firstMrp = (float)$_POST['default_mrp'];
+        }
+        if ($firstSp <= 0 && !empty($_POST['default_selling_price'])) {
+            $firstSp = (float)$_POST['default_selling_price'];
+        }
+
+        if (empty($selectedSizes) && !empty($_POST['sizes']) && is_array($_POST['sizes'])) {
+            $selectedSizes = array_values(array_filter(array_map('trim', $_POST['sizes'])));
+        }
+
+        $activeCid = currentConcernId() ?: 1;
+        $sellerId = (int)($item['purchase_seller_id'] ?? 0);
+
+        // 1. Create or update third_party_products master record
+        if ($tpProductId <= 0) {
+            $existingTp = Database::fetchOne(
+                "SELECT id FROM third_party_products WHERE code = ? LIMIT 1",
+                [$styleCode]
+            );
+            if ($existingTp) {
+                $tpProductId = (int)$existingTp['id'];
+                Database::execute(
+                    "UPDATE third_party_products
+                     SET name = ?, third_party_category_id = ?, third_party_subcategory_id = ?,
+                         third_party_sub_subcategory_id = ?, category_code = ?, subcategory_code = ?,
+                         sub_subcategory_code = ?, seller_id = COALESCE(?, seller_id), color = ?,
+                         size = ?, unit = ?, hsn_code = ?, mrp = ?, selling_price = ?,
+                         purchase_rate = ?, is_active = 1, updated_at = NOW()
+                     WHERE id = ?",
+                    [
+                        $styleName, $categoryId, $subcategoryId, $subSubcategoryId,
+                        $categoryCode ?: null, $subcategoryCode ?: null, $subSubcategoryCode ?: null,
+                        $sellerId ?: null, $color ?: null, implode(', ', $selectedSizes) ?: null,
+                        $item['unit'] ?: 'PCS', $hsnCode ?: null, $firstMrp, $firstSp,
+                        (float)$item['unit_price'], $tpProductId
+                    ]
+                );
+            } else {
+                Database::execute(
+                    "INSERT INTO third_party_products
+                        (concern_id, name, code, vendor_sku, third_party_category_id,
+                         third_party_subcategory_id, third_party_sub_subcategory_id,
+                         category_code, subcategory_code, sub_subcategory_code,
+                         seller_id, color, size, unit, hsn_code, mrp, selling_price,
+                         purchase_rate, attributes, is_active, created_by, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, NOW(), NOW())",
+                    [
+                        $activeCid, $styleName, $styleCode,
+                        $item['vendor_sku'] ?: $styleCode,
+                        $categoryId, $subcategoryId, $subSubcategoryId,
+                        $categoryCode ?: null, $subcategoryCode ?: null, $subSubcategoryCode ?: null,
+                        $sellerId ?: null, $color ?: null, implode(', ', $selectedSizes) ?: null,
+                        $item['unit'] ?: 'PCS', $hsnCode ?: null, $firstMrp, $firstSp,
+                        (float)$item['unit_price'],
+                        json_encode(['qr_key' => $qrKey, 'sizes' => $selectedSizes]),
+                        $userId
+                    ]
+                );
+                $tpProductId = (int)Database::lastInsertId();
+            }
+        }
+
+        // 2. Persist third_party_product_variants
+        if (!empty($submittedVariants) && is_array($submittedVariants)) {
+            Database::execute("DELETE FROM third_party_product_variants WHERE purchase_item_id = ?", [$itemId]);
+
+            foreach ($submittedVariants as $var) {
+                $vSize = trim($var['size'] ?? 'Free Size');
+                $vColor = trim($var['color'] ?? '') ?: $color;
+                $vSku = trim($var['sku'] ?? '') ?: ($styleCode . '-' . $vSize);
+                $vAllocQty = max(0, (float)($var['allocated_qty'] ?? 1));
+                $vRate = (float)($var['purchase_rate'] ?? $item['unit_price']);
+                $vMrp = (float)($var['mrp'] ?? $firstMrp);
+                $vSp = (float)($var['selling_price'] ?? $firstSp);
+                $vBarcode = trim($var['barcode'] ?? '') ?: $vSku;
+
+                Database::execute(
+                    "INSERT INTO third_party_product_variants
+                        (third_party_product_id, purchase_item_id, sku, size, color,
+                         allocated_qty, purchase_rate, mrp, selling_price, barcode, is_active, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
+                     ON DUPLICATE KEY UPDATE
+                        allocated_qty = VALUES(allocated_qty), purchase_rate = VALUES(purchase_rate),
+                        mrp = VALUES(mrp), selling_price = VALUES(selling_price), barcode = VALUES(barcode),
+                        updated_at = NOW()",
+                    [
+                        $tpProductId, $itemId, $vSku, $vSize, $vColor,
+                        $vAllocQty, $vRate, $vMrp, $vSp, $vBarcode
+                    ]
+                );
+            }
+        }
+
+        // 3. Update production_purchase_items
+        $mappedAttrs = [
+            'style_code' => $styleCode,
+            'style_name' => $styleName,
+            'color' => $color,
+            'colors' => $submittedColors,
+            'sizes' => $selectedSizes,
+            'qr_key' => $qrKey,
+            'mapping_action' => $mappingAction,
+            'variants_count' => count($submittedVariants),
+        ];
+
+        Database::execute(
+            "UPDATE production_purchase_items
+             SET third_party_product_id = ?,
+                 mapped_third_party_category_id = ?,
+                 mapped_third_party_subcategory_id = ?,
+                 mapped_third_party_sub_subcategory_id = ?,
+                 hsn_code = ?,
+                 mrp = ?,
+                 selling_price = ?,
+                 color = ?,
+                 size = ?,
+                 mapped_attributes = ?,
+                 is_mapped = ?,
+                 mapped_at = NOW(),
+                 mapped_by = ?
+             WHERE id = ?",
+            [
+                $tpProductId, $categoryId, $subcategoryId, $subSubcategoryId,
+                $hsnCode ?: null, $firstMrp, $firstSp, $color ?: null,
+                implode(', ', $selectedSizes) ?: null,
+                json_encode($mappedAttrs),
+                ($saveMode === 'complete' ? 1 : 0),
+                $userId, $itemId
+            ]
+        );
+
+        // 4. If completing, run fulfillment service to link GRN & QR readiness
+        if ($saveMode === 'complete') {
+            try {
+                $fulfillMrp = $firstMrp > 0 ? $firstMrp : (float)$item['unit_price'] * 1.5;
+                $fulfillSp = $firstSp > 0 ? $firstSp : $fulfillMrp;
+                if ($fulfillSp > $fulfillMrp) {
+                    $fulfillMrp = $fulfillSp;
+                }
+                PurchaseMappingFulfillmentService::fulfill($itemId, [
+                    'category_id'        => $categoryId,
+                    'subcategory_id'     => $subcategoryId,
+                    'sub_subcategory_id' => $subSubcategoryId,
+                    'attributes'         => $mappedAttrs,
+                    'is_complementary'   => !empty($_POST['is_complementary']) ? 1 : 0,
+                    'mrp'                => $fulfillMrp,
+                    'selling_price'      => $fulfillSp,
+                ], $userId);
+            } catch (\Throwable $e) {
+                error_log('GRN fulfillment notice: ' . $e->getMessage());
+            }
+        }
+
+        // Check if there are other unmapped items on this bill
+        $nextUnmapped = Database::fetchOne(
+            "SELECT id FROM production_purchase_items
+             WHERE purchase_id = ? AND item_type = 'THIRD_PARTY' AND is_mapped = 0 AND id != ?
+             ORDER BY id ASC LIMIT 1",
+            [$purchaseId, $itemId]
+        );
+
+        $successMsg = $saveMode === 'complete'
+            ? "Product line '{$styleName}' mapped successfully!"
+            : "Product line '{$styleName}' saved as draft.";
+
+        if ($saveMode === 'complete' && $nextUnmapped) {
+            $nextUrl = url("purchases/mapping/bill/{$purchaseId}?item_id=" . $nextUnmapped['id']);
+            $successMsg .= " Proceeding to the next unmapped product line.";
         } else {
-            $message .= " The item is ready for QR generation.";
+            $nextUrl = url("purchases/mapping/bill/{$purchaseId}");
         }
 
         if (Request::isAjax()) {
             Response::json([
-                'success'       => true,
-                'message'       => $message,
-                'grn_number'    => $result['grn']['grn_number'],
-                'grn_id'        => $result['grn']['grn_id'],
-                'grn_reused'    => !empty($result['grn_line_reused']),
+                'success' => true,
+                'message' => $successMsg,
+                'item_id' => $itemId,
+                'next_url' => $nextUrl,
+                'has_more' => (bool)$nextUnmapped,
             ]);
             return;
         }
 
-        Session::flash('success', $message);
-        if ($itemQrTab === '') {
-            Response::redirect(url('purchases/mapping/bill/' . (int)$item['purchase_id']));
-            return;
-        }
-        Response::redirect(url('production/qr-generations?tab=' . $itemQrTab));
+        Session::flash('success', $successMsg);
+        Response::redirect($nextUrl);
     }
 
     /**
