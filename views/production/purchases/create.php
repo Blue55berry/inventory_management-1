@@ -1669,7 +1669,9 @@
         const totalWeight = cards.reduce((sum, card) => sum + (Number(card.querySelector('.roll-weight').value) || 0), 0);
         const totalPrice = cards.reduce((sum, card) => {
             const price = Number(card.querySelector('.roll-price').value) || 0;
-            const tax = calculateItemTax(card, price);
+            const qty = Math.max(1, Number(card.querySelector('.roll-quantity')?.value) || 1);
+            const lineGross = price * qty;
+            const tax = calculateItemTax(card, lineGross);
             return sum + tax.total;
         }, 0);
         const totalRq = cards.reduce((sum, card) => sum + (Number(card.querySelector('.roll-quantity').value) || 0), 0);
@@ -1701,10 +1703,11 @@
                     const color = card.querySelector('.roll-color')?.value || '—';
                     const design = card.querySelector('.roll-design')?.value || '—';
                     const designCount = Number(card.querySelector('.roll-design-count')?.value) || 1;
-                    const qty = Number(card.querySelector('.roll-quantity')?.value) || 0;
+                    const qty = Math.max(1, Number(card.querySelector('.roll-quantity')?.value) || 1);
                     const weight = Number(card.querySelector('.roll-weight')?.value) || 0;
                     const price = Number(card.querySelector('.roll-price')?.value) || 0;
-                    const tax = calculateItemTax(card, price);
+                    const lineGross = price * qty;
+                    const tax = calculateItemTax(card, lineGross);
                     const totalValue = tax.total;
                     const start = Number(card.dataset.startSeq) || 0;
                     const end = start + Math.max(qty, 1) - 1;
@@ -1725,7 +1728,10 @@
                         <td class="text-center">${designCount}</td>
                         <td class="text-end fw-semibold">${qty.toLocaleString('en-IN')} RQ</td>
                         <td class="text-end fw-bold" style="color:#0284c7">${weight.toFixed(2)} kg</td>
-                        <td class="text-end">${money(price)} ${treatmentBadge}</td>
+                        <td class="text-end">
+                            <div><strong>${money(lineGross)}</strong> ${treatmentBadge}</div>
+                            ${qty > 1 ? `<small class="text-muted d-block font-monospace">(${money(price)} / RQ)</small>` : ''}
+                        </td>
                         <td><small class="badge bg-secondary-subtle text-secondary">${taxLabel}</small></td>
                         <td class="text-end">${money(tax.amount)}</td>
                         <td class="text-end fw-bold text-success">${money(totalValue)}</td>
@@ -2237,7 +2243,9 @@
 
         const rollTotals = Array.from(rollsContainer.querySelectorAll('.roll-card')).reduce((totals, card) => {
             const price = Number(card.querySelector('.roll-price')?.value) || 0;
-            const tax = calculateItemTax(card, price);
+            const qty = Math.max(1, Number(card.querySelector('.roll-quantity')?.value) || 1);
+            const lineGross = price * qty;
+            const tax = calculateItemTax(card, lineGross);
             totals.base += tax.base;
             totals.tax += tax.tax;
             totals.total += tax.total;
@@ -2811,6 +2819,12 @@
     };
 
     addRoll();
-    switchPurchaseType('FABRIC_ROLL');
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestedType = (urlParams.get('type') || 'FABRIC_ROLL').toUpperCase();
+    if (['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY'].includes(requestedType)) {
+        switchPurchaseType(requestedType);
+    } else {
+        switchPurchaseType('FABRIC_ROLL');
+    }
 })();
 </script>

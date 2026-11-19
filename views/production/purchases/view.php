@@ -132,8 +132,7 @@
                 $cgstTotal = 0.0;
                 $igstTotal = 0.0;
                 foreach ($items as $index => $item):
-                    $isRoll = ($item['item_type'] === 'FABRIC_ROLL');
-                    $gross = (float)$item['unit_price'] * ($isRoll ? 1 : (float)$item['quantity']);
+                    $gross = (float)$item['unit_price'] * (float)$item['quantity'];
                     $sgAmt = (float)($item['sgst_amount'] ?? 0);
                     $cgAmt = (float)($item['cgst_amount'] ?? 0);
                     $igAmt = (float)($item['igst_amount'] ?? 0);

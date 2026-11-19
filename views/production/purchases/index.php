@@ -1,6 +1,40 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
-        <h2 class="mb-1"><i class="bi bi-bag-check me-2 text-primary"></i>Purchases &amp; Procurement</h2>
+        <h2 class="mb-1 fw-bold text-dark"><i class="bi bi-bag-check me-2 text-primary"></i>Purchases &amp; Procurement</h2>
+        <div class="text-muted small">Manage inbound supplier purchases, fabric rolls, raw materials, and finished goods</div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <?php if (hasPermission('production_purchases', 'create') || hasPermission('sellers', 'create')): ?>
+        <div class="btn-group shadow-sm">
+            <a href="<?= url('purchases/create') ?>" class="btn btn-primary fw-semibold">
+                <i class="bi bi-plus-circle me-1"></i> Record Purchase
+            </a>
+            <button type="button" class="btn btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                <span class="visually-hidden">Toggle Dropdown</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                <li><h6 class="dropdown-header text-uppercase small fw-bold">Quick Purchase Entry</h6></li>
+                <li>
+                    <a class="dropdown-item py-2" href="<?= url('purchases/create?type=FABRIC_ROLL') ?>">
+                        <i class="bi bi-vinyl text-primary me-2"></i><strong>1. Fabric Rolls</strong>
+                        <small class="d-block text-muted ps-4">Thermal scannable roll QR tags</small>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item py-2" href="<?= url('purchases/create?type=RAW_MATERIAL') ?>">
+                        <i class="bi bi-boxes text-warning me-2"></i><strong>2. Raw Materials</strong>
+                        <small class="d-block text-muted ps-4">Yarn, sewing threads, trims</small>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item py-2" href="<?= url('purchases/create?type=THIRD_PARTY') ?>">
+                        <i class="bi bi-shop text-info me-2"></i><strong>3. Third-Party Products</strong>
+                        <small class="d-block text-muted ps-4">Ready-to-sell SKU items</small>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -8,37 +42,65 @@
 <div class="row g-3 mb-4">
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Total Purchases</div>
-                <div class="fs-3 fw-bold text-dark"><?= number_format((int)($metrics['total_count'] ?? count($purchases))) ?></div>
-                <div class="small text-muted">₹<?= number_format((float)$totalPurchaseValue, 2) ?> spend</div>
+            <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                    <div class="text-muted small text-uppercase fw-semibold">Total Purchases</div>
+                    <div class="fs-3 fw-bold text-dark"><?= number_format((int)($metrics['total_count'] ?? count($purchases))) ?></div>
+                    <div class="small text-muted">₹<?= number_format((float)$totalPurchaseValue, 2) ?> spend</div>
+                </div>
+                <div class="mt-3">
+                    <a href="<?= url('purchases') ?>" class="btn btn-sm btn-outline-secondary w-100 py-1" style="font-size:12px;">
+                        <i class="bi bi-view-list me-1"></i>View All Orders
+                    </a>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Fabric Roll Purchases</div>
-                <div class="fs-3 fw-bold text-primary"><?= number_format((int)($metrics['fabric_roll_count'] ?? 0)) ?></div>
-                <div class="small text-muted">Fabric roll orders</div>
+            <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                    <div class="text-muted small text-uppercase fw-semibold">Fabric Roll Purchases</div>
+                    <div class="fs-3 fw-bold text-primary"><?= number_format((int)($metrics['fabric_roll_count'] ?? 0)) ?></div>
+                    <div class="small text-muted">Fabric roll orders</div>
+                </div>
+                <div class="mt-3">
+                    <a href="<?= url('purchases/create?type=FABRIC_ROLL') ?>" class="btn btn-sm btn-outline-primary w-100 py-1 fw-semibold" style="font-size:12px;">
+                        <i class="bi bi-plus-circle me-1"></i>+ New Roll Purchase
+                    </a>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Raw Materials Purchases</div>
-                <div class="fs-3 fw-bold text-warning"><?= number_format((int)($metrics['raw_material_count'] ?? 0)) ?></div>
-                <div class="small text-muted">Yarn, threads & accessories</div>
+            <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                    <div class="text-muted small text-uppercase fw-semibold">Raw Materials Purchases</div>
+                    <div class="fs-3 fw-bold text-warning"><?= number_format((int)($metrics['raw_material_count'] ?? 0)) ?></div>
+                    <div class="small text-muted">Yarn, threads & accessories</div>
+                </div>
+                <div class="mt-3">
+                    <a href="<?= url('purchases/create?type=RAW_MATERIAL') ?>" class="btn btn-sm btn-outline-warning text-dark w-100 py-1 fw-semibold" style="font-size:12px;">
+                        <i class="bi bi-plus-circle me-1"></i>+ New Raw Material
+                    </a>
+                </div>
             </div>
         </div>
     </div>
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Third-Party Purchases</div>
-                <div class="fs-3 fw-bold text-info"><?= number_format((int)($metrics['third_party_count'] ?? 0)) ?></div>
-                <div class="small text-muted">Third-party orders</div>
+            <div class="card-body d-flex flex-column justify-content-between">
+                <div>
+                    <div class="text-muted small text-uppercase fw-semibold">Third-Party Purchases</div>
+                    <div class="fs-3 fw-bold text-info"><?= number_format((int)($metrics['third_party_count'] ?? 0)) ?></div>
+                    <div class="small text-muted">Third-party orders</div>
+                </div>
+                <div class="mt-3">
+                    <a href="<?= url('purchases/create?type=THIRD_PARTY') ?>" class="btn btn-sm btn-outline-info w-100 py-1 fw-semibold" style="font-size:12px;">
+                        <i class="bi bi-plus-circle me-1"></i>+ New 3rd-Party PO
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -73,7 +135,7 @@
                     Showing recorded procurement orders across all purchase types
                 </div>
             </div>
-            <div class="d-flex gap-2 align-items-center">
+            <div class="d-flex gap-2 align-items-center flex-wrap">
                 <div class="btn-group btn-group-sm me-2">
                     <a href="<?= url('purchases') ?>" class="btn <?= empty($filterType) ? 'btn-primary' : 'btn-outline-secondary' ?>">All</a>
                     <a href="<?= url('purchases?type=FABRIC_ROLL') ?>" class="btn <?= ($filterType === 'FABRIC_ROLL') ? 'btn-primary' : 'btn-outline-secondary' ?>">Rolls</a>
@@ -81,6 +143,11 @@
                     <a href="<?= url('purchases?type=THIRD_PARTY') ?>" class="btn <?= ($filterType === 'THIRD_PARTY') ? 'btn-info text-white' : 'btn-outline-secondary' ?>">3rd-Party</a>
                 </div>
                 <input type="text" id="purchasesSearchInput" class="form-control form-control-sm" placeholder="🔍 Search PO #, supplier, invoice..." style="width: 240px;" oninput="filterPurchasesTable(this.value)">
+                <?php if (hasPermission('production_purchases', 'create') || hasPermission('sellers', 'create')): ?>
+                <a href="<?= url('purchases/create') ?>" class="btn btn-sm btn-primary d-inline-flex align-items-center shadow-sm">
+                    <i class="bi bi-plus-circle me-1"></i> New Purchase
+                </a>
+                <?php endif; ?>
             </div>
         </div>
 
