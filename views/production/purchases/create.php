@@ -676,8 +676,12 @@
 }
 
 .tax-strip-container {
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background-color: #f8fafc !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 0.5rem !important;
+    padding: 14px 18px !important;
+    margin-top: 8px !important;
+    margin-bottom: 8px !important;
 }
 .tax-strip-container .item-gst-type,
 .item-gst-type {
@@ -807,8 +811,8 @@
                 </div>
 
                 <!-- Individual GST & Tax options -->
-                <div class="col-12 mt-2 pt-2 border-top">
-                    <div class="p-2.5 rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 tax-strip-container">
+                <div class="col-12 mt-3 pt-3 border-top">
+                    <div class="tax-strip-container rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 p-3 px-md-4 my-2">
                         <div style="min-width: 220px; flex: 1 1 240px; max-width: 330px;">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
@@ -862,7 +866,7 @@
                             <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
                             <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="ms-auto text-end flex-shrink-0 ps-2">
+                        <div class="ms-auto text-end flex-shrink-0 ps-3 pe-1">
                             <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
                             <strong class="text-success fs-6 rm-line-total">₹0.00</strong>
                         </div>
@@ -934,8 +938,8 @@
                 </div>
 
                 <!-- Individual GST & Tax options directly near product fields! -->
-                <div class="col-12 mt-2 pt-2 border-top">
-                    <div class="p-2.5 rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 tax-strip-container">
+                <div class="col-12 mt-3 pt-3 border-top">
+                    <div class="tax-strip-container rounded-3 border bg-light-subtle d-flex flex-wrap align-items-center gap-2 gap-lg-3 p-3 px-md-4 my-2">
                         <div style="min-width: 220px; flex: 1 1 240px; max-width: 330px;">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <label class="form-label mb-0 small fw-semibold">HSN Code <span class="text-danger">*</span></label>
@@ -989,7 +993,7 @@
                             <label class="form-label mb-1 small fw-semibold item-cgst-label">CGST (%)</label>
                             <input type="text" inputmode="decimal" pattern="([0-9]+([.][0-9]*)?|[.][0-9]+)" data-min="0" data-max="100" data-step="0.01" class="form-control form-control-sm item-cgst-value numeric-text-input fw-semibold text-center" style="font-size: 0.84rem;" value="2.50">
                         </div>
-                        <div class="ms-auto text-end flex-shrink-0 ps-2">
+                        <div class="ms-auto text-end flex-shrink-0 ps-3 pe-1">
                             <small class="text-muted d-block" style="font-size:11px">Item Total incl. Tax</small>
                             <strong class="text-success fs-6 tp-line-total">₹0.00</strong>
                         </div>
