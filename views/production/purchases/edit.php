@@ -57,10 +57,6 @@ $taxValueForItem = static function (array $item, string $type): float {
     </div>
     <div class="d-flex gap-2">
         <a href="<?= url('production/purchases') ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
-        <?php if ($purchaseType !== 'OWN_PRODUCT'): ?>
-            <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark btn-sm"><i class="bi bi-qr-code text-warning me-1"></i>Thermal QR Labels</a>
-        <?php endif; ?>
-        <a href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm"><i class="bi bi-printer me-1"></i>Print Invoice</a>
     </div>
 </div>
 

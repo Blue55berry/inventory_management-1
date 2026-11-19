@@ -1,11 +1,6 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Purchase Item Mapping</h2>
-        <p class="text-muted small mb-0">Open a purchase bill once to map all its products and set each product's MRP and selling price.</p>
-    </div>
-    <div class="d-flex gap-2 flex-wrap">
-        <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
-        <a href="<?= url('purchases/create') ?>" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Record Purchase</a>
     </div>
 </div>
 
@@ -76,14 +71,6 @@
                     <a href="<?= url('purchases/mapping?status=complementary' . ($search ? '&search=' . urlencode($search) : '')) ?>" 
                        class="btn btn-sm <?= ($status === 'complementary') ? 'btn-info text-dark fw-bold' : 'btn-outline-secondary' ?>">
                         <i class="bi bi-gift me-1"></i>Complementary (<?= number_format((int)($metrics['complementary_count'] ?? 0)) ?>)
-                    </a>
-                    <a href="<?= url('purchases/mapping?status=qr' . ($search ? '&search=' . urlencode($search) : '')) ?>"
-                       class="btn btn-sm <?= ($status === 'qr') ? 'btn-dark fw-bold' : 'btn-outline-secondary' ?>">
-                        <i class="bi bi-qr-code me-1"></i>QR Ready (<?= number_format((int)($metrics['qr_count'] ?? 0)) ?>)
-                    </a>
-                    <a href="<?= url('purchases/mapping?status=grn' . ($search ? '&search=' . urlencode($search) : '')) ?>"
-                       class="btn btn-sm <?= ($status === 'grn') ? 'btn-primary fw-bold' : 'btn-outline-secondary' ?>">
-                        <i class="bi bi-truck me-1"></i>GRN Created (<?= number_format((int)($metrics['grn_count'] ?? 0)) ?>)
                     </a>
                     <a href="<?= url('purchases/mapping?status=all' . ($search ? '&search=' . urlencode($search) : '')) ?>" 
                        class="btn btn-sm <?= ($status === 'all') ? 'btn-primary fw-bold' : 'btn-outline-secondary' ?>">

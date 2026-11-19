@@ -18,10 +18,6 @@
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
-        <?php if ($pType !== 'OWN_PRODUCT'): ?>
-            <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark"><i class="bi bi-qr-code me-1 text-warning"></i>Print Thermal QR Labels</a>
-        <?php endif; ?>
-        <a href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Invoice</a>
     </div>
 </div>
 
@@ -126,7 +122,6 @@
                     <?php if ($hasIgst): ?><th class="text-end"><?= e($igstTitle) ?></th><?php endif; ?>
                     <?php if (!$hasAnyTax): ?><th class="text-end">Tax</th><?php endif; ?>
                     <th class="text-end">Total</th>
-                    <th class="text-center">Action / QR</th>
                 </tr>
             </thead>
             <tbody id="purchasedItemsBody">
@@ -266,23 +261,6 @@
                         <td class="text-end text-muted">—</td>
                     <?php endif; ?>
                     <td class="text-end fw-bold font-monospace">₹<?= number_format((float)$item['total_price'], 2) ?></td>
-                    <td class="text-center">
-                        <div class="action-btns-group justify-content-center">
-                        <?php if ($item['item_type'] === 'FABRIC_ROLL' && !empty($item['seller_roll_id'])): ?>
-                            <a class="btn btn-outline-info btn-action-icon" href="<?= url('production/sellers/roll-labels/' . $item['seller_roll_id']) ?>" target="_blank" rel="noopener" title="Thermal Print Roll Label">
-                                <i class="bi bi-qr-code"></i>
-                            </a>
-                        <?php elseif ($item['item_type'] === 'THIRD_PARTY'): ?>
-                            <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
-                                <i class="bi bi-qr-code text-primary"></i>
-                            </a>
-                        <?php elseif ($item['item_type'] !== 'OWN_PRODUCT'): ?>
-                            <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
-                                <i class="bi bi-qr-code text-primary"></i>
-                            </a>
-                        <?php endif; ?>
-                        </div>
-                    </td>
                 </tr>
             <?php endforeach; ?>
                 <tr id="noItemsMatchRow" class="d-none">
@@ -300,19 +278,16 @@
                     <?php if ($hasIgst): ?><th class="text-end font-monospace">₹<?= number_format($igstTotal, 2) ?></th><?php endif; ?>
                     <?php if (!$hasAnyTax): ?><th class="text-end">—</th><?php endif; ?>
                     <th class="text-end font-monospace">₹<?= number_format((float)$purchase['total_amount'], 2) ?></th>
-                    <th></th>
                 </tr>
                 <?php if ($hasAnyTax): ?>
                 <tr>
-                    <th colspan="<?= 5 + $taxColCount ?>" class="text-end text-muted small">Total Taxes</th>
+                    <th colspan="<?= 6 + $taxColCount ?>" class="text-end text-muted small">Total Taxes</th>
                     <th class="text-end font-monospace text-muted small">₹<?= number_format($taxTotal, 2) ?></th>
-                    <th></th>
                 </tr>
                 <?php endif; ?>
                 <tr>
-                    <th colspan="<?= 5 + $taxColCount ?>" class="text-end">Overall Total</th>
+                    <th colspan="<?= 6 + $taxColCount ?>" class="text-end">Overall Total</th>
                     <th class="text-end text-success font-monospace fs-6">₹<?= number_format((float)$purchase['total_amount'], 2) ?></th>
-                    <th></th>
                 </tr>
             </tfoot>
         </table>

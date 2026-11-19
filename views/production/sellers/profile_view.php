@@ -18,12 +18,6 @@
         <a href="<?= url('production/sellers') ?>" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Suppliers
         </a>
-        <a href="<?= url('production/purchases/create?seller_id=' . (int)$seller['id']) ?>" class="btn btn-outline-primary">
-            <i class="bi bi-cart-plus me-1"></i>New Purchase
-        </a>
-        <a href="<?= url('production/sellers/edit/' . (int)$seller['id']) ?>" class="btn btn-primary">
-            <i class="bi bi-pencil-square me-1"></i>Edit Supplier
-        </a>
     </div>
 </div>
 

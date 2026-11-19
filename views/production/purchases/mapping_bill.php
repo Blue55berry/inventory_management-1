@@ -36,14 +36,8 @@ foreach ($items as $billItem) {
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Map Purchase Bill</h2>
-        <p class="text-muted small mb-0">Full bill view — map every product and set prices. Mapping creates GRNs; eligible mapped lines can be generated afterward from QR Generations.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <?php if ($firstQrTab !== ''): ?>
-            <a href="<?= url('production/qr-generations?tab=' . e($firstQrTab)) ?>" class="btn btn-outline-info">
-                <i class="bi bi-qr-code me-1"></i> QR Generations
-            </a>
-        <?php endif; ?>
         <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back to Mapping List
         </a>

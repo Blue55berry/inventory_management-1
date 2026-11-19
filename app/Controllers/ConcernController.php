@@ -169,24 +169,12 @@ class ConcernController {
     public function create(): void {
         $this->authorizeAdmin();
 
-        $standardModules = self::$STANDARD_MODULES;
         $roles = Role::getActive();
-
-        $allStaff = Database::fetchAll("
-            SELECT u.id, u.username, u.full_name, u.email, u.phone, u.department, u.staff_role,
-                   r.name as role_name, r.slug as role_slug
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.id
-            WHERE u.is_active = 1
-            ORDER BY u.full_name ASC
-        ");
 
         Response::view('admin.concerns.create', [
             'pageTitle'       => 'Add New Business Concern',
             'activeModule'    => 'concerns',
             'activeMenu'      => 'concerns-create',
-            'standardModules' => $standardModules,
-            'allStaff'        => $allStaff,
             'roles'           => $roles,
             'breadcrumb'      => [
                 ['label' => 'Dashboard', 'url' => url('admin/dashboard')],
@@ -279,27 +267,12 @@ class ConcernController {
                 $modStmt->execute([$concernId, $mKey]);
             }
 
-            // Map selected staff members to new concern
-            $staffIds = array_values(array_unique(array_filter(array_map('intval', $_POST['staff_ids'] ?? []))));
-            if (!in_array($creatorId, $staffIds, true)) {
-                $staffIds[] = $creatorId;
-            }
-            $primaryStaffId = !empty($_POST['primary_staff_id']) ? (int)$_POST['primary_staff_id'] : ($staffIds[0] ?? $creatorId);
-
-            $ucStmt = $db->prepare("
+            // Authorize creator to newly created concern
+            $db->prepare("
                 INSERT INTO user_concerns (user_id, concern_id, is_default, created_at)
-                VALUES (?, ?, ?, NOW())
-                ON DUPLICATE KEY UPDATE is_default = VALUES(is_default)
-            ");
-
-            foreach ($staffIds as $sId) {
-                $isDef = ($sId === $primaryStaffId) ? 1 : 0;
-                $ucStmt->execute([$sId, $concernId, $isDef]);
-                if ($isDef) {
-                    $db->prepare("UPDATE users SET default_concern_id = ? WHERE id = ? AND (default_concern_id IS NULL OR default_concern_id = 0)")
-                       ->execute([$concernId, $sId]);
-                }
-            }
+                VALUES (?, ?, 0, NOW())
+                ON DUPLICATE KEY UPDATE is_default = is_default
+            ")->execute([$creatorId, $concernId]);
 
             // Auto-link/create Production Unit if production module enabled
             if (in_array('production', $selectedModules, true)) {
@@ -335,7 +308,7 @@ class ConcernController {
 
             $db->commit();
 
-            Session::flash('success', "Business Concern '{$name}' ({$code}) created successfully with " . count($staffIds) . " assigned staff members.");
+            Session::flash('success', "Business Concern '{$name}' ({$code}) created successfully.");
             Response::redirect(url('admin/concerns'));
         } catch (Exception $e) {
             $db->rollBack();
@@ -358,43 +331,11 @@ class ConcernController {
             return;
         }
 
-        // Fetch active staff for assignment
-        $allStaff = Database::fetchAll("
-            SELECT u.id, u.username, u.full_name, u.email, u.phone, u.department, u.staff_role,
-                   r.name as role_name, r.slug as role_slug
-            FROM users u
-            LEFT JOIN roles r ON u.role_id = r.id
-            WHERE u.is_active = 1
-            ORDER BY u.full_name ASC
-        ");
-
-        $assignedStaffRows = Database::fetchAll("
-            SELECT user_id, is_default FROM user_concerns WHERE concern_id = ?
-        ", [$concernId]);
-
-        $assignedStaffIds = array_map('intval', array_column($assignedStaffRows, 'user_id'));
-        $primaryStaffId = null;
-        foreach ($assignedStaffRows as $asr) {
-            if ((int)$asr['is_default'] === 1) {
-                $primaryStaffId = (int)$asr['user_id'];
-                break;
-            }
-        }
-        if ($primaryStaffId === null && !empty($assignedStaffIds)) {
-            $primaryStaffId = $assignedStaffIds[0];
-        }
-
-        $roles = Role::getActive();
-
         Response::view('admin.concerns.edit', [
             'pageTitle'         => 'Edit Concern: ' . $concern['name'],
             'activeModule'      => 'concerns',
             'activeMenu'        => 'concerns-list',
             'concern'           => $concern,
-            'allStaff'          => $allStaff,
-            'assignedStaffIds'  => $assignedStaffIds,
-            'primaryStaffId'    => $primaryStaffId,
-            'roles'             => $roles,
             'breadcrumb'        => [
                 ['label' => 'Dashboard', 'url' => url('admin/dashboard')],
                 ['label' => 'Concerns', 'url' => url('admin/concerns')],
@@ -476,35 +417,6 @@ class ConcernController {
                 $invoicePrefix, $poPrefix, $dispatchPrefix, $isActive,
                 $concernId
             ]);
-
-            // Sync assigned staff members if submitted
-            if (isset($_POST['staff_ids']) || isset($_POST['staff_sync_submitted'])) {
-                $staffIds = array_values(array_unique(array_filter(array_map('intval', $_POST['staff_ids'] ?? []))));
-                $primaryStaffId = !empty($_POST['primary_staff_id']) ? (int)$_POST['primary_staff_id'] : ($staffIds[0] ?? null);
-
-                if (!empty($staffIds)) {
-                    $inClause = implode(',', array_fill(0, count($staffIds), '?'));
-                    $db->prepare("DELETE FROM user_concerns WHERE concern_id = ? AND user_id NOT IN ($inClause)")
-                       ->execute(array_merge([$concernId], $staffIds));
-                } else {
-                    $db->prepare("DELETE FROM user_concerns WHERE concern_id = ?")->execute([$concernId]);
-                }
-
-                $ucStmt = $db->prepare("
-                    INSERT INTO user_concerns (user_id, concern_id, is_default, created_at)
-                    VALUES (?, ?, ?, NOW())
-                    ON DUPLICATE KEY UPDATE is_default = VALUES(is_default)
-                ");
-
-                foreach ($staffIds as $sId) {
-                    $isDef = ($sId === $primaryStaffId) ? 1 : 0;
-                    $ucStmt->execute([$sId, $concernId, $isDef]);
-                    if ($isDef) {
-                        $db->prepare("UPDATE users SET default_concern_id = ? WHERE id = ?")
-                           ->execute([$concernId, $sId]);
-                    }
-                }
-            }
 
             $db->commit();
             Session::flash('success', "Concern '{$name}' ({$code}) updated successfully.");

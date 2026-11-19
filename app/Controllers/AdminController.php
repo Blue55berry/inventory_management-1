@@ -193,7 +193,7 @@ class AdminController {
 
         $roles            = Role::getActive();
         $productionUnits  = ProductionUnit::getWithMetrics();
-        $concerns         = getAvailableUserConcerns();
+        $concerns         = Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
         $curConcernId     = currentConcernId() ?? (!empty($concerns) ? (int)$concerns[0]['id'] : 1);
 
         Response::view('admin.staff_form', [
@@ -271,7 +271,7 @@ class AdminController {
             $defaultConcernId = !empty($_POST['default_concern_id']) ? (int)$_POST['default_concern_id'] : null;
 
             if (!isSuperAdmin()) {
-                $allowedCids = array_column(getAvailableUserConcerns(), 'id');
+                $allowedCids = array_column(Database::fetchAll("SELECT id FROM concerns WHERE is_active = 1") ?: [], 'id');
                 $assignedConcerns = array_values(array_intersect(array_map('intval', $assignedConcerns), $allowedCids));
                 if (empty($assignedConcerns)) {
                     $assignedConcerns = [currentConcernId() ?? 1];
@@ -400,7 +400,7 @@ class AdminController {
 
         $roles            = Role::getActive();
         $productionUnits  = ProductionUnit::getWithMetrics();
-        $concerns         = getAvailableUserConcerns();
+        $concerns         = Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
         $staffConcerns    = User::getConcernIds($staffId);
         $defaultConcernId = (int)($staff['default_concern_id'] ?? 0);
         if ($defaultConcernId === 0 && !empty($staffConcerns)) {
@@ -481,7 +481,7 @@ class AdminController {
                 $defaultConcernId = !empty($_POST['default_concern_id']) ? (int)$_POST['default_concern_id'] : null;
 
                 if (!isSuperAdmin()) {
-                    $allowedCids = array_column(getAvailableUserConcerns(), 'id');
+                    $allowedCids = array_column(Database::fetchAll("SELECT id FROM concerns WHERE is_active = 1") ?: [], 'id');
                     $assignedConcerns = array_values(array_intersect(array_map('intval', $assignedConcerns), $allowedCids));
                     if (empty($assignedConcerns)) {
                         $assignedConcerns = [currentConcernId() ?? 1];
