@@ -140,9 +140,11 @@ foreach ($items as $billItem) {
                     <span class="small text-muted">Category is required. MRP and selling price are saved with the mapped catalog variant.</span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <a href="<?= url('production/third-party-catalog') ?>" target="_blank" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1.5">
+                    <?php if (hasPermission('production_purchase_mapping', 'view')): ?>
+                    <a href="<?= url('production/purchases/mapping/catalog') ?>" target="_blank" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1.5">
                         <i class="bi bi-collection"></i> Third-Party Catalog
                     </a>
+                    <?php endif; ?>
                     <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#modalAddBillProduct">
                         <i class="bi bi-plus-circle-fill"></i> Add Product Line to Bill
                     </button>
@@ -226,7 +228,7 @@ foreach ($items as $billItem) {
                                                 class="form-select form-select-sm" data-category required>
                                             <option value="">-- Select Category --</option>
                                             <?php foreach ($categories as $cat): ?>
-                                                <option value="<?= (int)$cat['id'] ?>" <?= ((int)$item['mapped_category_id'] === (int)$cat['id']) ? 'selected' : '' ?>>
+                                                <option value="<?= (int)$cat['id'] ?>" <?= ((int)$item['mapped_third_party_category_id'] === (int)$cat['id']) ? 'selected' : '' ?>>
                                                     <?= e($cat['name']) ?> (<?= e($cat['code']) ?>)
                                                 </option>
                                             <?php endforeach; ?>
@@ -571,7 +573,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            fetch('<?= url("api/subcategories") ?>/' + categoryId)
+            fetch('<?= url("api/subcategories") ?>/' + categoryId + '?catalog_source=THIRD_PARTY')
                 .then(response => response.json())
                 .then(data => {
                     if (!Array.isArray(data) || !subcategory) return;
@@ -608,7 +610,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            fetch('<?= url("api/sub-subcategories") ?>/' + subcategoryId)
+            fetch('<?= url("api/sub-subcategories") ?>/' + subcategoryId + '?catalog_source=THIRD_PARTY')
                 .then(response => response.json())
                 .then(data => {
                     if (!Array.isArray(data) || !subsubcategory) return;
@@ -639,7 +641,7 @@ document.addEventListener('DOMContentLoaded', function() {
             fields.innerHTML = '';
 
             let endpoint = '<?= url("api/categories/attributes") ?>/' + categoryId;
-            const params = [];
+            const params = ['catalog_source=THIRD_PARTY'];
             if (subcategoryId) params.push('subcategory_id=' + subcategoryId);
             if (subSubcategoryId) params.push('sub_subcategory_id=' + subSubcategoryId);
             if (params.length) endpoint += '?' + params.join('&');
@@ -727,12 +729,12 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         validatePrices();
-        const initialCategory = parseInt(savedItem.mapped_category_id, 10) || 0;
+        const initialCategory = parseInt(savedItem.mapped_third_party_category_id, 10) || 0;
         if (initialCategory && category) {
             category.value = initialCategory;
             loadHierarchy(
-                parseInt(savedItem.mapped_subcategory_id, 10) || 0,
-                parseInt(savedItem.mapped_sub_subcategory_id, 10) || 0
+                parseInt(savedItem.mapped_third_party_subcategory_id, 10) || 0,
+                parseInt(savedItem.mapped_third_party_sub_subcategory_id, 10) || 0
             );
         }
     });
@@ -773,7 +775,7 @@ function loadNewProductSubcategories() {
 
     if (!catId) return;
 
-    fetch('<?= url("api/subcategories") ?>/' + catId)
+    fetch('<?= url("api/subcategories") ?>/' + catId + '?catalog_source=THIRD_PARTY')
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data) && data.length > 0) {
@@ -801,7 +803,7 @@ function loadNewProductSubSubcategories() {
 
     if (!subId) return;
 
-    fetch('<?= url("api/sub-subcategories") ?>/' + subId)
+    fetch('<?= url("api/sub-subcategories") ?>/' + subId + '?catalog_source=THIRD_PARTY')
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data) && data.length > 0) {

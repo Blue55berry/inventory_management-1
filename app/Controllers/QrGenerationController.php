@@ -338,14 +338,28 @@ class QrGenerationController {
             LIMIT 200
         ", $params);
 
+        if (empty($batches)) {
+            return [];
+        }
+
+        // Optimized Eager-Loading: Fetch all stitching items in 1 batch query instead of N loop queries
+        $batchIds = array_column($batches, 'id');
+        $placeholders = implode(',', array_fill(0, count($batchIds), '?'));
+        $allItems = Database::fetchAll("
+            SELECT si.id, si.stitching_batch_id, si.size_name, si.color_name,
+                   COALESCE(NULLIF(si.stitched_qty, 0), NULLIF(si.stitched_quantity, 0), si.received_qty, 0) as qty,
+                   si.catalog_hierarchy, si.base_price, si.discount_price
+            FROM stitching_items si
+            WHERE si.stitching_batch_id IN ({$placeholders})
+        ", $batchIds);
+
+        $itemsByBatch = [];
+        foreach ($allItems as $it) {
+            $itemsByBatch[$it['stitching_batch_id']][] = $it;
+        }
+
         foreach ($batches as &$b) {
-            $items = Database::fetchAll("
-                SELECT si.id, si.size_name, si.color_name,
-                       COALESCE(NULLIF(si.stitched_qty, 0), NULLIF(si.stitched_quantity, 0), si.received_qty, 0) as qty,
-                       si.catalog_hierarchy, si.base_price, si.discount_price
-                FROM stitching_items si
-                WHERE si.stitching_batch_id = ?
-            ", [$b['id']]);
+            $items = $itemsByBatch[$b['id']] ?? [];
             $b['items'] = $items;
             $calcTotal = 0;
             foreach ($items as $it) {

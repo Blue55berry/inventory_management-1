@@ -450,6 +450,10 @@ if (tableExists($db, 'production_purchase_items')) {
     }
 }
 
+// Migration 10b: Create an isolated category hierarchy for the third-party catalog.
+echo "  Applying 2026_11_19_create_third_party_taxonomy.php...\n";
+require_once BASE_PATH . '/database/migrations/2026_11_19_create_third_party_taxonomy.php';
+
 // Migration 11: 2026_11_17_enhance_stock_requests_inter_module_flow.sql
 echo "  Applying 2026_11_17_enhance_stock_requests_inter_module_flow.sql...\n";
 if (tableExists($db, 'production_stock_requests')) {

@@ -4,12 +4,16 @@
         <span class="text-muted small">Exclusively for mapping third-party purchased products to catalog categories &amp; variants. Fabric rolls &amp; raw materials move directly to QR Generations.</span>
     </div>
     <div class="d-flex align-items-center gap-2 flex-wrap">
-        <a href="<?= url('production/third-party-catalog') ?>" class="btn btn-outline-primary btn-sm">
+        <?php if (hasPermission('production_purchase_mapping', 'view')): ?>
+        <a href="<?= url('production/purchases/mapping/catalog') ?>" class="btn btn-outline-primary btn-sm">
             <i class="bi bi-collection me-1"></i> Third-Party Catalog
         </a>
-        <a href="<?= url('production/third-party-catalog/create') ?>" class="btn btn-primary btn-sm shadow-sm">
-            <i class="bi bi-plus-circle-fill me-1"></i> Create Third-Party Catalog
+        <?php endif; ?>
+        <?php if (hasPermission('production_purchase_mapping', 'create')): ?>
+        <a href="<?= url('production/purchases/mapping/catalog/create') ?>" class="btn btn-primary btn-sm shadow-sm">
+            <i class="bi bi-plus-circle-fill me-1"></i> Add Third-Party Product
         </a>
+        <?php endif; ?>
     </div>
 </div>
 
@@ -38,7 +42,7 @@
             <div class="card-body">
                 <div class="text-muted small text-uppercase fw-semibold">Successfully Mapped</div>
                 <div class="fs-3 fw-bold text-success"><?= number_format((int)($metrics['mapped_count'] ?? 0)) ?></div>
-                <div class="small text-muted">Configured in third-party catalog</div>
+                <div class="small text-muted">Configured in Third-Party Catalog</div>
             </div>
         </div>
     </div>

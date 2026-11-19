@@ -7,7 +7,7 @@
         <a href="<?= url('production/purchases/mapping') ?>" class="btn btn-outline-secondary">
             <i class="bi bi-diagram-3 me-1"></i> Product Mapping
         </a>
-        <a href="<?= url('production/third-party-catalog/create') ?>" class="btn btn-primary shadow-sm">
+        <a href="<?= url('production/purchases/mapping/catalog/create') ?>" class="btn btn-primary shadow-sm">
             <i class="bi bi-plus-circle-fill me-1"></i> Add Third-Party Style
         </a>
     </div>
@@ -56,7 +56,7 @@
 <!-- Search & Filters -->
 <div class="card mb-4 shadow-sm border-0">
     <div class="card-body p-3">
-        <form method="GET" action="<?= url('production/third-party-catalog') ?>" class="row g-2 align-items-center">
+        <form method="GET" action="<?= url('production/purchases/mapping/catalog') ?>" class="row g-2 align-items-center">
             <div class="col-lg-5 col-md-6">
                 <div class="input-group">
                     <span class="input-group-text bg-light text-primary"><i class="bi bi-search"></i></span>
@@ -78,7 +78,7 @@
             </div>
             <?php if (!empty($search) || !empty($categoryId)): ?>
             <div class="col-auto">
-                <a href="<?= url('production/third-party-catalog') ?>" class="btn btn-outline-secondary" title="Reset Filters"><i class="bi bi-x-lg"></i></a>
+                <a href="<?= url('production/purchases/mapping/catalog') ?>" class="btn btn-outline-secondary" title="Reset Filters"><i class="bi bi-x-lg"></i></a>
             </div>
             <?php endif; ?>
         </form>
@@ -113,7 +113,7 @@
                             <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
                             No third-party catalog styles found.
                             <div class="mt-2">
-                                <a href="<?= url('production/third-party-catalog/create') ?>" class="btn btn-sm btn-primary">
+                                <a href="<?= url('production/purchases/mapping/catalog/create') ?>" class="btn btn-sm btn-primary">
                                     <i class="bi bi-plus-circle me-1"></i> Add First Style
                                 </a>
                             </div>
@@ -155,10 +155,10 @@
                             <td class="text-end font-monospace fw-bold text-success">₹<?= number_format((float)$p['selling_price'], 2) ?></td>
                             <td class="text-center">
                                 <div class="btn-group btn-group-sm">
-                                    <a href="<?= url('production/third-party-catalog/edit/' . $p['id']) ?>" class="btn btn-outline-primary" title="Edit Style">
+                                    <a href="<?= url('production/purchases/mapping/catalog/edit/' . $p['id']) ?>" class="btn btn-outline-primary" title="Edit Style">
                                         <i class="bi bi-pencil"></i>
                                     </a>
-                                    <form method="POST" action="<?= url('production/third-party-catalog/delete/' . $p['id']) ?>" class="d-inline" onsubmit="return confirm('Remove style <?= e($p['name']) ?> from catalog?');">
+                                    <form method="POST" action="<?= url('production/purchases/mapping/catalog/delete/' . $p['id']) ?>" class="d-inline" onsubmit="return confirm('Remove style <?= e($p['name']) ?> from catalog?');">
                                         <?= csrf_field() ?>
                                         <button type="submit" class="btn btn-outline-danger" title="Remove Style">
                                             <i class="bi bi-trash"></i>

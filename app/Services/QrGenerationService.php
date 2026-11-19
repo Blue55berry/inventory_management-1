@@ -68,6 +68,10 @@ class QrGenerationService {
         if ($done) {
             return;
         }
+        if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['_qr_schema_ensured'])) {
+            $done = true;
+            return;
+        }
 
         Database::ensureColumn('qr_generations', 'qr_source', "VARCHAR(30) NOT NULL DEFAULT 'THIRD_PARTY' AFTER generation_type");
         Database::ensureColumn('qr_generations', 'source_purchase_id', 'INT UNSIGNED DEFAULT NULL AFTER qr_source');
@@ -94,6 +98,9 @@ class QrGenerationService {
             }
         }
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_qr_schema_ensured'] = 1;
+        }
         $done = true;
     }
 
@@ -524,8 +531,10 @@ class QrGenerationService {
                     sr.weight AS sr_weight, sr.color AS sr_color, sr.design_name AS sr_design_name,
                     sr.quantity AS sr_quantity,
                     pv.variant_code, pv.sku, pv.mrp AS variant_mrp, pv.selling_price AS variant_selling_price,
-                    c.name AS category_name, c.code AS category_code,
-                    sc.name AS subcategory_name, ssc.name AS sub_subcategory_name
+                    COALESCE(tpc.name, c.name) AS category_name,
+                    COALESCE(tpc.code, c.code) AS category_code,
+                    COALESCE(tpsc.name, sc.name) AS subcategory_name,
+                    COALESCE(tpssc.name, ssc.name) AS sub_subcategory_name
              FROM production_purchase_items ppi
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
              LEFT JOIN sellers s ON s.id = pp.seller_id
@@ -534,6 +543,9 @@ class QrGenerationService {
              LEFT JOIN categories c ON c.id = ppi.mapped_category_id
              LEFT JOIN subcategories sc ON sc.id = ppi.mapped_subcategory_id
              LEFT JOIN sub_subcategories ssc ON ssc.id = ppi.mapped_sub_subcategory_id
+             LEFT JOIN third_party_categories tpc ON tpc.id = ppi.mapped_third_party_category_id
+             LEFT JOIN third_party_subcategories tpsc ON tpsc.id = ppi.mapped_third_party_subcategory_id
+             LEFT JOIN third_party_sub_subcategories tpssc ON tpssc.id = ppi.mapped_third_party_sub_subcategory_id
              WHERE ppi.id = ?",
             [$itemId]
         );
@@ -583,9 +595,15 @@ class QrGenerationService {
         $sellingPrice = 0.0;
         $productId = (int)($item['product_id'] ?? 0);
         $variantId = (int)($item['variant_id'] ?? 0);
-        $categoryId = (int)($item['mapped_category_id'] ?? 0) ?: null;
-        $subcategoryId = !empty($item['mapped_subcategory_id']) ? (int)$item['mapped_subcategory_id'] : null;
-        $subSubcategoryId = !empty($item['mapped_sub_subcategory_id']) ? (int)$item['mapped_sub_subcategory_id'] : null;
+        $categoryId = $source === self::SOURCE_THIRD_PARTY
+            ? null
+            : ((int)($item['mapped_category_id'] ?? 0) ?: null);
+        $subcategoryId = $source === self::SOURCE_THIRD_PARTY
+            ? null
+            : (!empty($item['mapped_subcategory_id']) ? (int)$item['mapped_subcategory_id'] : null);
+        $subSubcategoryId = $source === self::SOURCE_THIRD_PARTY
+            ? null
+            : (!empty($item['mapped_sub_subcategory_id']) ? (int)$item['mapped_sub_subcategory_id'] : null);
 
         if ($source === self::SOURCE_THIRD_PARTY) {
             if ($productId <= 0 || $variantId <= 0) {

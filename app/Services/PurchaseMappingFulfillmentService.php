@@ -29,6 +29,10 @@ class PurchaseMappingFulfillmentService {
         if (self::$schemaEnsured) {
             return;
         }
+        if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['_pmf_schema_ensured_20261119'])) {
+            self::$schemaEnsured = true;
+            return;
+        }
 
         Database::ensureColumn('production_purchase_items', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER mapped_by');
         Database::ensureColumn('production_purchase_items', 'qr_batch_code', 'VARCHAR(50) DEFAULT NULL AFTER qr_generation_id');
@@ -43,14 +47,66 @@ class PurchaseMappingFulfillmentService {
 
         Database::ensureColumn('products', 'attributes', 'TEXT DEFAULT NULL AFTER description');
         Database::ensureColumn('product_variants', 'attributes', 'TEXT DEFAULT NULL AFTER image');
+        Database::execute("CREATE TABLE IF NOT EXISTS third_party_categories (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            code VARCHAR(50) DEFAULT NULL,
+            slug VARCHAR(200) NOT NULL,
+            is_active TINYINT(1) DEFAULT 1,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_third_party_category_slug (slug)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        Database::execute("CREATE TABLE IF NOT EXISTS third_party_subcategories (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            category_id INT UNSIGNED NOT NULL,
+            name VARCHAR(200) NOT NULL,
+            code VARCHAR(50) DEFAULT NULL,
+            slug VARCHAR(200) NOT NULL,
+            is_active TINYINT(1) DEFAULT 1,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_third_party_subcategory_slug (category_id, slug),
+            CONSTRAINT fk_third_party_subcategories_category
+                FOREIGN KEY (category_id) REFERENCES third_party_categories (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        Database::execute("CREATE TABLE IF NOT EXISTS third_party_sub_subcategories (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            subcategory_id INT UNSIGNED NOT NULL,
+            name VARCHAR(200) NOT NULL,
+            code VARCHAR(50) DEFAULT NULL,
+            slug VARCHAR(200) NOT NULL,
+            is_active TINYINT(1) DEFAULT 1,
+            sort_order INT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_third_party_sub_subcategory_slug (subcategory_id, slug),
+            CONSTRAINT fk_third_party_sub_subcategories_subcategory
+                FOREIGN KEY (subcategory_id) REFERENCES third_party_subcategories (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+        Database::ensureColumn('third_party_products', 'third_party_category_id', 'INT UNSIGNED DEFAULT NULL AFTER sub_subcategory_id');
+        Database::ensureColumn('third_party_products', 'third_party_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER third_party_category_id');
+        Database::ensureColumn('third_party_products', 'third_party_sub_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER third_party_subcategory_id');
+        Database::ensureColumn('production_purchase_items', 'third_party_product_id', 'INT UNSIGNED DEFAULT NULL AFTER variant_id');
+        Database::ensureColumn('production_purchase_items', 'mapped_third_party_category_id', 'INT UNSIGNED DEFAULT NULL AFTER mapped_sub_subcategory_id');
+        Database::ensureColumn('production_purchase_items', 'mapped_third_party_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER mapped_third_party_category_id');
+        Database::ensureColumn('production_purchase_items', 'mapped_third_party_sub_subcategory_id', 'INT UNSIGNED DEFAULT NULL AFTER mapped_third_party_subcategory_id');
 
         // Repair legacy rows that were flagged as mapped without any taxonomy.
         Database::execute(
             "UPDATE production_purchase_items
              SET is_mapped = 0
-             WHERE is_mapped = 1 AND mapped_category_id IS NULL"
+             WHERE is_mapped = 1
+               AND mapped_category_id IS NULL
+               AND mapped_third_party_category_id IS NULL"
         );
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['_pmf_schema_ensured_20261119'] = 1;
+        }
         self::$schemaEnsured = true;
     }
 
@@ -61,11 +117,11 @@ class PurchaseMappingFulfillmentService {
         return Database::fetchOne(
             "SELECT ppi.*,
                     pp.purchase_number, pp.purchase_date, pp.invoice_number, pp.total_amount,
-                    pp.seller_id, pp.grn_id AS purchase_grn_id, pp.grn_number AS purchase_grn_number,
+                    pp.seller_id, pp.concern_id, pp.grn_id AS purchase_grn_id, pp.grn_number AS purchase_grn_number,
                     s.name AS seller_name, s.company AS seller_company,
-                    c.name AS category_name, c.code AS category_code,
-                    sc.name AS subcategory_name, sc.code AS subcategory_code,
-                    ssc.name AS sub_subcategory_name, ssc.code AS sub_subcategory_code,
+                    COALESCE(tpc.name, c.name) AS category_name, COALESCE(tpc.code, c.code) AS category_code,
+                    COALESCE(tps.name, sc.name) AS subcategory_name, COALESCE(tps.code, sc.code) AS subcategory_code,
+                    COALESCE(tpss.name, ssc.name) AS sub_subcategory_name, COALESCE(tpss.code, ssc.code) AS sub_subcategory_code,
                     qg.batch_code AS existing_batch_code
              FROM production_purchase_items ppi
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
@@ -73,6 +129,9 @@ class PurchaseMappingFulfillmentService {
              LEFT JOIN categories c ON c.id = ppi.mapped_category_id
              LEFT JOIN subcategories sc ON sc.id = ppi.mapped_subcategory_id
              LEFT JOIN sub_subcategories ssc ON ssc.id = ppi.mapped_sub_subcategory_id
+             LEFT JOIN third_party_categories tpc ON tpc.id = ppi.mapped_third_party_category_id
+             LEFT JOIN third_party_subcategories tps ON tps.id = ppi.mapped_third_party_subcategory_id
+             LEFT JOIN third_party_sub_subcategories tpss ON tpss.id = ppi.mapped_third_party_sub_subcategory_id
              LEFT JOIN qr_generations qg ON qg.id = ppi.qr_generation_id
              WHERE ppi.id = ?",
             [$itemId]
@@ -91,6 +150,9 @@ class PurchaseMappingFulfillmentService {
         $item = self::getPurchaseItem($itemId);
         if (!$item) {
             throw new InvalidArgumentException('Purchase item not found.');
+        }
+        if (strtoupper((string)($item['item_type'] ?? '')) !== 'THIRD_PARTY') {
+            throw new InvalidArgumentException('Only third-party purchase items can be mapped to the external product catalog.');
         }
 
         $categoryId = (int)($mapping['category_id'] ?? 0);
@@ -112,22 +174,29 @@ class PurchaseMappingFulfillmentService {
             throw new InvalidArgumentException('Selling price cannot be greater than MRP.');
         }
 
-        $category = Database::fetchOne("SELECT id, name, code FROM categories WHERE id = ?", [$categoryId]);
+        $category = Database::fetchOne(
+            "SELECT id, name, code FROM third_party_categories WHERE id = ? AND is_active = 1",
+            [$categoryId]
+        );
         if (!$category) {
             throw new InvalidArgumentException('Selected category does not exist.');
         }
+        if (!self::isExternalCatalogHierarchy($categoryId, $subcategoryId, $subSubcategoryId)) {
+            throw new InvalidArgumentException('Select a valid category hierarchy from the Third-Party Catalog.');
+        }
         if ($subcategoryId) {
             $validSub = Database::fetchOne(
-                "SELECT id FROM subcategories WHERE id = ? AND category_id = ?",
+                "SELECT id FROM third_party_subcategories WHERE id = ? AND category_id = ? AND is_active = 1",
                 [$subcategoryId, $categoryId]
             );
             if (!$validSub) {
                 throw new InvalidArgumentException('Selected subcategory does not belong to the chosen category.');
             }
+
         }
         if ($subSubcategoryId) {
             $validSubSub = Database::fetchOne(
-                "SELECT id FROM sub_subcategories WHERE id = ? AND subcategory_id = ?",
+                "SELECT id FROM third_party_sub_subcategories WHERE id = ? AND subcategory_id = ? AND is_active = 1",
                 [$subSubcategoryId, $subcategoryId ?: 0]
             );
             if (!$validSubSub) {
@@ -135,7 +204,10 @@ class PurchaseMappingFulfillmentService {
             }
         }
 
-        $rawAttributes = $mapping['attributes'] ?? [];
+        $rawAttributes = $mapping['attributes'] ?? null;
+        if (empty($rawAttributes) && !empty($item['mapped_attributes'])) {
+            $rawAttributes = $item['mapped_attributes'];
+        }
         $encodedAttributes = null;
         if (!empty($rawAttributes)) {
             $encodedAttributes = is_string($rawAttributes)
@@ -149,9 +221,12 @@ class PurchaseMappingFulfillmentService {
                 "UPDATE production_purchase_items
                  SET mrp = ?,
                      selling_price = ?,
-                     mapped_category_id = ?,
-                     mapped_subcategory_id = ?,
-                     mapped_sub_subcategory_id = ?,
+                     mapped_category_id = NULL,
+                     mapped_subcategory_id = NULL,
+                     mapped_sub_subcategory_id = NULL,
+                     mapped_third_party_category_id = ?,
+                     mapped_third_party_subcategory_id = ?,
+                     mapped_third_party_sub_subcategory_id = ?,
                      mapped_attributes = ?,
                      is_complementary = ?,
                      is_mapped = 1,
@@ -196,6 +271,34 @@ class PurchaseMappingFulfillmentService {
         }
     }
 
+    public static function isExternalCatalogHierarchy(int $categoryId, ?int $subcategoryId = null, ?int $subSubcategoryId = null): bool {
+        if ($categoryId <= 0 || !Database::fetchOne(
+            "SELECT id FROM third_party_categories WHERE id = ? AND is_active = 1",
+            [$categoryId]
+        )) {
+            return false;
+        }
+
+        if ($subcategoryId) {
+            if (!Database::fetchOne(
+                "SELECT id FROM third_party_subcategories WHERE id = ? AND category_id = ? AND is_active = 1",
+                [$subcategoryId, $categoryId]
+            )) {
+                return false;
+            }
+        }
+        if ($subSubcategoryId) {
+            if (!$subcategoryId || !Database::fetchOne(
+                "SELECT id FROM third_party_sub_subcategories WHERE id = ? AND subcategory_id = ? AND is_active = 1",
+                [$subSubcategoryId, $subcategoryId]
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /**
      * Write the mapped hierarchy/attributes to products + product_variants and
      * make sure the purchase line has a variant that the QR/GRN flow can use.
@@ -206,23 +309,38 @@ class PurchaseMappingFulfillmentService {
             throw new RuntimeException('Purchase item disappeared during mapping.');
         }
 
-        $categoryId = (int)$item['mapped_category_id'];
-        $subcategoryId = !empty($item['mapped_subcategory_id']) ? (int)$item['mapped_subcategory_id'] : null;
-        $subSubcategoryId = !empty($item['mapped_sub_subcategory_id']) ? (int)$item['mapped_sub_subcategory_id'] : null;
+        $categoryId = (int)$item['mapped_third_party_category_id'];
+        $subcategoryId = !empty($item['mapped_third_party_subcategory_id']) ? (int)$item['mapped_third_party_subcategory_id'] : null;
+        $subSubcategoryId = !empty($item['mapped_third_party_sub_subcategory_id']) ? (int)$item['mapped_third_party_sub_subcategory_id'] : null;
 
         $hierarchy = Database::fetchOne(
             "SELECT c.name AS category_name, c.code AS category_code,
                     sc.name AS subcategory_name, sc.code AS subcategory_code,
                     ssc.name AS sub_subcategory_name, ssc.code AS sub_subcategory_code
-             FROM categories c
-             LEFT JOIN subcategories sc ON sc.id = ?
-             LEFT JOIN sub_subcategories ssc ON ssc.id = ?
+             FROM third_party_categories c
+             LEFT JOIN third_party_subcategories sc ON sc.id = ?
+             LEFT JOIN third_party_sub_subcategories ssc ON ssc.id = ?
              WHERE c.id = ?",
             [$subcategoryId, $subSubcategoryId, $categoryId]
         ) ?: [];
 
         $productId = (int)($item['product_id'] ?? 0);
         $itemName = mb_strtoupper(trim((string)$item['item_name'])) ?: ('PURCHASE ITEM ' . $itemId);
+        $code = '';
+
+        if ($productId > 0) {
+            $existingProduct = Database::fetchOne(
+                "SELECT id, code, source_type FROM products WHERE id = ?",
+                [$productId]
+            );
+            if (!$existingProduct || strtoupper((string)$existingProduct['source_type']) !== 'EXTERNAL_PURCHASE') {
+                $productId = 0;
+                $item['product_id'] = 0;
+                $item['variant_id'] = 0;
+            } else {
+                $code = (string)$existingProduct['code'];
+            }
+        }
 
         if ($productId <= 0) {
             $baseCode = 'PP-' . substr(strtoupper(preg_replace('/[^A-Z0-9]/', '', $itemName)), 0, 36);
@@ -234,15 +352,10 @@ class PurchaseMappingFulfillmentService {
             }
             Database::execute(
                 "INSERT INTO products
-                    (name, code, category_id, subcategory_id, sub_subcategory_id,
-                     category_code, subcategory_code, sub_subcategory_code,
-                     source_type, hsn_code, attributes, is_complementary, is_active, seller_id)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'EXTERNAL_PURCHASE', ?, ?, ?, 1, ?)",
+                    (name, code, source_type, hsn_code, attributes, is_complementary, is_active, seller_id)
+                 VALUES (?, ?, 'EXTERNAL_PURCHASE', ?, ?, ?, 1, ?)",
                 [
-                    $itemName, $code, $categoryId, $subcategoryId, $subSubcategoryId,
-                    $hierarchy['category_code'] ?? null,
-                    $hierarchy['subcategory_code'] ?? null,
-                    $hierarchy['sub_subcategory_code'] ?? null,
+                    $itemName, $code,
                     $item['hsn_code'] ?: null,
                     $attributes,
                     $isComplementary,
@@ -253,36 +366,40 @@ class PurchaseMappingFulfillmentService {
         } else {
             Database::execute(
                 "UPDATE products
-                 SET category_id = ?, subcategory_id = ?, sub_subcategory_id = ?,
-                     category_code = COALESCE(?, category_code),
-                     subcategory_code = COALESCE(?, subcategory_code),
-                     sub_subcategory_code = COALESCE(?, sub_subcategory_code),
-                     attributes = ?, is_complementary = ?,
+                 SET attributes = ?, is_complementary = ?,
                      hsn_code = COALESCE(hsn_code, ?)
                  WHERE id = ?",
                 [
-                    $categoryId, $subcategoryId, $subSubcategoryId,
-                    $hierarchy['category_code'] ?? null,
-                    $hierarchy['subcategory_code'] ?? null,
-                    $hierarchy['sub_subcategory_code'] ?? null,
                     $attributes, $isComplementary, $item['hsn_code'] ?: null, $productId,
                 ]
             );
         }
 
-        // Maintain independent third_party_products master catalog table
         $tpProductId = (int)($item['third_party_product_id'] ?? 0);
         $tpCode = trim((string)($item['vendor_sku'] ?? '')) ?: ('TP-' . $code);
         if ($tpProductId <= 0) {
-            $existingTp = Database::fetchOne("SELECT id FROM third_party_products WHERE code = ? OR (name = ? AND category_id = ?)", [$tpCode, $itemName, $categoryId]);
+            $existingTp = Database::fetchOne(
+                "SELECT id FROM third_party_products WHERE code = ? LIMIT 1",
+                [$tpCode]
+            );
+            if (!$existingTp) {
+                $existingTp = Database::fetchOne(
+                    "SELECT id FROM third_party_products
+                     WHERE UPPER(name) = UPPER(?) AND third_party_category_id = ?
+                     ORDER BY id ASC LIMIT 1",
+                    [$itemName, $categoryId]
+                );
+            }
             if ($existingTp) {
                 $tpProductId = (int)$existingTp['id'];
             } else {
                 Database::execute(
                     "INSERT INTO third_party_products
-                        (concern_id, name, code, vendor_sku, category_id, subcategory_id, sub_subcategory_id,
-                         category_code, subcategory_code, sub_subcategory_code, seller_id, color, size, unit,
-                         hsn_code, mrp, selling_price, purchase_rate, attributes, is_complementary, is_active)
+                        (concern_id, name, code, vendor_sku, third_party_category_id,
+                         third_party_subcategory_id, third_party_sub_subcategory_id,
+                         category_code, subcategory_code, sub_subcategory_code,
+                         seller_id, color, size, unit, hsn_code, mrp, selling_price,
+                         purchase_rate, attributes, is_complementary, is_active)
                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
                     [
                         $item['concern_id'] ?? null,
@@ -304,32 +421,45 @@ class PurchaseMappingFulfillmentService {
                         (float)($item['selling_price'] ?? 0),
                         (float)($item['unit_price'] ?? 0),
                         $attributes,
-                        $isComplementary
+                        $isComplementary,
                     ]
                 );
                 $tpProductId = (int)Database::lastInsertId();
             }
-        } else {
+        }
+        if ($tpProductId > 0) {
             Database::execute(
                 "UPDATE third_party_products
-                 SET category_id = ?, subcategory_id = ?, sub_subcategory_id = ?,
+                 SET name = ?, category_id = NULL, subcategory_id = NULL, sub_subcategory_id = NULL,
+                     third_party_category_id = ?, third_party_subcategory_id = ?,
+                     third_party_sub_subcategory_id = ?,
                      category_code = COALESCE(?, category_code),
                      subcategory_code = COALESCE(?, subcategory_code),
                      sub_subcategory_code = COALESCE(?, sub_subcategory_code),
-                     attributes = ?, is_complementary = ?, mrp = ?, selling_price = ?
+                     seller_id = ?, color = ?, size = ?, unit = ?, hsn_code = ?,
+                     attributes = ?, is_complementary = ?, mrp = ?, selling_price = ?,
+                     purchase_rate = ?, is_active = 1
                  WHERE id = ?",
                 [
-                    $categoryId, $subcategoryId, $subSubcategoryId,
+                    $itemName, $categoryId, $subcategoryId, $subSubcategoryId,
                     $hierarchy['category_code'] ?? null,
                     $hierarchy['subcategory_code'] ?? null,
                     $hierarchy['sub_subcategory_code'] ?? null,
-                    $attributes, $isComplementary, (float)($item['mrp'] ?? 0), (float)($item['selling_price'] ?? 0),
-                    $tpProductId
+                    (int)($item['seller_id'] ?? 0) ?: null,
+                    $item['color'] ?: null,
+                    $item['size'] ?: null,
+                    $item['unit'] ?: 'PCS',
+                    $item['hsn_code'] ?: null,
+                    $attributes, $isComplementary, (float)($item['mrp'] ?? 0),
+                    (float)($item['selling_price'] ?? 0), (float)($item['unit_price'] ?? 0), $tpProductId,
                 ]
             );
         }
 
-        Database::execute("UPDATE production_purchase_items SET third_party_product_id = ? WHERE id = ?", [$tpProductId, $itemId]);
+        Database::execute(
+            "UPDATE production_purchase_items SET third_party_product_id = ? WHERE id = ?",
+            [$tpProductId, $itemId]
+        );
 
         $variantId = (int)($item['variant_id'] ?? 0);
         if ($variantId <= 0) {

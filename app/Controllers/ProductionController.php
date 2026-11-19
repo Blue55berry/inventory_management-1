@@ -2875,9 +2875,22 @@ class ProductionController {
                 } elseif ($item['type'] === 'THIRD_PARTY') {
                     // 1. Ensure Catalog exists in products table
                     $catalogName = mb_strtoupper(trim($item['item_name']));
-                    $prod = Database::fetchOne("SELECT id, code FROM products WHERE UPPER(name) = UPPER(?)", [$catalogName]);
+                    $prod = Database::fetchOne(
+                        "SELECT id, code FROM products
+                         WHERE UPPER(name) = UPPER(?)
+                           AND UPPER(COALESCE(source_type, '')) = 'EXTERNAL_PURCHASE'
+                         LIMIT 1",
+                        [$catalogName]
+                    );
                     if ($prod) {
                         $item['product_id'] = (int)$prod['id'];
+                        Database::execute(
+                            "UPDATE products
+                             SET category_id = NULL, subcategory_id = NULL, sub_subcategory_id = NULL,
+                                 category_code = NULL, subcategory_code = NULL, sub_subcategory_code = NULL
+                             WHERE id = ?",
+                            [(int)$prod['id']]
+                        );
                     } else {
                         $cleanSlug = strtoupper(preg_replace('/[^A-Z0-9]/', '', $catalogName) ?: 'ITEM');
                         $basePCode = 'TP-' . substr($cleanSlug, 0, 8);
@@ -2887,15 +2900,10 @@ class ProductionController {
                             $pCode = $basePCode . '-' . $pSuffix++;
                         }
 
-                        $defaultCat = Database::fetchOne("SELECT id FROM categories WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
-                        $catId = $defaultCat ? (int)$defaultCat['id'] : null;
-                        $defaultSubCat = $catId ? Database::fetchOne("SELECT id FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 1", [$catId]) : null;
-                        $subCatId = $defaultSubCat ? (int)$defaultSubCat['id'] : null;
-
                         Database::execute(
                             "INSERT INTO products (name, code, category_id, subcategory_id, source_type, hsn_code, is_active)
-                             VALUES (?, ?, ?, ?, 'EXTERNAL_PURCHASE', ?, 1)",
-                            [$catalogName, $pCode, $catId, $subCatId, $item['hsn_code']]
+                             VALUES (?, ?, NULL, NULL, 'EXTERNAL_PURCHASE', ?, 1)",
+                            [$catalogName, $pCode, $item['hsn_code']]
                         );
                         $item['product_id'] = (int)Database::lastInsertId();
                     }
@@ -3122,7 +3130,7 @@ class ProductionController {
         }
 
         if ($categoryId > 0) {
-            $where[] = "ppi.mapped_category_id = ?";
+            $where[] = "ppi.mapped_third_party_category_id = ?";
             $params[] = $categoryId;
         }
 
@@ -3137,7 +3145,8 @@ class ProductionController {
             "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.vendor_sku, ppi.product_code,
                     ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
                     ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.is_complementary,
-                    ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id,
+                    ppi.mapped_third_party_category_id, ppi.mapped_third_party_subcategory_id,
+                    ppi.mapped_third_party_sub_subcategory_id,
                     ppi.mapped_attributes, ppi.mapped_at, ppi.mapped_by, ppi.created_at,
                     ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
                     pp.purchase_number, pp.purchase_date, pp.invoice_number,
@@ -3147,9 +3156,9 @@ class ProductionController {
              FROM production_purchase_items ppi
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
              INNER JOIN sellers s ON s.id = pp.seller_id
-             LEFT JOIN categories c ON c.id = ppi.mapped_category_id
-             LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
-             LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
+             LEFT JOIN third_party_categories c ON c.id = ppi.mapped_third_party_category_id
+             LEFT JOIN third_party_subcategories sub ON sub.id = ppi.mapped_third_party_subcategory_id
+             LEFT JOIN third_party_sub_subcategories subsub ON subsub.id = ppi.mapped_third_party_sub_subcategory_id
              LEFT JOIN users u ON u.id = ppi.mapped_by
              WHERE ppi.item_type = 'THIRD_PARTY' AND ppi.purchase_id IN (
                  SELECT DISTINCT filter_ppi.purchase_id
@@ -3185,7 +3194,7 @@ class ProductionController {
         );
 
         $categories = Database::fetchAll(
-            "SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC"
+            "SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC"
         );
 
         Response::view('production.purchases.mapping', [
@@ -3245,7 +3254,7 @@ class ProductionController {
         unset($item);
 
         $categories = Database::fetchAll(
-            "SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC"
+            "SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC"
         );
 
         Response::view('production.purchases.mapping_bill', [
@@ -3333,8 +3342,21 @@ class ProductionController {
             Response::back();
             return;
         }
+        if (strtoupper((string)$item['item_type']) !== 'THIRD_PARTY') {
+            $msg = 'Only third-party purchase items can be mapped to the external product catalog.';
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 422);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
 
-        $category = Database::fetchOne("SELECT id, name FROM categories WHERE id = ?", [$categoryId]);
+        $category = Database::fetchOne(
+            "SELECT id, name FROM third_party_categories WHERE id = ? AND is_active = 1",
+            [$categoryId]
+        );
         if (!$category) {
             $msg = 'Selected category does not exist.';
             if (Request::isAjax()) {
@@ -3419,7 +3441,7 @@ class ProductionController {
             [$purchaseId]
         );
         $purchaseItems = Database::fetchAll(
-            "SELECT id, item_name, item_type FROM production_purchase_items WHERE purchase_id = ? ORDER BY id ASC",
+            "SELECT id, item_name, item_type FROM production_purchase_items WHERE purchase_id = ? AND item_type = 'THIRD_PARTY' ORDER BY id ASC",
             [$purchaseId]
         );
         $submittedItems = $_POST['items'] ?? null;
@@ -3455,16 +3477,24 @@ class ProductionController {
                 return;
             }
 
-            $categoryExists = Database::fetchOne("SELECT id FROM categories WHERE id = ?", [$categoryId]);
+            $categoryExists = Database::fetchOne(
+                "SELECT id FROM third_party_categories WHERE id = ? AND is_active = 1",
+                [$categoryId]
+            );
             $subcategoryExists = !$subcategoryId || Database::fetchOne(
-                "SELECT id FROM subcategories WHERE id = ? AND category_id = ?",
+                "SELECT id FROM third_party_subcategories WHERE id = ? AND category_id = ? AND is_active = 1",
                 [$subcategoryId, $categoryId]
             );
             $subSubcategoryExists = !$subSubcategoryId || Database::fetchOne(
-                "SELECT id FROM sub_subcategories WHERE id = ? AND subcategory_id = ?",
+                "SELECT id FROM third_party_sub_subcategories WHERE id = ? AND subcategory_id = ? AND is_active = 1",
                 [$subSubcategoryId, $subcategoryId ?: 0]
             );
-            if (!$categoryExists || !$subcategoryExists || !$subSubcategoryExists) {
+            if (
+                !$categoryExists
+                || !$subcategoryExists
+                || !$subSubcategoryExists
+                || !PurchaseMappingFulfillmentService::isExternalCatalogHierarchy($categoryId, $subcategoryId, $subSubcategoryId)
+            ) {
                 Session::flash('error', "Check the category hierarchy for '{$purchaseItem['item_name']}'. No mappings were saved.");
                 Response::redirect(url('purchases/mapping/bill/' . $purchaseId));
                 return;
@@ -3528,7 +3558,8 @@ class ProductionController {
             "SELECT ppi.id, ppi.purchase_id, ppi.item_type, ppi.item_name, ppi.vendor_sku, ppi.product_code,
                     ppi.color, ppi.size, ppi.quantity, ppi.unit, ppi.unit_price, ppi.mrp,
                     ppi.selling_price, ppi.total_price, ppi.is_mapped, ppi.is_complementary,
-                    ppi.mapped_category_id, ppi.mapped_subcategory_id, ppi.mapped_sub_subcategory_id,
+                    ppi.mapped_third_party_category_id, ppi.mapped_third_party_subcategory_id,
+                    ppi.mapped_third_party_sub_subcategory_id,
                     ppi.mapped_attributes, ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
                     pp.purchase_number, pp.purchase_date,
                     s.name AS seller_name, s.company AS seller_company
@@ -3598,6 +3629,10 @@ class ProductionController {
             Response::json(['success' => false, 'message' => 'Please select a Category.'], 422);
             return;
         }
+        if (!PurchaseMappingFulfillmentService::isExternalCatalogHierarchy($categoryId, $subcategoryId, $subSubcategoryId)) {
+            Response::json(['success' => false, 'message' => 'Select a valid third-party category hierarchy.'], 422);
+            return;
+        }
 
         $unit = strtoupper(trim($_POST['new_unit'] ?? 'PCS')) ?: 'PCS';
         $vendorSku = trim($_POST['new_vendor_sku'] ?? '');
@@ -3633,6 +3668,8 @@ class ProductionController {
                     sgst_value, cgst_value, igst_value, sgst_amount, cgst_amount, igst_amount,
                     color, size, hsn_code, is_complementary,
                     mapped_category_id, mapped_subcategory_id, mapped_sub_subcategory_id,
+                    mapped_third_party_category_id, mapped_third_party_subcategory_id,
+                    mapped_third_party_sub_subcategory_id,
                     is_mapped, created_at
                 ) VALUES (
                     ?, ?, ?, ?, ?,
@@ -3640,6 +3677,7 @@ class ProductionController {
                     ?, ?, 'PERCENT', 'EXCLUDED',
                     ?, ?, 0, ?, ?, 0,
                     ?, ?, ?, ?,
+                    ?, ?, ?,
                     ?, ?, ?,
                     0, NOW()
                 )
@@ -3665,6 +3703,9 @@ class ProductionController {
                 $size ?: null,
                 $hsn ?: null,
                 $isComplementary,
+                null,
+                null,
+                null,
                 $categoryId,
                 $subcategoryId ?: null,
                 $subSubcategoryId ?: null
@@ -7193,7 +7234,7 @@ class ProductionController {
              LEFT JOIN subcategories sc ON p.subcategory_id = sc.id
              LEFT JOIN sub_subcategories ssc ON p.sub_subcategory_id = ssc.id
              LEFT JOIN brands b ON p.brand_id = b.id
-             WHERE p.id = ?",
+             WHERE p.id = ? AND UPPER(COALESCE(p.source_type, '')) <> 'EXTERNAL_PURCHASE'",
             [$id]
         );
 
@@ -7268,7 +7309,11 @@ class ProductionController {
     }
 
     public function editCatalog(int $id): void {
-        $product = Database::fetchOne("SELECT * FROM products WHERE id = ?", [$id]);
+        $product = Database::fetchOne(
+            "SELECT * FROM products
+             WHERE id = ? AND UPPER(COALESCE(source_type, '')) <> 'EXTERNAL_PURCHASE'",
+            [$id]
+        );
         if (!$product) {
             Session::flash('error', 'Product style not found.');
             Response::redirect(url('production/catalog'));
@@ -7344,7 +7389,11 @@ class ProductionController {
     }
 
     public function updateCatalog(int $id): void {
-        $product = Database::fetchOne("SELECT * FROM products WHERE id = ?", [$id]);
+        $product = Database::fetchOne(
+            "SELECT * FROM products
+             WHERE id = ? AND UPPER(COALESCE(source_type, '')) <> 'EXTERNAL_PURCHASE'",
+            [$id]
+        );
         if (!$product) {
             Session::flash('error', 'Product style not found.');
             Response::redirect(url('production/catalog'));
@@ -7561,6 +7610,15 @@ class ProductionController {
     }
 
     public function deleteCatalog(int $id): void {
+        if (!Database::fetchOne(
+            "SELECT id FROM products
+             WHERE id = ? AND UPPER(COALESCE(source_type, '')) <> 'EXTERNAL_PURCHASE'",
+            [$id]
+        )) {
+            Session::flash('error', 'Production product style not found.');
+            Response::redirect(url('production/catalog'));
+            return;
+        }
         $ts = time();
         Database::execute("UPDATE products SET is_active = 0, code = CONCAT(code, '_DEL_', ?) WHERE id = ?", [$ts, $id]);
         Database::execute("UPDATE product_variants SET is_active = 0, sku = CONCAT(sku, '_DEL_', ?), qr_code = CONCAT(qr_code, '_DEL_', ?) WHERE product_id = ?", [$ts, $ts, $id]);
@@ -7625,8 +7683,24 @@ class ProductionController {
 
     public function ajaxCategories(): void {
         try {
+            $catalogSource = strtoupper(trim((string)($_GET['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                Response::json(Database::fetchAll(
+                    "SELECT id, name, slug, code FROM third_party_categories
+                     WHERE is_active = 1 ORDER BY sort_order ASC, name ASC"
+                ));
+                return;
+            }
+
             $sql = "SELECT c.id, c.name, c.slug FROM categories c WHERE c.is_active = 1";
-            if (!empty($_GET['catalog_only'])) {
+            if ($catalogSource === 'EXTERNAL_PURCHASE') {
+                $sql .= " AND EXISTS (
+                    SELECT 1 FROM products p
+                    WHERE p.category_id = c.id
+                      AND p.is_active = 1
+                      AND p.source_type = 'EXTERNAL_PURCHASE'
+                )";
+            } elseif (!empty($_GET['catalog_only'])) {
                 $sql .= " AND EXISTS (
                     SELECT 1 FROM products p
                     WHERE p.category_id = c.id
@@ -7650,6 +7724,35 @@ class ProductionController {
                 return;
             }
             $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-'));
+            $catalogSource = strtoupper(trim((string)($_POST['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                $existing = Database::fetchOne(
+                    "SELECT id, name, is_active FROM third_party_categories WHERE name = ? OR slug = ?",
+                    [$name, $slug]
+                );
+                if ($existing) {
+                    Database::execute(
+                        "UPDATE third_party_categories SET is_active = 1, name = ?, updated_at = NOW() WHERE id = ?",
+                        [$name, $existing['id']]
+                    );
+                    Response::json(['success' => true, 'id' => (int)$existing['id'], 'name' => $name]);
+                    return;
+                }
+
+                $maxSort = Database::fetchOne("SELECT MAX(sort_order) AS m FROM third_party_categories")['m'] ?? 0;
+                $codeBase = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 3)) ?: 'CAT';
+                $code = $codeBase;
+                $counter = 1;
+                while (Database::fetchOne("SELECT id FROM third_party_categories WHERE code = ?", [$code])) {
+                    $code = $codeBase . $counter++;
+                }
+                Database::execute(
+                    "INSERT INTO third_party_categories (name, code, slug, sort_order, is_active) VALUES (?, ?, ?, ?, 1)",
+                    [$name, $code, $slug, (int)$maxSort + 1]
+                );
+                Response::json(['success' => true, 'id' => (int)Database::lastInsertId(), 'name' => $name, 'code' => $code]);
+                return;
+            }
 
             $existing = Database::fetchOne("SELECT id, name, is_active FROM categories WHERE name = ? OR slug = ?", [$name, $slug]);
             if ($existing) {
@@ -7726,9 +7829,26 @@ class ProductionController {
 
     public function ajaxSubcategories(int $categoryId): void {
         try {
+            $catalogSource = strtoupper(trim((string)($_GET['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                Response::json(Database::fetchAll(
+                    "SELECT id, name, code, slug FROM third_party_subcategories
+                     WHERE category_id = ? AND is_active = 1 ORDER BY sort_order ASC, name ASC",
+                    [$categoryId]
+                ));
+                return;
+            }
+
             $sql = "SELECT sc.id, sc.name, sc.code, sc.slug FROM subcategories sc
                     WHERE sc.category_id = ? AND sc.is_active = 1";
-            if (!empty($_GET['catalog_only'])) {
+            if ($catalogSource === 'EXTERNAL_PURCHASE') {
+                $sql .= " AND EXISTS (
+                    SELECT 1 FROM products p
+                    WHERE p.subcategory_id = sc.id
+                      AND p.is_active = 1
+                      AND p.source_type = 'EXTERNAL_PURCHASE'
+                )";
+            } elseif (!empty($_GET['catalog_only'])) {
                 $sql .= " AND EXISTS (
                     SELECT 1 FROM products p
                     WHERE p.subcategory_id = sc.id
@@ -7756,6 +7876,37 @@ class ProductionController {
                 return;
             }
             $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-'));
+            $catalogSource = strtoupper(trim((string)($_POST['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                if (!Database::fetchOne("SELECT id FROM third_party_categories WHERE id = ? AND is_active = 1", [$categoryId])) {
+                    Response::json(['success' => false, 'message' => 'Third-party category not found.'], 404);
+                    return;
+                }
+                $existing = Database::fetchOne(
+                    "SELECT id FROM third_party_subcategories WHERE category_id = ? AND (name = ? OR slug = ?)",
+                    [$categoryId, $name, $slug]
+                );
+                if ($existing) {
+                    Database::execute(
+                        "UPDATE third_party_subcategories SET is_active = 1, name = ?, updated_at = NOW() WHERE id = ?",
+                        [$name, $existing['id']]
+                    );
+                    Response::json(['success' => true, 'id' => (int)$existing['id'], 'name' => $name]);
+                    return;
+                }
+                $codeBase = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 3)) ?: 'SUB';
+                $code = $codeBase;
+                $counter = 1;
+                while (Database::fetchOne("SELECT id FROM third_party_subcategories WHERE code = ?", [$code])) {
+                    $code = $codeBase . $counter++;
+                }
+                Database::execute(
+                    "INSERT INTO third_party_subcategories (category_id, name, code, slug, is_active) VALUES (?, ?, ?, ?, 1)",
+                    [$categoryId, $name, $code, $slug]
+                );
+                Response::json(['success' => true, 'id' => (int)Database::lastInsertId(), 'name' => $name, 'code' => $code]);
+                return;
+            }
 
             $existing = Database::fetchOne("SELECT id, name, is_active FROM subcategories WHERE category_id = ? AND (name = ? OR slug = ?)", [$categoryId, $name, $slug]);
             if ($existing) {
@@ -7835,9 +7986,26 @@ class ProductionController {
 
     public function ajaxSubSubcategories(int $subcategoryId): void {
         try {
+            $catalogSource = strtoupper(trim((string)($_GET['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                Response::json(Database::fetchAll(
+                    "SELECT id, name, code, slug FROM third_party_sub_subcategories
+                     WHERE subcategory_id = ? AND is_active = 1 ORDER BY sort_order ASC, name ASC",
+                    [$subcategoryId]
+                ));
+                return;
+            }
+
             $sql = "SELECT ssc.id, ssc.name, ssc.code, ssc.slug FROM sub_subcategories ssc
                     WHERE ssc.subcategory_id = ? AND ssc.is_active = 1";
-            if (!empty($_GET['catalog_only'])) {
+            if ($catalogSource === 'EXTERNAL_PURCHASE') {
+                $sql .= " AND EXISTS (
+                    SELECT 1 FROM products p
+                    WHERE p.sub_subcategory_id = ssc.id
+                      AND p.is_active = 1
+                      AND p.source_type = 'EXTERNAL_PURCHASE'
+                )";
+            } elseif (!empty($_GET['catalog_only'])) {
                 $sql .= " AND EXISTS (
                     SELECT 1 FROM products p
                     WHERE p.sub_subcategory_id = ssc.id
@@ -7865,6 +8033,41 @@ class ProductionController {
                 return;
             }
             $slug = strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $name), '-'));
+            $catalogSource = strtoupper(trim((string)($_POST['catalog_source'] ?? '')));
+            if ($catalogSource === 'THIRD_PARTY') {
+                if (!Database::fetchOne(
+                    "SELECT id FROM third_party_subcategories WHERE id = ? AND is_active = 1",
+                    [$subcategoryId]
+                )) {
+                    Response::json(['success' => false, 'message' => 'Third-party subcategory not found.'], 404);
+                    return;
+                }
+                $existing = Database::fetchOne(
+                    "SELECT id FROM third_party_sub_subcategories
+                     WHERE subcategory_id = ? AND (name = ? OR slug = ?)",
+                    [$subcategoryId, $name, $slug]
+                );
+                if ($existing) {
+                    Database::execute(
+                        "UPDATE third_party_sub_subcategories SET is_active = 1, name = ?, updated_at = NOW() WHERE id = ?",
+                        [$name, $existing['id']]
+                    );
+                    Response::json(['success' => true, 'id' => (int)$existing['id'], 'name' => $name]);
+                    return;
+                }
+                $codeBase = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 3)) ?: 'SSC';
+                $code = $codeBase;
+                $counter = 1;
+                while (Database::fetchOne("SELECT id FROM third_party_sub_subcategories WHERE code = ?", [$code])) {
+                    $code = $codeBase . $counter++;
+                }
+                Database::execute(
+                    "INSERT INTO third_party_sub_subcategories (subcategory_id, name, code, slug, is_active) VALUES (?, ?, ?, ?, 1)",
+                    [$subcategoryId, $name, $code, $slug]
+                );
+                Response::json(['success' => true, 'id' => (int)Database::lastInsertId(), 'name' => $name, 'code' => $code]);
+                return;
+            }
 
             $existing = Database::fetchOne("SELECT id, name, is_active FROM sub_subcategories WHERE subcategory_id = ? AND (name = ? OR slug = ?)", [$subcategoryId, $name, $slug]);
             if ($existing) {
@@ -8026,6 +8229,10 @@ class ProductionController {
      */
     public function ajaxGetCategoryAttributes(int $categoryId): void {
         try {
+            if (strtoupper(trim((string)($_GET['catalog_source'] ?? ''))) === 'THIRD_PARTY') {
+                Response::json(['success' => true, 'attributes' => []]);
+                return;
+            }
             $this->ensureProductionCategoryAttributesTable();
             $subcategoryId = !empty($_GET['subcategory_id']) ? (int)$_GET['subcategory_id'] : null;
             $subSubcategoryId = !empty($_GET['sub_subcategory_id']) ? (int)$_GET['sub_subcategory_id'] : null;
@@ -17903,6 +18110,7 @@ class ProductionController {
      * Dedicated QR Barcode Generation & Thermal Printing for a Purchase.
      */
     public function productionPurchaseRollQr(string $id): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $purchaseId = (int)$id;
         $purchase = Database::fetchOne(
             "SELECT pp.*, s.name AS supplier_name, s.company AS supplier_company, s.phone AS supplier_phone,
@@ -17926,11 +18134,12 @@ class ProductionController {
                     sr.design_name AS sr_design_name, sr.price AS sr_price, sr.photo_url AS sr_photo_url,
                     sr.quantity AS sr_quantity,
                     pv.variant_code AS pv_variant_code, pv.sku AS pv_sku, pv.mrp AS pv_mrp, pv.selling_price AS pv_selling_price,
-                    c.name AS cat_name
+                    COALESCE(tpc.name, c.name) AS cat_name
              FROM production_purchase_items ppi
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
              LEFT JOIN product_variants pv ON pv.id = ppi.variant_id
              LEFT JOIN categories c ON c.id = ppi.mapped_category_id
+             LEFT JOIN third_party_categories tpc ON tpc.id = ppi.mapped_third_party_category_id
              WHERE ppi.purchase_id = ?
              ORDER BY ppi.id ASC",
             [$purchaseId]
@@ -18746,6 +18955,7 @@ class ProductionController {
      */
 
     public function thirdPartyCatalogList(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $search = trim($_GET['search'] ?? '');
         $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : null;
         $subcategoryId = !empty($_GET['subcategory_id']) ? (int)$_GET['subcategory_id'] : null;
@@ -18760,17 +18970,17 @@ class ProductionController {
         }
 
         if (!empty($search)) {
-            $where[] = "(tp.name LIKE ? OR tp.code LIKE ? OR tp.vendor_sku LIKE ? OR tp.hsn_code LIKE ? OR c.name LIKE ? OR sc.name LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
+            $where[] = "(tp.name LIKE ? OR tp.code LIKE ? OR tp.vendor_sku LIKE ? OR tp.hsn_code LIKE ? OR tpc.name LIKE ? OR tpsc.name LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
             $term = '%' . $search . '%';
             $params = array_merge($params, [$term, $term, $term, $term, $term, $term, $term, $term]);
         }
 
         if ($categoryId) {
-            $where[] = "tp.category_id = ?";
+            $where[] = "tp.third_party_category_id = ?";
             $params[] = $categoryId;
         }
         if ($subcategoryId) {
-            $where[] = "tp.subcategory_id = ?";
+            $where[] = "tp.third_party_subcategory_id = ?";
             $params[] = $subcategoryId;
         }
 
@@ -18778,27 +18988,27 @@ class ProductionController {
 
         $products = Database::fetchAll("
             SELECT tp.*,
-                   c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                   tpc.name AS category_name, tpsc.name AS subcategory_name, tpssc.name AS sub_subcategory_name,
                    s.name AS seller_name, s.company AS seller_company,
                    u.full_name AS created_by_name
             FROM third_party_products tp
-            LEFT JOIN categories c ON c.id = tp.category_id
-            LEFT JOIN subcategories sc ON sc.id = tp.subcategory_id
-            LEFT JOIN sub_subcategories ssc ON ssc.id = tp.sub_subcategory_id
+            LEFT JOIN third_party_categories tpc ON tpc.id = tp.third_party_category_id
+            LEFT JOIN third_party_subcategories tpsc ON tpsc.id = tp.third_party_subcategory_id
+            LEFT JOIN third_party_sub_subcategories tpssc ON tpssc.id = tp.third_party_sub_subcategory_id
             LEFT JOIN sellers s ON s.id = tp.seller_id
             LEFT JOIN users u ON u.id = tp.created_by
             WHERE {$whereSql}
             ORDER BY tp.id DESC
         ", $params);
 
-        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
-        $subcategories = $categoryId ? Database::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [$categoryId]) : [];
+        $categories = Database::fetchAll("SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC");
+        $subcategories = $categoryId ? Database::fetchAll("SELECT id, name, code FROM third_party_subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [$categoryId]) : [];
 
         $metrics = Database::fetchOne("
             SELECT COUNT(*) AS total_styles,
                    COALESCE(AVG(selling_price), 0) AS avg_selling,
                    COALESCE(AVG(mrp), 0) AS avg_mrp,
-                   COUNT(DISTINCT category_id) AS total_categories
+                   COUNT(DISTINCT third_party_category_id) AS total_categories
             FROM third_party_products
             WHERE is_active = 1
         ");
@@ -18806,7 +19016,7 @@ class ProductionController {
         Response::view('production.third_party_catalog.index', [
             'pageTitle'     => 'Third-Party Product Catalog',
             'activeModule'  => 'purchases',
-            'activeMenu'    => 'prod-third-party-catalog',
+            'activeMenu'    => 'purchases-mapping',
             'products'      => $products,
             'categories'    => $categories,
             'subcategories' => $subcategories,
@@ -18823,24 +19033,26 @@ class ProductionController {
     }
 
     public function createThirdPartyCatalog(): void {
-        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
+        PurchaseMappingFulfillmentService::ensureSchema();
+        $categories = Database::fetchAll("SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC");
         $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
 
         Response::view('production.third_party_catalog.create', [
             'pageTitle'    => 'Add Third-Party Catalog Style',
             'activeModule' => 'purchases',
-            'activeMenu'   => 'prod-third-party-catalog',
+            'activeMenu'   => 'purchases-mapping',
             'categories'   => $categories,
             'sellers'      => $sellers,
             'breadcrumb'   => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
-                ['label' => 'Third-Party Catalog', 'url' => url('production/third-party-catalog')],
+                ['label' => 'Third-Party Catalog', 'url' => url('production/purchases/mapping/catalog')],
                 ['label' => 'Add Style'],
             ],
         ]);
     }
 
     public function storeThirdPartyCatalog(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $name = trim($_POST['name'] ?? '');
         $categoryId = (int)($_POST['category_id'] ?? 0);
         $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
@@ -18883,9 +19095,15 @@ class ProductionController {
             $code = 'TP-' . $prefix . '-' . strtoupper(substr(uniqid(), -4));
         }
 
-        $cat = Database::fetchOne("SELECT code FROM categories WHERE id = ?", [$categoryId]);
-        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM subcategories WHERE id = ?", [$subcategoryId]) : null;
-        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
+        if (!PurchaseMappingFulfillmentService::isExternalCatalogHierarchy($categoryId, $subcategoryId, $subSubcategoryId)) {
+            Session::flash('error', 'Please select a valid third-party category hierarchy.');
+            Response::back();
+            return;
+        }
+
+        $cat = Database::fetchOne("SELECT code FROM third_party_categories WHERE id = ?", [$categoryId]);
+        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM third_party_subcategories WHERE id = ?", [$subcategoryId]) : null;
+        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM third_party_sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
 
         $encodedAttrs = !empty($rawAttrs) ? json_encode($rawAttrs, JSON_UNESCAPED_UNICODE) : null;
         $cid = function_exists('currentConcernId') ? currentConcernId() : null;
@@ -18894,9 +19112,10 @@ class ProductionController {
         Database::execute("
             INSERT INTO third_party_products (
                 concern_id, name, code, vendor_sku, category_id, subcategory_id, sub_subcategory_id,
+                third_party_category_id, third_party_subcategory_id, third_party_sub_subcategory_id,
                 category_code, subcategory_code, sub_subcategory_code, seller_id, color, size, unit,
                 hsn_code, mrp, selling_price, purchase_rate, attributes, description, is_active, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         ", [
             $cid, $name, $code, $code, $categoryId, $subcategoryId, $subSubcategoryId,
             $cat['code'] ?? null, $subcat['code'] ?? null, $subsub['code'] ?? null,
@@ -18905,20 +19124,21 @@ class ProductionController {
         ]);
 
         Session::flash('success', "Third-party product style '{$name}' created successfully!");
-        Response::redirect(url('production/third-party-catalog'));
+        Response::redirect(url('production/purchases/mapping/catalog'));
     }
 
     public function editThirdPartyCatalog(string $id): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $product = Database::fetchOne("SELECT * FROM third_party_products WHERE id = ?", [(int)$id]);
         if (!$product) {
             Session::flash('error', 'Third-party catalog item not found.');
-            Response::redirect(url('production/third-party-catalog'));
+            Response::redirect(url('production/purchases/mapping/catalog'));
             return;
         }
 
-        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
-        $subcategories = $product['category_id'] ? Database::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['category_id']]) : [];
-        $subSubcategories = $product['subcategory_id'] ? Database::fetchAll("SELECT id, name, code FROM sub_subcategories WHERE subcategory_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['subcategory_id']]) : [];
+        $categories = Database::fetchAll("SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC");
+        $subcategories = $product['third_party_category_id'] ? Database::fetchAll("SELECT id, name, code FROM third_party_subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['third_party_category_id']]) : [];
+        $subSubcategories = $product['third_party_subcategory_id'] ? Database::fetchAll("SELECT id, name, code FROM third_party_sub_subcategories WHERE subcategory_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['third_party_subcategory_id']]) : [];
         $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
 
         $parsedAttrs = !empty($product['attributes']) ? (json_decode($product['attributes'], true) ?: []) : [];
@@ -18926,7 +19146,7 @@ class ProductionController {
         Response::view('production.third_party_catalog.edit', [
             'pageTitle'        => 'Edit Third-Party Catalog Style',
             'activeModule'     => 'purchases',
-            'activeMenu'       => 'prod-third-party-catalog',
+            'activeMenu'       => 'purchases-mapping',
             'product'          => $product,
             'categories'       => $categories,
             'subcategories'    => $subcategories,
@@ -18935,18 +19155,19 @@ class ProductionController {
             'parsedAttrs'      => $parsedAttrs,
             'breadcrumb'       => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
-                ['label' => 'Third-Party Catalog', 'url' => url('production/third-party-catalog')],
+                ['label' => 'Third-Party Catalog', 'url' => url('production/purchases/mapping/catalog')],
                 ['label' => 'Edit ' . $product['name']],
             ],
         ]);
     }
 
     public function updateThirdPartyCatalog(string $id): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $tpId = (int)$id;
         $product = Database::fetchOne("SELECT id FROM third_party_products WHERE id = ?", [$tpId]);
         if (!$product) {
             Session::flash('error', 'Product not found.');
-            Response::redirect(url('production/third-party-catalog'));
+            Response::redirect(url('production/purchases/mapping/catalog'));
             return;
         }
 
@@ -18981,14 +19202,21 @@ class ProductionController {
             return;
         }
 
-        $cat = Database::fetchOne("SELECT code FROM categories WHERE id = ?", [$categoryId]);
-        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM subcategories WHERE id = ?", [$subcategoryId]) : null;
-        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
+        if (!PurchaseMappingFulfillmentService::isExternalCatalogHierarchy($categoryId, $subcategoryId, $subSubcategoryId)) {
+            Session::flash('error', 'Please select a valid third-party category hierarchy.');
+            Response::back();
+            return;
+        }
+
+        $cat = Database::fetchOne("SELECT code FROM third_party_categories WHERE id = ?", [$categoryId]);
+        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM third_party_subcategories WHERE id = ?", [$subcategoryId]) : null;
+        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM third_party_sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
         $encodedAttrs = !empty($rawAttrs) ? json_encode($rawAttrs, JSON_UNESCAPED_UNICODE) : null;
 
         Database::execute("
             UPDATE third_party_products SET
-                name = ?, category_id = ?, subcategory_id = ?, sub_subcategory_id = ?,
+                name = ?, category_id = NULL, subcategory_id = NULL, sub_subcategory_id = NULL,
+                third_party_category_id = ?, third_party_subcategory_id = ?, third_party_sub_subcategory_id = ?,
                 category_code = ?, subcategory_code = ?, sub_subcategory_code = ?,
                 seller_id = ?, color = ?, size = ?, unit = ?, hsn_code = ?,
                 mrp = ?, selling_price = ?, purchase_rate = ?, attributes = ?, description = ?
@@ -19001,14 +19229,14 @@ class ProductionController {
         ]);
 
         Session::flash('success', "Third-party product '{$name}' updated successfully!");
-        Response::redirect(url('production/third-party-catalog'));
+        Response::redirect(url('production/purchases/mapping/catalog'));
     }
 
     public function deleteThirdPartyCatalog(string $id): void {
         $tpId = (int)$id;
         Database::execute("UPDATE third_party_products SET is_active = 0 WHERE id = ?", [$tpId]);
         Session::flash('success', 'Third-party catalog style removed.');
-        Response::redirect(url('production/third-party-catalog'));
+        Response::redirect(url('production/purchases/mapping/catalog'));
     }
 
     /**
@@ -19019,6 +19247,7 @@ class ProductionController {
      * =========================================================================
      */
     public function purchasedStockIndex(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
         $typeFilter = trim($_GET['type'] ?? 'ALL');
         $search = trim($_GET['search'] ?? '');
         $cid = function_exists('currentConcernId') ? currentConcernId() : null;
@@ -19051,7 +19280,9 @@ class ProductionController {
                    ppi.total_price, ppi.vendor_sku, ppi.product_code, ppi.roll_number, ppi.quantity AS purchase_qty,
                    pp.id AS purchase_id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
                    s.name AS seller_name, s.company AS seller_company,
-                   c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                   COALESCE(qrg.category_name, tpc.name, c.name) AS category_name,
+                   COALESCE(qrg.subcategory_name, tpsc.name, sc.name) AS subcategory_name,
+                   COALESCE(qrg.sub_subcategory_name, tpssc.name, ssc.name) AS sub_subcategory_name,
                    u.full_name AS stock_added_by_name
             FROM qr_generations qrg
             INNER JOIN production_purchase_items ppi ON ppi.id = qrg.source_purchase_item_id
@@ -19060,6 +19291,9 @@ class ProductionController {
             LEFT JOIN categories c ON c.id = COALESCE(qrg.category_id, ppi.mapped_category_id)
             LEFT JOIN subcategories sc ON sc.id = COALESCE(qrg.subcategory_id, ppi.mapped_subcategory_id)
             LEFT JOIN sub_subcategories ssc ON ssc.id = COALESCE(qrg.sub_subcategory_id, ppi.mapped_sub_subcategory_id)
+            LEFT JOIN third_party_categories tpc ON tpc.id = ppi.mapped_third_party_category_id
+            LEFT JOIN third_party_subcategories tpsc ON tpsc.id = ppi.mapped_third_party_subcategory_id
+            LEFT JOIN third_party_sub_subcategories tpssc ON tpssc.id = ppi.mapped_third_party_sub_subcategory_id
             LEFT JOIN users u ON u.id = qrg.stock_added_by
             WHERE {$whereSql}
             ORDER BY qrg.stock_added_at DESC, qrg.id DESC
