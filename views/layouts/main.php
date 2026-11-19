@@ -28,11 +28,10 @@ if (!empty($authUser['production_unit_name'])) {
     <meta name="description" content="GRM Production & Inventory Management System">
     <?= CSRF::metaTag() ?>
 
-    <!-- Fonts & Icons & Bootstrap CSS -->
+    <!-- Fonts & Icons & Bootstrap CSS (Fast Local Assets with Zero External Latency) -->
     <link href="<?= asset('css/bootstrap.min.css') ?>" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="<?= asset('css/bootstrap-icons.min.css') ?>" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="<?= asset('css/style.css') ?>" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="<?= asset('css/style.css') ?>?v=<?= file_exists(BASE_PATH . '/public/assets/css/style.css') ? filemtime(BASE_PATH . '/public/assets/css/style.css') : '1.1' ?>" rel="stylesheet">
     <link href="<?= asset('css/reports.css') ?>?v=<?= file_exists(BASE_PATH . '/public/assets/css/reports.css') ? filemtime(BASE_PATH . '/public/assets/css/reports.css') : '1' ?>" rel="stylesheet">
@@ -100,7 +99,6 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php endif; ?>
                             <?php if ($modPurchases && hasPermission('production_purchase_mapping', 'view')): ?>
                             <li><a href="<?= url('production/purchases/mapping') ?>" class="<?= in_array($activeMenu ?? '', ['purchases-mapping', 'prod-purchases-mapping']) ? 'active' : '' ?>">Product Mapping</a></li>
-                            <li><a href="<?= url('production/third-party-catalog') ?>" class="<?= ($activeMenu ?? '') === 'prod-third-party-catalog' ? 'active' : '' ?>">Third-Party Catalog</a></li>
                             <?php endif; ?>
                             <?php if ($modProduction && hasPermission('damages', 'view')): ?>
                             <li><a href="<?= url('production/damages') ?>" class="<?= ($activeMenu ?? '') === 'prod-damages' ? 'active' : '' ?>">Damage Management</a></li>

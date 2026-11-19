@@ -241,14 +241,12 @@ class Router {
         $this->post('production/purchases/mapping/add-product', 'ProductionController', 'ajaxAddBillMappingProduct', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
         $this->post('production/purchases/mapping/delete-product/{id}', 'ProductionController', 'ajaxDeleteBillMappingProduct', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'delete']]);
         $this->get('api/purchases/mapping/item/{id}', 'ProductionController', 'ajaxGetThirdPartyItem', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
-
-        // Third-Party Product Catalog (Dedicated Master Table)
-        $this->get('production/third-party-catalog', 'ProductionController', 'thirdPartyCatalogList', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'view']]);
-        $this->get('production/third-party-catalog/create', 'ProductionController', 'createThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
-        $this->post('production/third-party-catalog/store', 'ProductionController', 'storeThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
-        $this->get('production/third-party-catalog/edit/{id}', 'ProductionController', 'editThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
-        $this->post('production/third-party-catalog/update/{id}', 'ProductionController', 'updateThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
-        $this->post('production/third-party-catalog/delete/{id}', 'ProductionController', 'deleteThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'delete']]);
+        $this->get('production/purchases/mapping/catalog', 'ProductionController', 'thirdPartyCatalogList', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'view']]);
+        $this->get('production/purchases/mapping/catalog/create', 'ProductionController', 'createThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
+        $this->post('production/purchases/mapping/catalog/store', 'ProductionController', 'storeThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
+        $this->get('production/purchases/mapping/catalog/edit/{id}', 'ProductionController', 'editThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
+        $this->post('production/purchases/mapping/catalog/update/{id}', 'ProductionController', 'updateThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
+        $this->post('production/purchases/mapping/catalog/delete/{id}', 'ProductionController', 'deleteThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'delete']]);
 
         // Purchased Stock Sub-Module (Fabric Rolls, Raw Materials, Third-Party)
         $this->get('production/purchased-stock', 'ProductionController', 'purchasedStockIndex', ['AuthMiddleware']);
@@ -264,6 +262,12 @@ class Router {
         $this->post('purchases/mapping/save', 'ProductionController', 'saveThirdPartyMapping', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
         $this->post('purchases/mapping/add-product', 'ProductionController', 'ajaxAddBillMappingProduct', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
         $this->post('purchases/mapping/delete-product/{id}', 'ProductionController', 'ajaxDeleteBillMappingProduct', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'delete']]);
+        $this->get('purchases/mapping/catalog', 'ProductionController', 'thirdPartyCatalogList', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'view']]);
+        $this->get('purchases/mapping/catalog/create', 'ProductionController', 'createThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
+        $this->post('purchases/mapping/catalog/store', 'ProductionController', 'storeThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'create']]);
+        $this->get('purchases/mapping/catalog/edit/{id}', 'ProductionController', 'editThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
+        $this->post('purchases/mapping/catalog/update/{id}', 'ProductionController', 'updateThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'edit']]);
+        $this->post('purchases/mapping/catalog/delete/{id}', 'ProductionController', 'deleteThirdPartyCatalog', ['AuthMiddleware', ['PermissionMiddleware', 'production_purchase_mapping', 'delete']]);
 
         // Production Billing
         $this->get('production/billing', 'ProductionBillingController', 'billList', ['AuthMiddleware', ['PermissionMiddleware', 'production_billing', 'view']]);

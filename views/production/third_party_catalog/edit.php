@@ -3,12 +3,12 @@
         <h2 class="mb-1"><i class="bi bi-pencil-square me-2 text-primary"></i>Edit Third-Party Catalog Style</h2>
         <span class="text-muted small">Update master catalog details for <strong><?= e($product['name']) ?></strong></span>
     </div>
-    <a href="<?= url('production/third-party-catalog') ?>" class="btn btn-outline-secondary">
+    <a href="<?= url('production/purchases/mapping/catalog') ?>" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i> Back to Catalog
     </a>
 </div>
 
-<form method="POST" action="<?= url('production/third-party-catalog/update/' . $product['id']) ?>" id="formEditThirdPartyProduct">
+<form method="POST" action="<?= url('production/purchases/mapping/catalog/update/' . $product['id']) ?>" id="formEditThirdPartyProduct">
     <?= csrf_field() ?>
 
     <div class="row g-4">
@@ -34,33 +34,36 @@
                             <select name="category_id" id="tp_category_id" class="form-select" required onchange="loadTpSubcategories()">
                                 <option value="">-- Select Category --</option>
                                 <?php foreach ($categories as $cat): ?>
-                                    <option value="<?= (int)$cat['id'] ?>" <?= ((int)$product['category_id'] === (int)$cat['id']) ? 'selected' : '' ?>>
+                                    <option value="<?= (int)$cat['id'] ?>" <?= ((int)$product['third_party_category_id'] === (int)$cat['id']) ? 'selected' : '' ?>>
                                         <?= e($cat['name']) ?> (<?= e($cat['code']) ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <button type="button" class="btn btn-link btn-sm px-0" onclick="addTpTaxonomy('category')">+ Add third-party category</button>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Subcategory</label>
                             <select name="subcategory_id" id="tp_subcategory_id" class="form-select" onchange="loadTpSubSubcategories()">
                                 <option value="">-- Select Subcategory --</option>
                                 <?php foreach ($subcategories as $sc): ?>
-                                    <option value="<?= (int)$sc['id'] ?>" <?= ((int)$product['subcategory_id'] === (int)$sc['id']) ? 'selected' : '' ?>>
+                                    <option value="<?= (int)$sc['id'] ?>" <?= ((int)$product['third_party_subcategory_id'] === (int)$sc['id']) ? 'selected' : '' ?>>
                                         <?= e($sc['name']) ?> (<?= e($sc['code']) ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <button type="button" class="btn btn-link btn-sm px-0" onclick="addTpTaxonomy('subcategory')">+ Add subcategory</button>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold">Sub-Subcategory</label>
                             <select name="sub_subcategory_id" id="tp_sub_subcategory_id" class="form-select">
                                 <option value="">-- Select Sub-Subcategory --</option>
                                 <?php foreach ($subSubcategories as $ssc): ?>
-                                    <option value="<?= (int)$ssc['id'] ?>" <?= ((int)$product['sub_subcategory_id'] === (int)$ssc['id']) ? 'selected' : '' ?>>
+                                    <option value="<?= (int)$ssc['id'] ?>" <?= ((int)$product['third_party_sub_subcategory_id'] === (int)$ssc['id']) ? 'selected' : '' ?>>
                                         <?= e($ssc['name']) ?> (<?= e($ssc['code']) ?>)
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                            <button type="button" class="btn btn-link btn-sm px-0" onclick="addTpTaxonomy('subsubcategory')">+ Add sub-subcategory</button>
                         </div>
 
                         <div class="col-md-4">
@@ -162,7 +165,7 @@ function loadTpSubcategories() {
 
     if (!catId) return;
 
-    fetch('<?= url("api/subcategories") ?>/' + catId)
+    fetch('<?= url("api/subcategories") ?>/' + catId + '?catalog_source=THIRD_PARTY')
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data) && data.length > 0) {
@@ -188,7 +191,7 @@ function loadTpSubSubcategories() {
 
     if (!subId) return;
 
-    fetch('<?= url("api/sub-subcategories") ?>/' + subId)
+    fetch('<?= url("api/sub-subcategories") ?>/' + subId + '?catalog_source=THIRD_PARTY')
         .then(res => res.json())
         .then(data => {
             if (Array.isArray(data) && data.length > 0) {
@@ -204,6 +207,55 @@ function loadTpSubSubcategories() {
             }
         })
         .catch(err => console.error(err));
+}
+
+async function addTpTaxonomy(level) {
+    const labels = {
+        category: 'third-party category',
+        subcategory: 'subcategory',
+        subsubcategory: 'sub-subcategory'
+    };
+    const name = window.prompt('Enter the ' + labels[level] + ' name:');
+    if (!name || !name.trim()) return;
+
+    const category = document.getElementById('tp_category_id');
+    const subcategory = document.getElementById('tp_subcategory_id');
+    if (level === 'subcategory' && !category.value) {
+        window.alert('Select a category first.');
+        return;
+    }
+    if (level === 'subsubcategory' && !subcategory.value) {
+        window.alert('Select a subcategory first.');
+        return;
+    }
+
+    const endpoints = {
+        category: '<?= url("api/categories/quick-add") ?>',
+        subcategory: '<?= url("api/subcategories/quick-add") ?>',
+        subsubcategory: '<?= url("api/sub-subcategories/quick-add") ?>'
+    };
+    const payload = new URLSearchParams({ name: name.trim(), catalog_source: 'THIRD_PARTY' });
+    if (level === 'subcategory') payload.set('category_id', category.value);
+    if (level === 'subsubcategory') payload.set('subcategory_id', subcategory.value);
+
+    try {
+        const response = await fetch(endpoints[level], {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: payload.toString()
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Could not add taxonomy value.');
+
+        const target = level === 'category' ? category : (level === 'subcategory' ? subcategory : document.getElementById('tp_sub_subcategory_id'));
+        const option = new Option(result.name + (result.code ? ' (' + result.code + ')' : ''), result.id, true, true);
+        target.add(option);
+        target.disabled = false;
+        if (level === 'category') loadTpSubcategories();
+        if (level === 'subcategory') loadTpSubSubcategories();
+    } catch (error) {
+        window.alert(error.message);
+    }
 }
 
 function calcMargins() {

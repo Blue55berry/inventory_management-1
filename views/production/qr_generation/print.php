@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($batch['brand_name']) ?> — QR Labels (<?= count($batch['items']) ?> pcs)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="<?= asset('css/bootstrap.min.css') ?>" rel="stylesheet">
+    <link href="<?= asset('css/bootstrap-icons.min.css') ?>" rel="stylesheet">
+    <script src="<?= asset('js/bootstrap.bundle.min.js') ?>"></script>
+    <script src="<?= asset('js/qrcode.min.js') ?>"></script>
     <style>
         body {
             background-color: #f1f5f9;

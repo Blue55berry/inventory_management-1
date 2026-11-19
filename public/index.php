@@ -41,12 +41,33 @@ require_once BASE_PATH . '/app/Models/Role.php';
 require_once BASE_PATH . '/app/Middleware/AuthMiddleware.php';
 require_once BASE_PATH . '/app/Middleware/PermissionMiddleware.php';
 
-// Global class autoloader for Services, Models, Controllers, and Helpers
+// Global high-performance class autoloader with in-memory caching and suffix heuristics
 spl_autoload_register(function (string $className) {
+    static $resolved = [];
     $cleanClass = basename(str_replace('\\', '/', $className));
+    if (isset($resolved[$cleanClass])) {
+        return;
+    }
+
+    // Direct suffix routing avoids scanning all 5 directories on disk
+    $preferred = null;
+    if (str_ends_with($cleanClass, 'Controller')) {
+        $preferred = BASE_PATH . '/app/Controllers/' . $cleanClass . '.php';
+    } elseif (str_ends_with($cleanClass, 'Service')) {
+        $preferred = BASE_PATH . '/app/Services/' . $cleanClass . '.php';
+    } elseif (str_ends_with($cleanClass, 'Middleware')) {
+        $preferred = BASE_PATH . '/app/Middleware/' . $cleanClass . '.php';
+    }
+
+    if ($preferred !== null && file_exists($preferred)) {
+        require_once $preferred;
+        $resolved[$cleanClass] = true;
+        return;
+    }
+
     $directories = [
-        BASE_PATH . '/app/Services/',
         BASE_PATH . '/app/Models/',
+        BASE_PATH . '/app/Services/',
         BASE_PATH . '/app/Helpers/',
         BASE_PATH . '/app/Controllers/',
         BASE_PATH . '/app/Middleware/',
@@ -56,18 +77,19 @@ spl_autoload_register(function (string $className) {
         $file = $dir . $cleanClass . '.php';
         if (file_exists($file)) {
             require_once $file;
+            $resolved[$cleanClass] = true;
             return;
         }
     }
 });
 
-// Ensure concern master tables exist on every request (including public pages).
+// Start session early so session-based schema caching is available
+Session::start();
+
+// Ensure concern master tables exist on every request (cached in session after initial check)
 if (class_exists('Concern')) {
     Concern::ensureSchema();
 }
-
-// Start session
-Session::start();
 
 // Get the requested URL
 $requestUrl = isset($_GET['url']) ? trim($_GET['url'], '/') : '';

@@ -921,6 +921,10 @@ CREATE TABLE `production_purchase_items` (
   `mapped_category_id` int(10) unsigned DEFAULT NULL,
   `mapped_subcategory_id` int(10) unsigned DEFAULT NULL,
   `mapped_sub_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `mapped_third_party_category_id` int(10) unsigned DEFAULT NULL,
+  `mapped_third_party_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `mapped_third_party_sub_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `third_party_product_id` int(10) unsigned DEFAULT NULL,
   `mapped_attributes` text DEFAULT NULL,
   `mapped_at` datetime DEFAULT NULL,
   `mapped_by` int(10) unsigned DEFAULT NULL,
@@ -929,6 +933,7 @@ CREATE TABLE `production_purchase_items` (
   UNIQUE KEY `uniq_production_purchase_seller_roll` (`seller_roll_id`),
   KEY `idx_production_purchase_items_purchase` (`purchase_id`),
   KEY `idx_production_purchase_items_stock` (`item_type`,`item_name`,`unit`),
+  KEY `idx_purchase_items_third_party_category` (`mapped_third_party_category_id`,`mapped_third_party_subcategory_id`),
   CONSTRAINT `production_purchase_items_ibfk_1` FOREIGN KEY (`purchase_id`) REFERENCES `production_purchases` (`id`) ON DELETE CASCADE,
   CONSTRAINT `production_purchase_items_ibfk_2` FOREIGN KEY (`seller_roll_id`) REFERENCES `seller_rolls` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1207,6 +1212,49 @@ CREATE TABLE `products` (
 -- ------------------------------------------------------------
 -- Table structure for `third_party_products`
 -- ------------------------------------------------------------
+CREATE TABLE `third_party_categories` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `name` varchar(200) NOT NULL,
+  `code` varchar(50) DEFAULT NULL,
+  `slug` varchar(200) NOT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `sort_order` int(11) DEFAULT 0,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_third_party_category_slug` (`slug`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `third_party_subcategories` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `category_id` int(10) unsigned NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `code` varchar(50) DEFAULT NULL,
+  `slug` varchar(200) NOT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `sort_order` int(11) DEFAULT 0,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_third_party_subcategory_slug` (`category_id`,`slug`),
+  CONSTRAINT `fk_third_party_subcategories_category` FOREIGN KEY (`category_id`) REFERENCES `third_party_categories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `third_party_sub_subcategories` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `subcategory_id` int(10) unsigned NOT NULL,
+  `name` varchar(200) NOT NULL,
+  `code` varchar(50) DEFAULT NULL,
+  `slug` varchar(200) NOT NULL,
+  `is_active` tinyint(1) DEFAULT 1,
+  `sort_order` int(11) DEFAULT 0,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_third_party_sub_subcategory_slug` (`subcategory_id`,`slug`),
+  CONSTRAINT `fk_third_party_sub_subcategories_subcategory` FOREIGN KEY (`subcategory_id`) REFERENCES `third_party_subcategories` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 DROP TABLE IF EXISTS `third_party_products`;
 CREATE TABLE `third_party_products` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
@@ -1217,6 +1265,9 @@ CREATE TABLE `third_party_products` (
   `category_id` int(10) unsigned DEFAULT NULL,
   `subcategory_id` int(10) unsigned DEFAULT NULL,
   `sub_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `third_party_category_id` int(10) unsigned DEFAULT NULL,
+  `third_party_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `third_party_sub_subcategory_id` int(10) unsigned DEFAULT NULL,
   `category_code` varchar(50) DEFAULT NULL,
   `subcategory_code` varchar(50) DEFAULT NULL,
   `sub_subcategory_code` varchar(50) DEFAULT NULL,

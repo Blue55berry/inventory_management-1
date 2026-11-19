@@ -41,6 +41,10 @@ class Concern {
      */
     public static function ensureSchema(): void {
         if (self::$schemaChecked) return;
+        if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['_concern_schema_checked'])) {
+            self::$schemaChecked = true;
+            return;
+        }
         self::$schemaChecked = true;
 
         try {
@@ -108,6 +112,10 @@ class Concern {
                     "INSERT INTO concerns (id, name, code, invoice_prefix, po_prefix, dispatch_prefix, is_active, created_at)
                      VALUES (1, 'GRM Apparels', 'CN-01', 'INV', 'PO', 'DSP', 1, NOW())"
                 );
+            }
+
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                $_SESSION['_concern_schema_checked'] = 1;
             }
         } catch (Throwable $e) {
             error_log("Concern schema bootstrap failed: " . $e->getMessage());
