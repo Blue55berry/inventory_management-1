@@ -4,11 +4,28 @@
         <p class="text-muted small mb-0">Generate standalone or catalog-linked QR identities with custom brand prefixes and batch thermal labels.</p>
     </div>
     <div class="d-flex gap-2">
-        <a href="<?= url('production/qr-generations/create') ?>" class="btn btn-primary shadow-sm">
+        <a href="<?= url('production/qr-generations/create?tab=' . e($activeTab)) ?>" class="btn btn-primary shadow-sm">
             <i class="bi bi-plus-circle-fill me-1"></i> Generate New QR Batch
         </a>
     </div>
 </div>
+
+<!-- QR Generation areas: Fabric / Raw Material / Third-Party / Return -->
+<ul class="nav nav-tabs nav-fill mb-4 border-bottom-0 gap-2" id="qrSourceTabs" role="tablist">
+    <?php foreach ($tabs as $tab): ?>
+        <?php $isActiveTab = $tab['key'] === $activeTab; ?>
+        <li class="nav-item" role="presentation">
+            <a href="<?= url('production/qr-generations?tab=' . $tab['key']) ?>"
+               class="nav-link py-3 border shadow-sm rounded <?= $isActiveTab ? 'active fw-bold' : 'fw-semibold text-muted' ?>"
+               role="tab" aria-selected="<?= $isActiveTab ? 'true' : 'false' ?>">
+                <i class="bi <?= $tab['icon'] ?> me-2 text-<?= $tab['color'] ?> fs-5"></i><?= e($tab['label']) ?>
+                <span class="badge bg-<?= $tab['color'] ?>-subtle text-<?= $tab['color'] ?> border ms-1">
+                    <?= number_format((int)($tabCounts[$tab['key']] ?? 0)) ?>
+                </span>
+            </a>
+        </li>
+    <?php endforeach; ?>
+</ul>
 
 <!-- KPI Cards -->
 <div class="row g-3 mb-4">
@@ -78,6 +95,7 @@
 <div class="card mb-4 shadow-sm border-0">
     <div class="card-body p-3">
         <form method="GET" action="<?= url('production/qr-generations') ?>" class="row g-2 align-items-end">
+            <input type="hidden" name="tab" value="<?= e($activeTab) ?>">
             <div class="col-lg-4 col-md-6">
                 <label class="form-label small text-muted fw-semibold mb-1">Search Batch / Brand / Prefix</label>
                 <div class="input-group">
@@ -124,6 +142,7 @@
                 <thead class="table-light">
                     <tr>
                         <th class="ps-3">Batch Code</th>
+                        <th>Area</th>
                         <th>Type</th>
                         <th>Printed Brand Name</th>
                         <th>Category Hierarchy</th>
@@ -136,7 +155,7 @@
                 <tbody>
                     <?php if (empty($batches)): ?>
                     <tr>
-                        <td colspan="8" class="text-center py-5 text-muted">
+                        <td colspan="9" class="text-center py-5 text-muted">
                             <i class="bi bi-qr-code fs-1 d-block mb-2 text-secondary"></i>
                             No QR batches generated yet. Click "Generate New QR Batch" above to start.
                         </td>
@@ -145,9 +164,21 @@
                     <?php foreach ($batches as $batch): ?>
                     <tr>
                         <td class="ps-3">
-                            <a href="<?= url('production/qr-generations/view/' . $batch['id']) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
+                            <a href="<?= url('production/qr-generations/view/' . $batch['id'] . '?tab=' . e($activeTab)) ?>" class="fw-bold font-monospace text-primary text-decoration-none">
                                 <?= e($batch['batch_code']) ?>
                             </a>
+                        </td>
+                        <td>
+                            <?php
+                                $batchSource = strtoupper((string)($batch['qr_source'] ?? QrGenerationService::SOURCE_THIRD_PARTY));
+                                $sourceMeta = null;
+                                foreach ($tabs as $tab) {
+                                    if ($tab['source'] === $batchSource) { $sourceMeta = $tab; break; }
+                                }
+                            ?>
+                            <span class="badge bg-<?= e($sourceMeta['color'] ?? 'secondary') ?>-subtle text-<?= e($sourceMeta['color'] ?? 'secondary') ?> border">
+                                <i class="bi <?= e($sourceMeta['icon'] ?? 'bi-qr-code') ?> me-1"></i><?= e($sourceMeta['label'] ?? str_replace('_', ' ', $batchSource)) ?>
+                            </span>
                         </td>
                         <td>
                             <?php if ($batch['generation_type'] === 'MANUAL'): ?>

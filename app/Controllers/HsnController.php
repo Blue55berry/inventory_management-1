@@ -109,9 +109,20 @@ class HsnController {
             return;
         }
 
-        $hsnCode = strtoupper(trim((string)($_POST['hsn_code'] ?? '')));
-        $description = trim((string)($_POST['description'] ?? ''));
-        $gstRate = isset($_POST['gst_rate']) && $_POST['gst_rate'] !== '' ? (float)$_POST['gst_rate'] : null;
+        $input = $_POST;
+        if (empty($input['hsn_code'])) {
+            $rawJson = file_get_contents('php://input');
+            if ($rawJson) {
+                $decoded = json_decode($rawJson, true);
+                if (is_array($decoded)) {
+                    $input = array_merge($input, $decoded);
+                }
+            }
+        }
+
+        $hsnCode = strtoupper(trim((string)($input['hsn_code'] ?? '')));
+        $description = trim((string)($input['description'] ?? ''));
+        $gstRate = isset($input['gst_rate']) && $input['gst_rate'] !== '' ? (float)$input['gst_rate'] : null;
 
         if ($hsnCode === '') {
             $msg = 'HSN Code is required.';
@@ -230,9 +241,20 @@ class HsnController {
             return;
         }
 
-        $hsnCode = strtoupper(trim((string)($_POST['hsn_code'] ?? '')));
-        $description = trim((string)($_POST['description'] ?? ''));
-        $gstRate = isset($_POST['gst_rate']) && $_POST['gst_rate'] !== '' ? (float)$_POST['gst_rate'] : null;
+        $input = $_POST;
+        if (empty($input['hsn_code'])) {
+            $rawJson = file_get_contents('php://input');
+            if ($rawJson) {
+                $decoded = json_decode($rawJson, true);
+                if (is_array($decoded)) {
+                    $input = array_merge($input, $decoded);
+                }
+            }
+        }
+
+        $hsnCode = strtoupper(trim((string)($input['hsn_code'] ?? '')));
+        $description = trim((string)($input['description'] ?? ''));
+        $gstRate = isset($input['gst_rate']) && $input['gst_rate'] !== '' ? (float)$input['gst_rate'] : null;
 
         if ($hsnCode === '') {
             $msg = 'HSN Code is required.';

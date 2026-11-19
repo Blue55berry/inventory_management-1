@@ -407,7 +407,9 @@
                                 <option value="">Select Warehouse</option>
                                 <?php if (!empty($warehouses)): ?>
                                     <?php foreach ($warehouses as $wh): ?>
-                                        <option value="<?= (int)$wh['id'] ?>"><?= e($wh['name']) ?> (<?= e($wh['code'] ?? 'WH') ?>)</option>
+                                        <option value="<?= (int)$wh['id'] ?>">
+                                            <?= e($wh['name']) ?> (<?= e($wh['code'] ?? 'WH') ?>)<?= !empty($wh['concern_name']) ? ' — [' . e($wh['concern_name']) . ']' : '' ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </select>

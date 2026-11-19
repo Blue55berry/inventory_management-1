@@ -371,15 +371,15 @@
                             <div class="p-3 bg-light rounded-3 border">
                                 <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                                     <label for="damageRollQrScan" class="form-label fw-bold mb-0">
-                                        <i class="bi bi-upc-scan text-success me-1"></i>Scan Fabric Roll Barcode / QR Tag
+                                        <i class="bi bi-upc-scan text-success me-1"></i>Scan Product Barcode / QR Tag
                                     </label>
-                                    <small class="text-muted">Hardware barcode scanner</small>
+                                    <small class="text-muted">Hardware barcode / QR scanner</small>
                                 </div>
                                 <div class="input-group">
                                     <span class="input-group-text bg-white text-success border-end-0">
                                         <i class="bi bi-qr-code"></i>
                                     </span>
-                                    <input type="text" id="damageRollQrScan" class="form-control border-start-0" placeholder="Scan a Roll QR or Finished Product Tag and press Enter" autocomplete="off">
+                                    <input type="text" id="damageRollQrScan" class="form-control border-start-0" placeholder="Scan any QR code or barcode and press Enter..." autocomplete="off">
                                     <button type="button" class="btn btn-success fw-semibold px-3" onclick="scanDamageRollQr()">
                                         <i class="bi bi-plus-circle me-1"></i>Scan / Add
                                     </button>
@@ -389,7 +389,7 @@
                             <div class="border rounded mt-2 p-2">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <strong>Scanned labels</strong>
-                                    <span id="damageScannedCount" class="badge bg-secondary">0 pieces</span>
+                                    <span id="damageScannedCount" class="badge bg-secondary">0 items</span>
                                 </div>
                                 <div id="damageScannedLabels" class="list-group small" style="max-height: none; overflow: visible;">
                                     <div class="list-group-item text-muted" id="damageScannedEmpty">No labels scanned yet.</div>
@@ -399,13 +399,28 @@
                         </div>
 
                         <div class="col-12">
-                            <div class="alert alert-info py-2 mb-0 small">
-                                <i class="bi bi-info-circle me-1"></i>Set a damage reason and attach a photo for each scanned label.
+                            <div class="alert alert-danger py-2 mb-0 small d-flex align-items-center">
+                                <i class="bi bi-exclamation-triangle-fill fs-5 me-2 text-danger flex-shrink-0"></i>
+                                <div>
+                                    <strong>Permanent Deletion &amp; Stock Deduction:</strong> Once submitted, scanned QR codes are <strong>deleted from the system</strong> across all modules and corresponding counts are deducted from active inventory.
+                                </div>
                             </div>
                         </div>
 
+                        <!-- Damaged Quantity (Auto-calculated from items) -->
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold text-dark">
+                                Total Damaged Qty <span class="badge bg-secondary-subtle text-secondary border ms-1">Auto</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="number" step="1" name="total_damaged_quantity" id="inputDamagedTotalQty" class="form-control bg-light fw-bold text-dark" placeholder="0" readonly tabindex="-1" style="background-color: #f1f3f5 !important; cursor: not-allowed;">
+                                <span class="input-group-text bg-light">pcs</span>
+                            </div>
+                            <small class="text-muted d-block mt-1" id="reportQtyHelp">0 pieces counted</small>
+                        </div>
+
                         <!-- Damaged Weight (Disabled with clear visibility - Auto-calculated) -->
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-bold text-dark">
                                 Damaged Weight <span class="badge bg-secondary-subtle text-secondary border ms-1">Auto</span>
                             </label>
@@ -417,16 +432,15 @@
                         </div>
 
                         <!-- Estimated Loss Valuation (Disabled with clear visibility - Auto-calculated) -->
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label fw-bold text-danger">
-                                <i class="bi bi-currency-rupee me-1"></i>Estimated Loss Valuation <span class="badge bg-danger-subtle text-danger border ms-1">Auto</span>
+                                <i class="bi bi-currency-rupee me-1"></i>Loss Valuation <span class="badge bg-danger-subtle text-danger border ms-1">Auto</span>
                             </label>
                             <div class="input-group">
                                 <span class="input-group-text bg-danger-subtle text-danger fw-bold">₹</span>
                                 <input type="number" step="0.01" name="loss_amount" id="inputEstimatedLoss" class="form-control fw-bold text-danger bg-light fs-6" placeholder="0.00" readonly tabindex="-1" style="background-color: #f1f3f5 !important; cursor: not-allowed;">
-                                <span class="input-group-text bg-light text-muted small" id="reportRateBadge">₹0.00 / kg</span>
                             </div>
-                            <small class="text-muted d-block mt-1" id="reportLossCalcHelp">Calculated: 0.00 kg × ₹0.00/kg</small>
+                            <small class="text-muted d-block mt-1" id="reportLossCalcHelp">Calculated: ₹0.00</small>
                         </div>
 
                         <!-- Shared notes are optional; reason and evidence are captured per scanned label. -->
@@ -441,7 +455,7 @@
                 <div class="modal-footer bg-light py-3">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="submit" class="btn btn-danger px-4 fw-semibold shadow-sm">
-                        <i class="bi bi-check-circle me-1"></i> Save Damage &amp; Deduct Stock
+                        <i class="bi bi-trash3-fill me-1"></i> Confirm Damage &amp; Delete QR from Stock
                     </button>
                 </div>
             </form>
@@ -863,8 +877,31 @@ function setDamageRollScanStatus(message, isError = false) {
 function clearDamageRollSelection() {
     damageScannedLabels = [];
     renderDamageScannedLabels();
-    document.getElementById('inputDamagedWeight').value = '';
-    document.getElementById('inputEstimatedLoss').value = '';
+    const qtyInput = document.getElementById('inputDamagedTotalQty');
+    if (qtyInput) qtyInput.value = '';
+    const weightInput = document.getElementById('inputDamagedWeight');
+    if (weightInput) weightInput.value = '';
+    const lossInput = document.getElementById('inputEstimatedLoss');
+    if (lossInput) lossInput.value = '';
+}
+
+function updateDamageItemQty(index, newQty) {
+    if (!damageScannedLabels[index]) return;
+    const val = Math.max(1, parseInt(newQty, 10) || 1);
+    damageScannedLabels[index].qty = val;
+    damageScannedLabels[index].weight = damageScannedLabels[index].unitWeight * val;
+    damageScannedLabels[index].loss = damageScannedLabels[index].unitLoss * val;
+    renderDamageScannedLabels();
+}
+
+function incrementDamageQty(index) {
+    if (!damageScannedLabels[index]) return;
+    updateDamageItemQty(index, (damageScannedLabels[index].qty || 1) + 1);
+}
+
+function decrementDamageQty(index) {
+    if (!damageScannedLabels[index]) return;
+    updateDamageItemQty(index, Math.max(1, (damageScannedLabels[index].qty || 1) - 1));
 }
 
 function renderDamageScannedLabels() {
@@ -877,8 +914,10 @@ function renderDamageScannedLabels() {
     }
     list.replaceChildren();
     inputs.replaceChildren();
-    const count = document.getElementById('damageScannedCount');
-    if (count) count.textContent = `${damageScannedLabels.length} ${damageScannedLabels.length === 1 ? 'item' : 'items'}`;
+
+    let totalQty = 0;
+    let totalWeight = 0;
+    let totalLoss = 0;
 
     if (damageScannedLabels.length === 0) {
         const empty = document.createElement('div');
@@ -887,39 +926,79 @@ function renderDamageScannedLabels() {
         list.appendChild(empty);
     }
 
-    let totalWeight = 0;
-    let totalLoss = 0;
     damageScannedLabels.forEach((item, index) => {
-        totalWeight += item.weight;
-        totalLoss += item.loss;
+        const itemQty = item.qty || 1;
+        const itemWeight = (item.unitWeight || 0) * itemQty;
+        const itemLoss = (item.unitLoss || 0) * itemQty;
+
+        totalQty += itemQty;
+        totalWeight += itemWeight;
+        totalLoss += itemLoss;
 
         const row = document.createElement('div');
-        row.className = 'list-group-item';
+        row.className = 'list-group-item p-3 border rounded mb-2';
+
         const header = document.createElement('div');
-        header.className = 'd-flex justify-content-between align-items-start gap-2';
+        header.className = 'd-flex justify-content-between align-items-center flex-wrap gap-2 pb-2 border-bottom';
+
         const details = document.createElement('div');
         details.className = 'text-break flex-grow-1';
         const code = document.createElement('strong');
+        code.className = 'fs-6 text-dark me-2';
         code.textContent = item.code;
         const metadata = document.createElement('div');
-        metadata.className = 'text-muted small mt-0.5';
+        metadata.className = 'text-muted small mt-1';
 
         const isProd = (item.itemType === 'PRODUCT');
         const isSupply = (item.damageKind === 'SUPPLY');
         const typeBadge = document.createElement('span');
         typeBadge.className = `badge ${isSupply ? 'bg-info-subtle text-info' : (isProd ? 'bg-primary-subtle text-primary' : 'bg-secondary-subtle text-secondary')} border me-1`;
         typeBadge.textContent = isSupply ? 'Supply' : (isProd ? 'Product' : 'Roll');
+
         metadata.append(typeBadge, document.createTextNode(
             isSupply
-                ? `${item.sellerName} • ${item.rollNumber} • ${item.quantityLabel} • ₹${item.loss.toFixed(2)}`
-                : `${item.sellerName} • ${item.rollNumber} • ${item.weight.toFixed(2)} kg • ₹${item.loss.toFixed(2)}`
+                ? `${item.sellerName} • ${item.rollNumber} • ₹${item.unitLoss.toFixed(2)}/pc • Subtotal: ₹${itemLoss.toFixed(2)}`
+                : `${item.sellerName} • ${item.rollNumber} • ${itemWeight.toFixed(2)} kg (${item.unitWeight.toFixed(2)} kg/pc) • ₹${itemLoss.toFixed(2)}`
         ));
         details.append(code, metadata);
+
+        // Actions: Quantity +/- controls and Remove
+        const actions = document.createElement('div');
+        actions.className = 'd-flex align-items-center gap-2';
+
+        const qtyBox = document.createElement('div');
+        qtyBox.className = 'd-flex align-items-center bg-light border rounded px-1';
+
+        const decBtn = document.createElement('button');
+        decBtn.type = 'button';
+        decBtn.className = 'btn btn-sm btn-link text-decoration-none text-dark fw-bold px-2 py-0';
+        decBtn.textContent = '−';
+        decBtn.title = 'Decrease quantity';
+        decBtn.addEventListener('click', () => decrementDamageQty(index));
+
+        const qtyInput = document.createElement('input');
+        qtyInput.type = 'number';
+        qtyInput.min = '1';
+        qtyInput.step = '1';
+        qtyInput.className = 'form-control form-control-sm text-center fw-bold border-0 bg-transparent px-1 py-0';
+        qtyInput.style.width = '55px';
+        qtyInput.value = itemQty;
+        qtyInput.addEventListener('change', () => updateDamageItemQty(index, qtyInput.value));
+
+        const incBtn = document.createElement('button');
+        incBtn.type = 'button';
+        incBtn.className = 'btn btn-sm btn-link text-decoration-none text-dark fw-bold px-2 py-0';
+        incBtn.textContent = '+';
+        incBtn.title = 'Increase quantity';
+        incBtn.addEventListener('click', () => incrementDamageQty(index));
+
+        qtyBox.append(decBtn, qtyInput, incBtn);
 
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'btn btn-sm btn-outline-danger flex-shrink-0';
-        remove.textContent = 'Remove';
+        remove.innerHTML = '<i class="bi bi-trash"></i>';
+        remove.title = `Remove ${item.code}`;
         remove.setAttribute('aria-label', `Remove ${item.code}`);
         remove.addEventListener('click', () => {
             if (item.photoPreviewUrl) {
@@ -929,11 +1008,13 @@ function renderDamageScannedLabels() {
             damageScannedLabels.splice(index, 1);
             renderDamageScannedLabels();
         });
-        header.append(details, remove);
+
+        actions.append(qtyBox, remove);
+        header.append(details, actions);
         row.appendChild(header);
 
         const fields = document.createElement('div');
-        fields.className = 'row g-2 mt-1';
+        fields.className = 'row g-2 mt-2';
 
         const reasonColumn = document.createElement('div');
         reasonColumn.className = 'col-md-6';
@@ -974,15 +1055,15 @@ function renderDamageScannedLabels() {
         const photoColumn = document.createElement('div');
         photoColumn.className = 'col-md-6';
         const photoLabel = document.createElement('label');
-        photoLabel.className = 'form-label small fw-semibold mb-1';
+        photoLabel.className = 'form-label small fw-semibold text-muted mb-1';
         photoLabel.htmlFor = `damagePhoto_${index}`;
-        photoLabel.textContent = 'Defect Photo / Evidence *';
+        photoLabel.textContent = 'Defect Photo / Evidence (Optional)';
         if (!item.photoInput) {
             item.photoInput = document.createElement('input');
             item.photoInput.type = 'file';
             item.photoInput.accept = 'image/*,application/pdf';
             item.photoInput.className = 'form-control form-control-sm';
-            item.photoInput.required = true;
+            item.photoInput.required = false;
             item.photoInput.addEventListener('change', () => {
                 if (item.photoPreviewUrl) {
                     URL.revokeObjectURL(item.photoPreviewUrl);
@@ -1022,6 +1103,12 @@ function renderDamageScannedLabels() {
         hiddenCode.value = item.code;
         inputs.appendChild(hiddenCode);
 
+        const hiddenQty = document.createElement('input');
+        hiddenQty.type = 'hidden';
+        hiddenQty.name = `damage_quantities[${index}]`;
+        hiddenQty.value = itemQty;
+        inputs.appendChild(hiddenQty);
+
         const hiddenSupplyItemId = document.createElement('input');
         hiddenSupplyItemId.type = 'hidden';
         hiddenSupplyItemId.name = `damage_supply_item_ids[${index}]`;
@@ -1029,14 +1116,29 @@ function renderDamageScannedLabels() {
         inputs.appendChild(hiddenSupplyItemId);
     });
 
-    document.getElementById('inputDamagedWeight').value = totalWeight.toFixed(2);
-    document.getElementById('inputEstimatedLoss').value = totalLoss.toFixed(2);
+    const count = document.getElementById('damageScannedCount');
+    if (count) count.textContent = `${totalQty} pieces (${damageScannedLabels.length} items)`;
+
+    const totalQtyInput = document.getElementById('inputDamagedTotalQty');
+    if (totalQtyInput) totalQtyInput.value = totalQty;
+
+    const damagedWeightInput = document.getElementById('inputDamagedWeight');
+    if (damagedWeightInput) damagedWeightInput.value = totalWeight.toFixed(2);
+
+    const estimatedLossInput = document.getElementById('inputEstimatedLoss');
+    if (estimatedLossInput) estimatedLossInput.value = totalLoss.toFixed(2);
+
+    const qtyHelp = document.getElementById('reportQtyHelp');
+    if (qtyHelp) qtyHelp.textContent = `${totalQty} total piece(s) across ${damageScannedLabels.length} QR code(s)`;
+
     const weightHelp = document.getElementById('reportWeightHelp');
-    if (weightHelp) weightHelp.textContent = `${damageScannedLabels.length} scanned item(s)`;
+    if (weightHelp) weightHelp.textContent = `${damageScannedLabels.length} scanned QR code(s)`;
+
     const rateBadge = document.getElementById('reportRateBadge');
     if (rateBadge) rateBadge.textContent = totalWeight > 0 ? `₹${(totalLoss / totalWeight).toFixed(2)} / kg` : '₹0.00 / kg';
+
     const lossHelp = document.getElementById('reportLossCalcHelp');
-    if (lossHelp) lossHelp.textContent = `Estimated loss for ${damageScannedLabels.length} scanned item(s): ₹${totalLoss.toFixed(2)}`;
+    if (lossHelp) lossHelp.textContent = `Calculated: ${totalQty} pcs = ₹${totalLoss.toFixed(2)}`;
 }
 
 function scanDamageRollQr() {
@@ -1045,14 +1147,19 @@ function scanDamageRollQr() {
     if (!scannedCode || damageScanInProgress) return;
 
     const normalizedCode = scannedCode.split('|', 1)[0].trim().toUpperCase().replace(/^#/, '');
-    if (damageScannedLabels.some(item => item.code === normalizedCode)) {
-        setDamageRollScanStatus(`QR label ${normalizedCode} is already in this damage list.`, true);
-        if (scanInput) scanInput.select();
+    const existingIndex = damageScannedLabels.findIndex(item => item.code === normalizedCode);
+    if (existingIndex !== -1) {
+        incrementDamageQty(existingIndex);
+        setDamageRollScanStatus(`Scanned again: incremented count for ${normalizedCode} to ${damageScannedLabels[existingIndex].qty} pcs.`);
+        if (scanInput) {
+            scanInput.value = '';
+            scanInput.focus();
+        }
         return;
     }
 
     damageScanInProgress = true;
-    setDamageRollScanStatus('Looking up item QR (roll or garment)…');
+    setDamageRollScanStatus('Looking up item QR (roll, product, or variant)…');
     fetch('<?= url('api/production/damages/scan-roll') ?>?code=' + encodeURIComponent(scannedCode))
         .then(async response => {
             const data = await response.json();
@@ -1092,6 +1199,18 @@ function addScannedDamageItem(data, scanInput) {
     const isProduct = data.item_type === 'PRODUCT';
     const pieceWeight = parseFloat(data.piece_weight !== undefined ? data.piece_weight : data.weight) || 0;
     const loss = parseFloat(data.piece_loss !== undefined ? data.piece_loss : (data.loss !== undefined ? data.loss : data.price)) || 0;
+    const normalizedCode = (data.code || '').trim().toUpperCase().replace(/^#/, '');
+
+    const existingIndex = damageScannedLabels.findIndex(item => item.code === normalizedCode);
+    if (existingIndex !== -1) {
+        incrementDamageQty(existingIndex);
+        setDamageRollScanStatus(`Scanned again: incremented count for ${normalizedCode} to ${damageScannedLabels[existingIndex].qty} pcs.`);
+        if (scanInput) {
+            scanInput.value = '';
+            scanInput.focus();
+        }
+        return;
+    }
 
     damageScannedLabels.push({
         code: data.code,
@@ -1101,13 +1220,16 @@ function addScannedDamageItem(data, scanInput) {
         rollNumber: data.roll_number,
         quantityLabel: data.quantity_label || '',
         supplyItemId: data.supply_item_id || null,
+        unitWeight: pieceWeight,
+        unitLoss: loss,
+        qty: 1,
         weight: pieceWeight,
         loss: loss,
         damageReason: ''
     });
     renderDamageScannedLabels();
     const badgeType = data.damage_kind === 'SUPPLY' ? 'Other Garment Supply' : (isProduct ? 'Finished Product' : 'Fabric Roll');
-    setDamageRollScanStatus(`Added [${badgeType}] ${data.code} — ${data.roll_number}. Scan another label or submit.`);
+    setDamageRollScanStatus(`Added [${badgeType}] ${data.code} — ${data.roll_number}. Qty: 1 pc. Scan another label or submit.`);
     if (scanInput) {
         scanInput.value = '';
         scanInput.focus();
@@ -1984,7 +2106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (reportForm) {
         reportForm.addEventListener('submit', function(e) {
             if (damageScannedLabels.length === 0) {
-                alert('Scan at least one valid fabric QR label first.');
+                alert('Scan at least one valid QR label or barcode first.');
                 e.preventDefault();
                 return false;
             }
@@ -1996,11 +2118,6 @@ document.addEventListener('DOMContentLoaded', () => {
             for (const item of damageScannedLabels) {
                 if (!item.damageReason || !item.damageReason.trim()) {
                     alert(`Please select a Damage / Defect Reason for QR label ${item.code}.`);
-                    e.preventDefault();
-                    return false;
-                }
-                if (!item.photoInput || !item.photoInput.files || item.photoInput.files.length === 0) {
-                    alert(`Please attach a photo / evidence file for QR label ${item.code}.`);
                     e.preventDefault();
                     return false;
                 }

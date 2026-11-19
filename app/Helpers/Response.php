@@ -617,6 +617,7 @@ function currentUser(): ?array {
                     'production_unit_name' => $fresh['production_unit_name'] ?? null,
                     'warehouse_name'       => $fresh['warehouse_name'] ?? null,
                     'shop_name'            => $fresh['shop_name'] ?? null,
+                    'default_concern_id'   => !empty($fresh['default_concern_id']) ? (int)$fresh['default_concern_id'] : null,
                     'is_active'            => (int)$fresh['is_active'],
                 ]);
                 Session::set('user', $user);
@@ -711,4 +712,128 @@ function getScopedShops(bool $activeOnly = true): array {
     }
     $sql = "SELECT * FROM shops" . ($activeOnly ? " WHERE is_active = 1" : "") . " ORDER BY name ASC";
     return Database::fetchAll($sql);
+}
+
+/**
+ * =========================================================================
+ * Multi-Concern Architecture Helpers (Scoped Context Engine)
+ * =========================================================================
+ */
+
+/**
+ * Get current active concern ID from Session.
+ */
+function currentConcernId(): ?int {
+    if (Session::has('active_concern_id')) {
+        $cid = (int)Session::get('active_concern_id');
+        if ($cid > 0) return $cid;
+    }
+    $u = currentUser();
+    if (!empty($u['default_concern_id'])) {
+        Session::set('active_concern_id', (int)$u['default_concern_id']);
+        return (int)$u['default_concern_id'];
+    }
+    // Fallback to first available active concern
+    if (class_exists('Database')) {
+        $first = Database::fetchOne("SELECT id FROM concerns WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
+        if ($first) {
+            Session::set('active_concern_id', (int)$first['id']);
+            return (int)$first['id'];
+        }
+    }
+    return null;
+}
+
+/**
+ * Get full active concern record.
+ */
+function currentConcern(): ?array {
+    $cid = currentConcernId();
+    if (!$cid) return null;
+    static $cachedConcern = [];
+    if (!isset($cachedConcern[$cid])) {
+        if (class_exists('Database')) {
+            $cachedConcern[$cid] = Database::fetchOne("SELECT * FROM concerns WHERE id = ?", [$cid]) ?: null;
+        } else {
+            return null;
+        }
+    }
+    return $cachedConcern[$cid];
+}
+
+/**
+ * Check if a module is enabled for the current active concern.
+ */
+function hasConcernModule(string $moduleKey): bool {
+    if (isSuperAdmin()) {
+        return true; // Super admin sees all, or can toggle mode
+    }
+    $cid = currentConcernId();
+    if (!$cid) return false;
+
+    static $moduleCache = [];
+    $cacheKey = "{$cid}_{$moduleKey}";
+    if (!isset($moduleCache[$cacheKey])) {
+        if (class_exists('Database')) {
+            $res = Database::fetchOne(
+                "SELECT is_enabled FROM concern_modules WHERE concern_id = ? AND module_key = ?",
+                [$cid, $moduleKey]
+            );
+            $moduleCache[$cacheKey] = $res ? (bool)$res['is_enabled'] : false;
+        } else {
+            return false;
+        }
+    }
+    return $moduleCache[$cacheKey];
+}
+
+/**
+ * Get available concerns for a user (or current user).
+ */
+function getAvailableUserConcerns(?int $userId = null): array {
+    if (!class_exists('Database')) return [];
+    if (isSuperAdmin()) {
+        return Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
+    }
+    $u = currentUser();
+    $uid = $userId ?? ($u['id'] ?? null);
+    if (!$uid) {
+        return Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
+    }
+
+    $concerns = Database::fetchAll("
+        SELECT c.* 
+        FROM concerns c
+        JOIN user_concerns uc ON c.id = uc.concern_id
+        WHERE uc.user_id = ? AND c.is_active = 1
+        ORDER BY uc.is_default DESC, c.id ASC
+    ", [$uid]);
+
+    // Fallback if none mapped: allow all active concerns
+    if (empty($concerns)) {
+        $concerns = Database::fetchAll("SELECT * FROM concerns WHERE is_active = 1 ORDER BY id ASC") ?: [];
+    }
+    return $concerns;
+}
+
+/**
+ * Switch active concern in session.
+ */
+function switchConcern(int $concernId): bool {
+    if (!class_exists('Database')) return false;
+    $concern = Database::fetchOne("SELECT id, name, code FROM concerns WHERE id = ? AND is_active = 1", [$concernId]);
+    if (!$concern) return false;
+
+    // Verify user authorization if not super admin
+    if (!isSuperAdmin()) {
+        $u = currentUser();
+        $uid = $u['id'] ?? 0;
+        $allowed = Database::fetchOne("SELECT id FROM user_concerns WHERE user_id = ? AND concern_id = ?", [$uid, $concernId]);
+        if (!$allowed) {
+            return false;
+        }
+    }
+
+    Session::set('active_concern_id', (int)$concernId);
+    return true;
 }

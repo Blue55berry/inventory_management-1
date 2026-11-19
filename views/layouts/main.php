@@ -67,112 +67,118 @@ if (!empty($authUser['production_unit_name'])) {
 
                     <!-- Production -->
                     <?php 
-                    $canViewProduction = hasPermission('production', 'view')
-                        || hasPermission('sellers', 'view')
-                        || hasPermission('production_purchases', 'view')
-                        || hasPermission('damages', 'view')
-                        || hasPermission('catalog', 'view')
-                        || hasPermission('variants', 'view')
-                        || hasPermission('qr_generation', 'view')
-                        || hasPermission('programs', 'view')
-                        || hasPermission('cutting', 'view')
-                        || hasPermission('wastage', 'view')
-                        || hasPermission('stitching', 'view')
-                        || hasPermission('stitching_wastage', 'view')
-                        || hasPermission('labels', 'view')
-                        || hasPermission('qc', 'view')
-                        || hasPermission('inventory', 'view')
-                        || hasPermission('inward', 'view')
-                        || hasPermission('stock_adjustments', 'view')
-                        || hasPermission('production_expenses', 'view')
-                        || hasPermission('production_billing', 'view')
-                        || hasPermission('production_returns', 'view')
-                        || hasPermission('batches', 'view')
-                        || hasPermission('outward', 'view')
-                        || hasPermission('production_stock_requests', 'view')
-                        || hasPermission('warehouse_rework', 'view')
-                        || hasPermission('asset_register', 'view')
-                        || hasPermission('assets', 'view')
-                        || hasPermission('asset_maintenance', 'view');
+                    $modProduction = isSuperAdmin() || hasConcernModule('production');
+                    $modPurchases  = isSuperAdmin() || hasConcernModule('purchases');
+                    $modWarehouse  = isSuperAdmin() || hasConcernModule('warehouse');
+                    $modRetailPos  = isSuperAdmin() || hasConcernModule('retail_pos');
+                    $modReturns    = isSuperAdmin() || hasConcernModule('returns');
+                    $modExpenses   = isSuperAdmin() || hasConcernModule('expenses');
+                    $modAssets     = isSuperAdmin() || hasConcernModule('assets');
+
+                    $canViewProduction = (
+                        ($modPurchases && (hasPermission('sellers', 'view') || hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view')))
+                        || ($modProduction && (hasPermission('production', 'view') || hasPermission('damages', 'view') || hasPermission('catalog', 'view') || hasPermission('variants', 'view') || hasPermission('qr_generation', 'view') || hasPermission('programs', 'view') || hasPermission('cutting', 'view') || hasPermission('wastage', 'view') || hasPermission('stitching', 'view') || hasPermission('stitching_wastage', 'view') || hasPermission('qc', 'view')))
+                        || ($modWarehouse && (hasPermission('inventory', 'view') || hasPermission('inward', 'view') || hasPermission('stock_adjustments', 'view') || hasPermission('batches', 'view') || hasPermission('outward', 'view') || hasPermission('production_stock_requests', 'view') || hasPermission('warehouse_rework', 'view')))
+                        || ($modExpenses && hasPermission('production_expenses', 'view'))
+                        || ($modRetailPos && hasPermission('production_billing', 'view'))
+                        || ($modReturns && hasPermission('production_returns', 'view'))
+                    );
                     ?>
                     <?php if ($canViewProduction): ?>
                     <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link <?= in_array(($activeModule ?? ''), ['production', 'assets']) ? 'active' : '' ?>">
+                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'production' ? 'active' : '' ?>">
                             <i class="bi bi-gear-wide-connected"></i>
                             <span>Production</span>
                             <i class="bi bi-chevron-down submenu-arrow"></i>
                         </a>
-                        <ul class="submenu <?= in_array(($activeModule ?? ''), ['production', 'assets']) ? 'show' : '' ?>">
-                            <?php if (hasPermission('sellers', 'view')): ?>
+                        <ul class="submenu <?= ($activeModule ?? '') === 'production' ? 'show' : '' ?>">
+                            <?php if ($modPurchases && hasPermission('sellers', 'view')): ?>
                             <li><a href="<?= url('production/sellers') ?>" class="<?= ($activeMenu ?? '') === 'prod-sellers' ? 'active' : '' ?>">Suppliers &amp; Mills</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view')): ?>
+                            <?php if ($modPurchases && (hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view'))): ?>
                             <li><a href="<?= url('production/purchases') ?>" class="<?= in_array($activeMenu ?? '', ['purchases', 'prod-purchases']) ? 'active' : '' ?>">Purchases</a></li>
                             <li><a href="<?= url('production/purchases/mapping') ?>" class="<?= in_array($activeMenu ?? '', ['purchases-mapping', 'prod-purchases-mapping']) ? 'active' : '' ?>">Third-Party Product Mapping</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('damages', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('damages', 'view')): ?>
                             <li><a href="<?= url('production/damages') ?>" class="<?= ($activeMenu ?? '') === 'prod-damages' ? 'active' : '' ?>">Damage Management</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('catalog', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('catalog', 'view')): ?>
                             <li><a href="<?= url('production/catalog') ?>" class="<?= ($activeMenu ?? '') === 'prod-catalog' ? 'active' : '' ?>">Product Catalog</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('variants', 'view') || hasPermission('catalog', 'view')): ?>
+                            <?php if ($modProduction && (hasPermission('variants', 'view') || hasPermission('catalog', 'view'))): ?>
                             <li><a href="<?= url('production/variants') ?>" class="<?= ($activeMenu ?? '') === 'prod-variants' ? 'active' : '' ?>">Product Variants</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('qr_generation', 'view') || hasPermission('labels', 'view') || hasPermission('catalog', 'view')): ?>
+                            <?php if ($modProduction && (hasPermission('qr_generation', 'view') || hasPermission('catalog', 'view'))): ?>
                             <li><a href="<?= url('production/qr-generations') ?>" class="<?= ($activeMenu ?? '') === 'prod-qr-generation' ? 'active' : '' ?>">QR Generations</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('programs', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('programs', 'view')): ?>
                             <li><a href="<?= url('production/programs') ?>" class="<?= ($activeMenu ?? '') === 'programs' ? 'active' : '' ?>">Production Programs</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('cutting', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('cutting', 'view')): ?>
                             <li><a href="<?= url('production/cutting') ?>" class="<?= ($activeMenu ?? '') === 'cutting' ? 'active' : '' ?>">Cutting Unit</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('wastage', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('wastage', 'view')): ?>
                             <li><a href="<?= url('production/wastage') ?>" class="<?= ($activeMenu ?? '') === 'wastage-selling' ? 'active' : '' ?>">Fabric Wastage Sales</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('stitching', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('stitching', 'view')): ?>
                             <li><a href="<?= url('production/stitching') ?>" class="<?= ($activeMenu ?? '') === 'stitching' ? 'active' : '' ?>">Stitching Unit</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('stitching_wastage', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('stitching_wastage', 'view')): ?>
                             <li><a href="<?= url('production/stitching-wastage') ?>" class="<?= ($activeMenu ?? '') === 'stitching-wastage' ? 'active' : '' ?>">Stitching Wastage Sales</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('labels', 'view')): ?>
-                            <li><a href="<?= url('production/labels') ?>" class="<?= ($activeMenu ?? '') === 'labels' ? 'active' : '' ?>">Label Management</a></li>
-                            <?php endif; ?>
-                            <?php if (hasPermission('qc', 'view')): ?>
+                            <?php if ($modProduction && hasPermission('qc', 'view')): ?>
                             <li><a href="<?= url('production/qc') ?>" class="<?= ($activeMenu ?? '') === 'qc' ? 'active' : '' ?>">Quality Control (QC)</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('inventory', 'view')): ?>
+                            <?php if ($modWarehouse && hasPermission('inventory', 'view')): ?>
                             <li><a href="<?= url('production/inventory') ?>" class="<?= ($activeMenu ?? '') === 'prod-inventory' ? 'active' : '' ?>">Finished Goods Inventory</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('inward', 'view') || hasPermission('inventory', 'view')): ?>
+                            <?php if ($modWarehouse && (hasPermission('inward', 'view') || hasPermission('inventory', 'view'))): ?>
                             <li><a href="<?= url('production/inwards') ?>" class="<?= in_array($activeMenu ?? '', ['inwards', 'prod-inwards']) ? 'active' : '' ?>">Goods Inward (GRN)</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_stock_requests', 'view') || hasPermission('stock_requests', 'view') || hasPermission('inventory', 'view')): ?>
+                            <?php if ($modWarehouse && (hasPermission('production_stock_requests', 'view') || hasPermission('stock_requests', 'view') || hasPermission('inventory', 'view'))): ?>
                             <li><a href="<?= url('production/stock-requests') ?>" class="<?= in_array($activeMenu ?? '', ['prod-stock-requests', 'stock-requests', 'stock-requirements']) ? 'active' : '' ?>">Stock Requirements</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_expenses', 'view')): ?>
+                            <?php if ($modExpenses && hasPermission('production_expenses', 'view')): ?>
                             <li><a href="<?= url('production/expenses') ?>" class="<?= ($activeMenu ?? '') === 'production-expenses' ? 'active' : '' ?>">Production Expenses</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_billing', 'view')): ?>
+                            <?php if ($modRetailPos && hasPermission('production_billing', 'view')): ?>
                             <li><a href="<?= url('production/billing') ?>" class="<?= ($activeMenu ?? '') === 'prod-billing' ? 'active' : '' ?>">Production Billing / POS</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('production_returns', 'view')): ?>
+                            <?php if ($modReturns && hasPermission('production_returns', 'view')): ?>
                             <li><a href="<?= url('production/returns') ?>" class="<?= ($activeMenu ?? '') === 'prod-returns' ? 'active' : '' ?>">Customer Returns &amp; Exchanges</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('batches', 'view')): ?>
+                            <?php if ($modWarehouse && hasPermission('batches', 'view')): ?>
                             <li><a href="<?= url('production/batches') ?>" class="<?= in_array($activeMenu ?? '', ['batches', 'prod-batches']) ? 'active' : '' ?>">Packing Batches</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('outward', 'view')): ?>
+                            <?php if ($modWarehouse && hasPermission('outward', 'view')): ?>
                             <li><a href="<?= url('production/outward') ?>" class="<?= in_array($activeMenu ?? '', ['outward', 'prod-outward', 'batch-outward']) ? 'active' : '' ?>">Warehouse Outward Dispatch</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('warehouse_rework', 'view')): ?>
+                            <?php if ($modWarehouse && hasPermission('warehouse_rework', 'view')): ?>
                             <li><a href="<?= url('production/warehouse-rework') ?>" class="<?= ($activeMenu ?? '') === 'warehouse-rework' ? 'active' : '' ?>">Warehouse Rework</a></li>
                             <?php endif; ?>
-                            <?php if (hasPermission('reports', 'view')): ?>
-                            <li><a href="<?= url('production/reports') ?>" class="<?= ($activeMenu ?? '') === 'reports' ? 'active' : '' ?>">Production Analytics &amp; Reports</a></li>
-                            <?php endif; ?>
+                        </ul>
+                    </li>
+                    <?php endif; ?>
+
+                    <!-- Assets -->
+                    <?php
+                    $canViewAssets = $modAssets && (
+                        hasPermission('asset_register', 'view')
+                        || hasPermission('assets', 'view')
+                        || hasPermission('asset_register', 'create')
+                        || hasPermission('assets', 'create')
+                        || hasPermission('asset_maintenance', 'view')
+                        || hasPermission('asset_maintenance', 'create')
+                    );
+                    ?>
+                    <?php if ($canViewAssets): ?>
+                    <li class="nav-item has-submenu">
+                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'assets' ? 'active' : '' ?>">
+                            <i class="bi bi-tools"></i>
+                            <span>Assets</span>
+                            <i class="bi bi-chevron-down submenu-arrow"></i>
+                        </a>
+                        <ul class="submenu <?= ($activeModule ?? '') === 'assets' ? 'show' : '' ?>">
                             <?php if (hasPermission('asset_register', 'view') || hasPermission('assets', 'view')): ?>
                             <li><a href="<?= url('assets') ?>" class="<?= ($activeMenu ?? '') === 'assets-list' ? 'active' : '' ?>">Asset Register</a></li>
                             <?php endif; ?>
@@ -182,29 +188,9 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php if (hasPermission('asset_maintenance', 'view') || hasPermission('assets', 'view')): ?>
                             <li><a href="<?= url('assets/maintenance') ?>" class="<?= ($activeMenu ?? '') === 'assets-maintenance' ? 'active' : '' ?>">Maintenance &amp; Services</a></li>
                             <?php endif; ?>
-                        </ul>
-                    </li>
-                    <?php endif; ?>
-
-                    <li class="nav-divider"></li>
-
-                    <!-- HSN Module -->
-                    <?php 
-                    $canViewHsn = hasPermission('hsn', 'view') 
-                        || hasPermission('catalog', 'view') 
-                        || hasPermission('production_purchases', 'view')
-                        || isSuperAdmin();
-                    ?>
-                    <?php if ($canViewHsn): ?>
-                    <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'hsn' ? 'active' : '' ?>">
-                            <i class="bi bi-upc-scan"></i>
-                            <span>HSN Module</span>
-                            <i class="bi bi-chevron-down submenu-arrow"></i>
-                        </a>
-                        <ul class="submenu <?= ($activeModule ?? '') === 'hsn' ? 'show' : '' ?>">
-                            <li><a href="<?= url('hsn') ?>" class="<?= in_array(($activeMenu ?? ''), ['hsn-list', 'hsn']) ? 'active' : '' ?>">HSN Code Catalog</a></li>
-                            <li><a href="<?= url('hsn/create') ?>" class="<?= ($activeMenu ?? '') === 'hsn-create' ? 'active' : '' ?>">Add New HSN</a></li>
+                            <?php if (hasPermission('asset_maintenance', 'create') || hasPermission('assets', 'create')): ?>
+                            <li><a href="<?= url('assets/maintenance/create') ?>" class="<?= ($activeMenu ?? '') === 'assets-maintenance-create' ? 'active' : '' ?>">Record Maintenance</a></li>
+                            <?php endif; ?>
                         </ul>
                     </li>
                     <?php endif; ?>
@@ -234,18 +220,26 @@ if (!empty($authUser['production_unit_name'])) {
 
                     <li class="nav-divider"></li>
 
-                    <!-- Staff -->
+                    <!-- Concerns & Staff Module -->
                     <?php 
+                    $canViewConcerns = isSuperAdmin() || hasPermission('settings', 'view') || hasPermission('concerns', 'view');
                     $canViewStaff = hasPermission('staff', 'view') || hasPermission('roles', 'view') || hasPermission('staff', 'create');
                     ?>
-                    <?php if ($canViewStaff): ?>
+                    <?php if ($canViewConcerns || $canViewStaff): ?>
                     <li class="nav-item has-submenu">
-                        <a href="#" class="nav-link <?= ($activeModule ?? '') === 'staff' ? 'active' : '' ?>">
-                            <i class="bi bi-people"></i>
-                            <span>Staff</span>
+                        <a href="#" class="nav-link <?= in_array(($activeModule ?? ''), ['concerns', 'staff']) ? 'active' : '' ?>">
+                            <i class="bi bi-buildings"></i>
+                            <span>Concerns</span>
                             <i class="bi bi-chevron-down submenu-arrow"></i>
                         </a>
-                        <ul class="submenu <?= ($activeModule ?? '') === 'staff' ? 'show' : '' ?>">
+                        <ul class="submenu <?= in_array(($activeModule ?? ''), ['concerns', 'staff']) ? 'show' : '' ?>">
+                            <?php if ($canViewConcerns): ?>
+                            <li><a href="<?= url('admin/concerns') ?>" class="<?= in_array(($activeMenu ?? ''), ['concerns', 'admin-concerns', 'concerns-list']) ? 'active' : '' ?>">All Concerns</a></li>
+                            <li><a href="<?= url('admin/concerns/create') ?>" class="<?= ($activeMenu ?? '') === 'concerns-create' ? 'active' : '' ?>">Add New Concern</a></li>
+                            <?php endif; ?>
+
+                            <?php if ($canViewStaff): ?>
+                            <li class="sidebar-sub-heading text-uppercase px-3 pt-2 pb-1 text-muted" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">Staff &amp; Permissions</li>
                             <?php if (hasPermission('staff', 'create')): ?>
                             <li><a href="<?= url('admin/staff/create') ?>" class="<?= ($activeMenu ?? '') === 'staff-create' ? 'active' : '' ?>">Add Staff</a></li>
                             <?php endif; ?>
@@ -255,8 +249,27 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php if (hasPermission('roles', 'view')): ?>
                             <li><a href="<?= url('admin/roles') ?>" class="<?= ($activeMenu ?? '') === 'roles' ? 'active' : '' ?>">Role Assign / Permissions</a></li>
                             <?php endif; ?>
+                            <?php endif; ?>
+
+                            <?php 
+                            $sideConcerns = getAvailableUserConcerns();
+                            if (!empty($sideConcerns)):
+                            ?>
+                            <li class="sidebar-sub-heading text-uppercase px-3 pt-2 pb-1 text-muted" style="font-size: 10px; font-weight: 700; letter-spacing: 0.5px;">Switch Entity</li>
+                            <?php foreach ($sideConcerns as $sc): 
+                                $isCurSc = ((int)currentConcernId() === (int)$sc['id']);
+                            ?>
+                            <li>
+                                <a href="<?= url('system/concerns/switch/' . $sc['id']) ?>" class="d-flex align-items-center justify-content-between py-1 px-3 <?= $isCurSc ? 'active text-primary fw-bold' : '' ?>" title="Switch context to <?= e($sc['name']) ?>">
+                                    <span class="text-truncate" style="max-width: 130px;"><i class="bi bi-building me-1.5 opacity-75"></i><?= e($sc['name']) ?></span>
+                                    <span class="badge <?= $isCurSc ? 'bg-primary text-white' : 'bg-light text-secondary border' ?>" style="font-size: 9px;"><?= e($sc['code']) ?></span>
+                                </a>
+                            </li>
+                            <?php endforeach; endif; ?>
                         </ul>
                     </li>
+
+                    <li class="nav-divider"></li>
                     <?php endif; ?>
 
                     <li class="nav-divider"></li>
@@ -275,6 +288,9 @@ if (!empty($authUser['production_unit_name'])) {
                             <i class="bi bi-chevron-down submenu-arrow"></i>
                         </a>
                         <ul class="submenu <?= ($activeModule ?? '') === 'system' ? 'show' : '' ?>">
+                            <?php if (isSuperAdmin() || hasPermission('settings', 'view')): ?>
+                            <li><a href="<?= url('admin/concerns') ?>" class="<?= in_array($activeMenu ?? '', ['concerns', 'admin-concerns']) ? 'active' : '' ?>"><i class="bi bi-buildings me-2 text-primary"></i>Business Concerns</a></li>
+                            <?php endif; ?>
                             <?php if (hasPermission('audit', 'view')): ?>
                             <li><a href="<?= url('system/audit') ?>">Audit Logs</a></li>
                             <?php endif; ?>
@@ -319,6 +335,42 @@ if (!empty($authUser['production_unit_name'])) {
                 </div>
 
                 <div class="navbar-right d-flex align-items-center gap-2">
+                    <!-- Concern Switcher Dropdown in Top Navbar (concern.pdf Section 3.2) -->
+                    <?php 
+                    $currConcern = currentConcern();
+                    $availConcerns = getAvailableUserConcerns();
+                    ?>
+                    <div class="dropdown me-1">
+                        <button class="btn btn-sm btn-outline-primary dropdown-toggle d-flex align-items-center gap-2 shadow-xs fw-semibold"
+                                type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Switch Business Concern">
+                            <i class="bi bi-buildings"></i>
+                            <span class="d-none d-sm-inline"><?= e($currConcern['name'] ?? 'Select Concern') ?></span>
+                            <span class="badge bg-primary text-white ms-1 font-monospace"><?= e($currConcern['code'] ?? 'CN-01') ?></span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border py-2" style="min-width: 270px;">
+                            <li><h6 class="dropdown-header text-uppercase small fw-bold text-muted py-1"><i class="bi bi-shuffle me-1"></i>Switch Business Concern</h6></li>
+                            <?php foreach ($availConcerns as $c): 
+                                $isActiveC = ((int)currentConcernId() === (int)$c['id']);
+                            ?>
+                                <li>
+                                    <a class="dropdown-item d-flex justify-content-between align-items-center py-2 px-3 <?= $isActiveC ? 'active bg-primary text-white fw-bold' : '' ?>"
+                                       href="<?= url('system/concerns/switch/' . $c['id']) ?>">
+                                        <span class="text-truncate me-2"><i class="bi bi-building me-2"></i><?= e($c['name']) ?></span>
+                                        <span class="badge <?= $isActiveC ? 'bg-light text-primary' : 'bg-secondary-subtle text-secondary border' ?> font-monospace"><?= e($c['code']) ?></span>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                            <?php if (isSuperAdmin() || hasPermission('settings', 'view')): ?>
+                                <li><hr class="dropdown-divider my-1"></li>
+                                <li>
+                                    <a class="dropdown-item small text-primary py-1.5 px-3 fw-semibold" href="<?= url('admin/concerns') ?>">
+                                        <i class="bi bi-gear me-2"></i>Manage Business Concerns
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+                        </ul>
+                    </div>
+
                     <button type="button" class="btn btn-sm btn-outline-dark shadow-sm fw-semibold d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#qrStatusFinderModal">
                         <i class="bi bi-qr-code-scan text-primary"></i>
                         <span class="d-none d-md-inline">QR Finder</span>

@@ -29,7 +29,7 @@ class AssetController {
 
         Response::view('assets.index', [
             'pageTitle'    => 'Asset Register & Plant Machinery',
-            'activeModule' => 'production',
+            'activeModule' => 'assets',
             'activeMenu'   => 'assets-list',
             'breadcrumb'   => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
@@ -53,7 +53,7 @@ class AssetController {
 
         Response::view('assets.create', [
             'pageTitle'    => 'Register New Asset',
-            'activeModule' => 'production',
+            'activeModule' => 'assets',
             'activeMenu'   => 'assets-create',
             'breadcrumb'   => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
@@ -133,7 +133,7 @@ class AssetController {
 
         Response::view('assets.view', [
             'pageTitle'       => 'Asset: ' . $asset['name'] . ' (' . $asset['asset_code'] . ')',
-            'activeModule'    => 'production',
+            'activeModule'    => 'assets',
             'activeMenu'      => 'assets-list',
             'breadcrumb'      => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
@@ -160,7 +160,7 @@ class AssetController {
 
         Response::view('assets.edit', [
             'pageTitle'    => 'Edit Asset: ' . $asset['asset_code'],
-            'activeModule' => 'production',
+            'activeModule' => 'assets',
             'activeMenu'   => 'assets-list',
             'breadcrumb'   => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
@@ -254,7 +254,7 @@ class AssetController {
 
         Response::view('assets.maintenance_list', [
             'pageTitle'    => 'Asset Maintenance & Repair Logs',
-            'activeModule' => 'production',
+            'activeModule' => 'assets',
             'activeMenu'   => 'assets-maintenance',
             'breadcrumb'   => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
@@ -277,8 +277,8 @@ class AssetController {
 
         Response::view('assets.maintenance_create', [
             'pageTitle'       => 'Log Asset Maintenance Ticket',
-            'activeModule'    => 'production',
-            'activeMenu'      => 'assets-maintenance',
+            'activeModule'    => 'assets',
+            'activeMenu'      => 'assets-maintenance-create',
             'breadcrumb'      => [
                 ['label' => 'Asset Management', 'url' => url('assets')],
                 ['label' => 'Maintenance', 'url' => url('assets/maintenance')],
@@ -344,7 +344,7 @@ class AssetController {
 
         Response::view('assets.maintenance_view', [
             'pageTitle'    => 'Maintenance Ticket: ' . $log['log_number'],
-            'activeModule' => 'production',
+            'activeModule' => 'assets',
             'activeMenu'   => 'assets-maintenance',
             'breadcrumb'   => [
                 ['label' => 'Asset Management', 'url' => url('assets')],

@@ -86,7 +86,7 @@ class PurchaseMappingFulfillmentService {
      * Main entry point called by ProductionController::saveThirdPartyMapping().
      *
      * @param array $mapping keys: category_id, subcategory_id, sub_subcategory_id,
-     *                       attributes (array|string), is_complementary
+     *                       attributes (array|string), is_complementary, mrp, selling_price
      */
     public static function fulfill(int $itemId, array $mapping, int $userId): array {
         self::ensureSchema();
@@ -100,6 +100,20 @@ class PurchaseMappingFulfillmentService {
         $subcategoryId = !empty($mapping['subcategory_id']) ? (int)$mapping['subcategory_id'] : null;
         $subSubcategoryId = !empty($mapping['sub_subcategory_id']) ? (int)$mapping['sub_subcategory_id'] : null;
         $isComplementary = !empty($mapping['is_complementary']) ? 1 : 0;
+        $mrpValue = $mapping['mrp'] ?? null;
+        $sellingPriceValue = $mapping['selling_price'] ?? null;
+
+        if (!is_numeric($mrpValue) || !is_numeric($sellingPriceValue)) {
+            throw new InvalidArgumentException('Enter valid MRP and selling prices.');
+        }
+        $mrp = (float)$mrpValue;
+        $sellingPrice = (float)$sellingPriceValue;
+        if (!is_finite($mrp) || !is_finite($sellingPrice) || $mrp <= 0 || $sellingPrice <= 0) {
+            throw new InvalidArgumentException('MRP and selling price must be valid positive amounts.');
+        }
+        if ($sellingPrice > $mrp) {
+            throw new InvalidArgumentException('Selling price cannot be greater than MRP.');
+        }
 
         $category = Database::fetchOne("SELECT id, name, code FROM categories WHERE id = ?", [$categoryId]);
         if (!$category) {
@@ -136,7 +150,9 @@ class PurchaseMappingFulfillmentService {
         try {
             Database::execute(
                 "UPDATE production_purchase_items
-                 SET mapped_category_id = ?,
+                 SET mrp = ?,
+                     selling_price = ?,
+                     mapped_category_id = ?,
                      mapped_subcategory_id = ?,
                      mapped_sub_subcategory_id = ?,
                      mapped_attributes = ?,
@@ -145,7 +161,7 @@ class PurchaseMappingFulfillmentService {
                      mapped_at = NOW(),
                      mapped_by = ?
                  WHERE id = ?",
-                [$categoryId, $subcategoryId, $subSubcategoryId, $encodedAttributes,
+                [$mrp, $sellingPrice, $categoryId, $subcategoryId, $subSubcategoryId, $encodedAttributes,
                  $isComplementary, $userId ?: null, $itemId]
             );
 
@@ -159,6 +175,8 @@ class PurchaseMappingFulfillmentService {
                 'category_id'           => $categoryId,
                 'subcategory_id'        => $subcategoryId,
                 'sub_subcategory_id'    => $subSubcategoryId,
+                'mrp'                   => $mrp,
+                'selling_price'         => $sellingPrice,
                 'is_complementary'      => $isComplementary,
                 'qr_generation_id'      => $qr['generation_id'],
                 'qr_batch_code'         => $qr['batch_code'],
@@ -279,10 +297,12 @@ class PurchaseMappingFulfillmentService {
 
         Database::execute(
             "UPDATE product_variants
-             SET is_complementary = ?, attributes = COALESCE(?, attributes),
+             SET mrp = ?, selling_price = ?,
+                 is_complementary = ?, attributes = COALESCE(?, attributes),
                  hsn_code = COALESCE(hsn_code, ?)
              WHERE id = ?",
-            [$isComplementary, $attributes, $item['hsn_code'] ?: null, $variantId]
+            [(float)$item['mrp'], (float)$item['selling_price'],
+             $isComplementary, $attributes, $item['hsn_code'] ?: null, $variantId]
         );
 
         if ($productId !== (int)($item['product_id'] ?? 0) || $variantId !== (int)($item['variant_id'] ?? 0)) {
@@ -460,33 +480,21 @@ class PurchaseMappingFulfillmentService {
                 [$qty, $qty, $grnId]
             );
 
-            // Credit only the not-yet-inwarded delta to avoid double counting.
-            $alreadyInwarded = max(0.0, (float)($item['inwarded_qty'] ?? 0));
-            $creditQty = max(0.0, (float)$catalog['quantity'] - $alreadyInwarded);
-            if ($creditQty > 0 && !empty($catalog['variant_id'])) {
-                StockService::increase(
-                    (int)$catalog['variant_id'],
-                    'WAREHOUSE',
-                    $warehouseId,
-                    'AVAILABLE',
-                    $creditQty,
-                    'INWARD',
-                    'PURCHASE_INWARD',
-                    $grnId,
-                    $userId ?: null,
-                    "GRN {$grnNumber} — auto receipt for {$catalog['purchase_number']} / {$catalog['item_name']}"
-                );
-            }
-
+            // The GRN records receipt/QC data only. Stock is NOT credited and the
+            // line is NOT marked inwarded here: that happens exclusively when the
+            // admin clicks "Add to Stock" on the generated QR batch.
             Database::execute(
                 "UPDATE production_purchase_items
-                 SET grn_id = ?, grn_number = ?, is_inwarded = 1,
-                     inwarded_qty = ?, inwarded_at = NOW(), inwarded_by = ?
+                 SET grn_id = ?, grn_number = ?
                  WHERE id = ?",
-                [$grnId, $grnNumber, max((float)$catalog['quantity'], $alreadyInwarded), $userId ?: null, $itemId]
+                [$grnId, $grnNumber, $itemId]
             );
         } else {
             $lineReused = true;
+            Database::execute(
+                "UPDATE purchase_inward_items SET mrp = ? WHERE id = ?",
+                [(float)$catalog['mrp'], (int)$lineAlreadyExists['id']]
+            );
             Database::execute(
                 "UPDATE production_purchase_items SET grn_id = ?, grn_number = ? WHERE id = ?",
                 [$grnId, $grnNumber, $itemId]

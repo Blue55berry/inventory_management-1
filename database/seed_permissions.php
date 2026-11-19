@@ -186,9 +186,6 @@ $definitions = array_merge($definitions, [
     ['module' => 'reports_online', 'action' => 'export', 'desc' => 'Export Combined Online report'],
     ['module' => 'reports_online', 'action' => 'print', 'desc' => 'Print Combined Online report'],
 
-    // Production Labels
-    ['module' => 'labels', 'action' => 'delete', 'desc' => 'Delete Garment Label Batch'],
-
     // Production Rework from Warehouse
     ['module' => 'warehouse_rework', 'action' => 'view', 'desc' => 'View Warehouse Rework Requests and History'],
     ['module' => 'warehouse_rework', 'action' => 'create', 'desc' => 'Receive and Log damaged goods from warehouse for rework'],

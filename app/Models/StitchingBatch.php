@@ -29,14 +29,13 @@ class StitchingBatch {
              LEFT JOIN sub_subcategories subsubcat ON sb.sub_subcategory_id = subsubcat.id
              LEFT JOIN users u ON sb.worker_id = u.id
              LEFT JOIN (
-                 SELECT COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) as actual_stitching_id,
+                 SELECT qb.stitching_batch_id as actual_stitching_id,
                         SUM(qb.rejected_qty) as qc_rejected_qty,
                         SUM(qb.rework_qty) as qc_rework_qty,
                         MAX(qb.status) as qc_status
                  FROM qc_batches qb
-                 LEFT JOIN label_batches lb ON qb.label_batch_id = lb.id
-                 WHERE COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) IS NOT NULL
-                 GROUP BY COALESCE(qb.stitching_batch_id, lb.stitching_batch_id)
+                 WHERE qb.stitching_batch_id IS NOT NULL
+                 GROUP BY qb.stitching_batch_id
              ) qc ON qc.actual_stitching_id = sb.id
              WHERE sb.id = ?",
             [$id]
@@ -65,14 +64,13 @@ class StitchingBatch {
                 LEFT JOIN sub_subcategories subsubcat ON (sb.sub_subcategory_id = subsubcat.id OR pp.sub_subcategory_id = subsubcat.id)
                 LEFT JOIN users u ON sb.worker_id = u.id
                 LEFT JOIN (
-                    SELECT COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) as actual_stitching_id,
+                    SELECT qb.stitching_batch_id as actual_stitching_id,
                            SUM(qb.rejected_qty) as qc_rejected_qty,
                            SUM(qb.rework_qty) as qc_rework_qty,
                            MAX(qb.status) as qc_status
                     FROM qc_batches qb
-                    LEFT JOIN label_batches lb ON qb.label_batch_id = lb.id
-                    WHERE COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) IS NOT NULL
-                    GROUP BY COALESCE(qb.stitching_batch_id, lb.stitching_batch_id)
+                    WHERE qb.stitching_batch_id IS NOT NULL
+                    GROUP BY qb.stitching_batch_id
                 ) qc ON qc.actual_stitching_id = sb.id
                 WHERE 1=1";
         $params = [];
@@ -271,14 +269,13 @@ class StitchingBatch {
                  SELECT qi.variant_id, 
                         LOWER(TRIM(COALESCE(qi.size_name, ''))) as match_size,
                         LOWER(TRIM(COALESCE(qi.color_name, ''))) as match_color,
-                        COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) as match_stitching_id,
+                        qb.stitching_batch_id as match_stitching_id,
                         SUM(qi.rejected_qty) as qc_rejected_qty,
                         SUM(qi.rework_qty) as qc_rework_qty
                  FROM qc_items qi
                  JOIN qc_batches qb ON qi.qc_batch_id = qb.id
-                 LEFT JOIN label_batches lb ON qb.label_batch_id = lb.id
-                 WHERE COALESCE(qb.stitching_batch_id, lb.stitching_batch_id) = ?
-                 GROUP BY qi.variant_id, LOWER(TRIM(COALESCE(qi.size_name, ''))), LOWER(TRIM(COALESCE(qi.color_name, ''))), COALESCE(qb.stitching_batch_id, lb.stitching_batch_id)
+                 WHERE qb.stitching_batch_id = ?
+                 GROUP BY qi.variant_id, LOWER(TRIM(COALESCE(qi.size_name, ''))), LOWER(TRIM(COALESCE(qi.color_name, ''))), qb.stitching_batch_id
              ) qci ON (
                  qci.match_stitching_id = si.stitching_batch_id AND (
                      (si.variant_id IS NOT NULL AND si.variant_id > 0 AND qci.variant_id = si.variant_id)

@@ -512,6 +512,21 @@
                     <label class="form-label fw-bold small text-dark">Commodity / Description <span class="text-danger">*</span></label>
                     <input type="text" id="quickHsnDescInput" class="form-control" placeholder="e.g. Cotton Woven Fabric / Sewing Thread / Buttons" maxlength="150" required>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-dark">GST Percentage (%) <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <input type="number" id="quickHsnGstRateInput" class="form-control fw-bold" placeholder="e.g. 5" min="0" max="100" step="0.01" value="5" required>
+                        <span class="input-group-text fw-bold">%</span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-1 mt-2">
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-rate-pill" data-rate="0" style="font-size: 11px;">0% (Exempt)</button>
+                        <button type="button" class="btn btn-xs btn-primary py-0 px-2 quick-rate-pill active" data-rate="5" style="font-size: 11px;">5% (Fabric/Apparel)</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-rate-pill" data-rate="12" style="font-size: 11px;">12% (Yarn/Apparel)</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-rate-pill" data-rate="18" style="font-size: 11px;">18% (Trims/Machinery)</button>
+                        <button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 quick-rate-pill" data-rate="28" style="font-size: 11px;">28%</button>
+                    </div>
+                    <small class="text-muted d-block mt-1" style="font-size:0.75rem;">Standard garment rates: 5% (cotton/fabric/apparel), 12% (synthetic yarn), 18% (buttons/zips/machinery)</small>
+                </div>
                 <div id="quickHsnAlert" class="alert alert-danger py-2 small d-none mb-0"></div>
             </div>
             <div class="modal-footer bg-light py-2">
@@ -1160,15 +1175,26 @@
             dropdownEl,
             hiddenInput,
             btn: dropdownEl.querySelector('.hsn-dropdown-btn'),
-            btnText: dropdownEl.querySelector('.hsn-btn-text')
+            btnText: dropdownEl.querySelector('.hsn-btn-text'),
+            card: dropdownEl.closest('.roll-card, .rm-card, .tp-card')
         };
         const codeInp = document.getElementById('quickHsnCodeInput');
         const descInp = document.getElementById('quickHsnDescInput');
-        const gstInp = document.getElementById('quickHsnGstInput');
+        const gstInp = document.getElementById('quickHsnGstRateInput');
         const alertBox = document.getElementById('quickHsnAlert');
         if (codeInp) codeInp.value = presetCode || '';
         if (descInp) descInp.value = '';
+        if (gstInp) gstInp.value = '5';
         if (alertBox) alertBox.classList.add('d-none');
+        document.querySelectorAll('#modalQuickAddHsn .quick-rate-pill').forEach(p => {
+            if (p.dataset.rate === '5') {
+                p.classList.remove('btn-outline-secondary');
+                p.classList.add('btn-primary', 'active');
+            } else {
+                p.classList.remove('btn-primary', 'active');
+                p.classList.add('btn-outline-secondary');
+            }
+        });
         const modalEl = document.getElementById('modalQuickAddHsn');
         if (modalEl) {
             const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
@@ -1183,9 +1209,27 @@
     function initQuickAddHsnModalHandler() {
         const btnSave = document.getElementById('btnSaveQuickHsn');
         if (!btnSave) return;
+
+        // Wire quick-rate pills inside modal
+        document.querySelectorAll('#modalQuickAddHsn .quick-rate-pill').forEach(pill => {
+            pill.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.querySelectorAll('#modalQuickAddHsn .quick-rate-pill').forEach(p => {
+                    p.classList.remove('btn-primary', 'active');
+                    p.classList.add('btn-outline-secondary');
+                });
+                pill.classList.remove('btn-outline-secondary');
+                pill.classList.add('btn-primary', 'active');
+                const rateInput = document.getElementById('quickHsnGstRateInput');
+                if (rateInput) rateInput.value = pill.dataset.rate || 0;
+            });
+        });
+
         btnSave.addEventListener('click', () => {
             const code = (document.getElementById('quickHsnCodeInput')?.value || '').trim().toUpperCase();
             const desc = (document.getElementById('quickHsnDescInput')?.value || '').trim();
+            const rateVal = parseFloat(document.getElementById('quickHsnGstRateInput')?.value || 0);
+            const gstRate = isNaN(rateVal) ? 0 : rateVal;
             const alertBox = document.getElementById('quickHsnAlert');
 
             if (!code || code.length < 2) {
@@ -1203,6 +1247,7 @@
             const fd = new FormData();
             fd.append('hsn_code', code);
             fd.append('description', desc);
+            fd.append('gst_rate', gstRate);
             const csrf = document.querySelector('input[name="csrf_token"]');
             if (csrf) fd.append('csrf_token', csrf.value);
 
@@ -1223,16 +1268,23 @@
                         window.hsnCodesList[existingIdx] = newHsn;
                     } else {
                         if (!window.hsnCodesList) window.hsnCodesList = [];
-                        window.hsnCodesList.push(newHsn);
+                        window.hsnCodesList.unshift(newHsn);
                     }
 
                     if (activeHsnTarget && activeHsnTarget.hiddenInput) {
                         activeHsnTarget.hiddenInput.value = newHsn.hsn_code;
                         if (activeHsnTarget.btnText) {
-                            activeHsnTarget.btnText.innerHTML = `<span class="fw-bold text-primary">${safe(newHsn.hsn_code)}</span> <span class="text-muted small">(${safe(newHsn.description).slice(0, 16)}${newHsn.description.length > 16 ? '...' : ''})</span>`;
+                            activeHsnTarget.btnText.innerHTML = `<span class="fw-bold text-primary">${safe(newHsn.hsn_code)}</span> <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1 ms-1" style="font-size:10px;">${parseFloat(newHsn.gst_rate ?? 0)}% GST</span>`;
                         }
                         const bsDropdown = bootstrap.Dropdown.getInstance(activeHsnTarget.btn);
                         if (bsDropdown) bsDropdown.hide();
+                        
+                        // Automatically apply tax rules to the row
+                        const card = activeHsnTarget.card || activeHsnTarget.hiddenInput.closest('.roll-card, .rm-card, .tp-card');
+                        if (card) {
+                            applyHsnTaxRules(card, newHsn.hsn_code);
+                        }
+
                         activeHsnTarget.hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
                         activeHsnTarget.hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
                     }
@@ -1279,9 +1331,11 @@
             });
         }
 
-        function updateBtnDisplay(code, desc) {
+        function updateBtnDisplay(code, desc, gstRate = null) {
             if (code) {
-                btnText.innerHTML = `<span class="fw-bold text-primary">${safe(code)}</span> ${desc ? `<span class="text-muted small">(${safe(desc).slice(0, 16)}${desc.length > 16 ? '...' : ''})</span>` : ''}`;
+                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === String(code).toUpperCase());
+                const rate = gstRate !== null ? gstRate : (found && found.gst_rate !== null ? found.gst_rate : 5);
+                btnText.innerHTML = `<span class="fw-bold text-primary">${safe(code)}</span> <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1 ms-1" style="font-size:10px;">${parseFloat(rate)}% GST</span> ${desc ? `<span class="text-muted small ms-1">(${safe(desc).slice(0, 16)}${desc.length > 16 ? '...' : ''})</span>` : ''}`;
             } else {
                 btnText.textContent = '-- Select HSN --';
             }
@@ -1289,13 +1343,13 @@
 
         if (hiddenInput && hiddenInput.value) {
             const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hiddenInput.value.toUpperCase());
-            updateBtnDisplay(hiddenInput.value, found ? found.description : '');
+            updateBtnDisplay(hiddenInput.value, found ? found.description : '', found ? found.gst_rate : null);
         }
 
         function renderOptions(filter = '') {
             const q = filter.trim().toLowerCase();
             let html = `
-                <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item text-muted" data-code="" data-desc="">
+                <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item text-muted" data-code="" data-desc="" data-rate="0">
                     <em>-- Clear / No HSN --</em>
                 </button>
             `;
@@ -1308,6 +1362,7 @@
                 const h = list[i];
                 const code = String(h.hsn_code || '').trim();
                 const desc = String(h.description || '').trim();
+                const rateText = (h.gst_rate !== null && h.gst_rate !== undefined && h.gst_rate !== '') ? `${parseFloat(h.gst_rate)}% GST` : '5% GST';
                 const searchStr = (code + ' ' + desc).toLowerCase();
                 if (q === '' || searchStr.includes(q)) {
                     matchCount++;
@@ -1315,9 +1370,10 @@
                         const isSelected = currentVal && currentVal.toUpperCase() === code.toUpperCase();
                         html += `
                             <button type="button" class="dropdown-item py-1.5 px-2 small border-bottom hsn-opt-item ${isSelected ? 'active' : ''}" 
-                                    data-code="${safe(code)}" data-desc="${safe(desc)}">
+                                    data-code="${safe(code)}" data-desc="${safe(desc)}" data-rate="${h.gst_rate ?? 5}">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <span class="font-monospace fw-bold text-primary">${safe(code)}</span>
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1" style="font-size: 10px;">${rateText}</span>
                                 </div>
                                 <div class="text-truncate small text-muted" style="max-width: 250px;" title="${safe(desc)}">${safe(desc)}</div>
                             </button>
@@ -1365,12 +1421,19 @@
                     e.stopPropagation();
                     const code = item.dataset.code || '';
                     const desc = item.dataset.desc || '';
+                    const rate = item.dataset.rate || 5;
                     if (hiddenInput) {
                         hiddenInput.value = code;
                     }
-                    updateBtnDisplay(code, desc);
+                    updateBtnDisplay(code, desc, rate);
                     const bsDropdown = bootstrap.Dropdown.getInstance(btn);
                     if (bsDropdown) bsDropdown.hide();
+
+                    const card = container.closest('.roll-card, .rm-card, .tp-card') || container;
+                    if (card) {
+                        applyHsnTaxRules(card, code);
+                    }
+
                     if (hiddenInput) {
                         hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
                         hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1401,6 +1464,58 @@
                 }
             });
         }
+    }
+
+    function applyHsnTaxRules(card, hsnCode, forcedGstType = null) {
+        if (!card) return;
+        const list = window.hsnCodesList || [];
+        const cleanCode = String(hsnCode || '').trim().toUpperCase();
+        const found = list.find(h => String(h.hsn_code).toUpperCase() === cleanCode);
+        
+        let rate = 5.00;
+        if (found && found.gst_rate !== null && found.gst_rate !== undefined && found.gst_rate !== '') {
+            rate = parseFloat(found.gst_rate);
+        } else if (card.dataset.hsnGstRate !== undefined && card.dataset.hsnGstRate !== '') {
+            rate = parseFloat(card.dataset.hsnGstRate);
+        }
+        if (isNaN(rate)) rate = 5.00;
+
+        card.dataset.hsnGstRate = rate;
+
+        const gstTypeSelect = card.querySelector('.item-gst-type');
+        const taxModeSelect = card.querySelector('.item-tax-mode');
+        const taxValInput = card.querySelector('.item-tax-value');
+        const cgstValInput = card.querySelector('.item-cgst-value');
+
+        let currentType = forcedGstType !== null ? forcedGstType : (gstTypeSelect ? gstTypeSelect.value : 'EXEMPTED');
+
+        // If an HSN code with rate > 0 is selected and current type is EXEMPTED, auto-switch to BOTH
+        if (cleanCode && rate > 0 && currentType === 'EXEMPTED' && forcedGstType === null) {
+            currentType = 'BOTH';
+            if (gstTypeSelect) gstTypeSelect.value = 'BOTH';
+        } else if (cleanCode && rate === 0 && forcedGstType === null) {
+            currentType = 'EXEMPTED';
+            if (gstTypeSelect) gstTypeSelect.value = 'EXEMPTED';
+        }
+
+        if (taxModeSelect) {
+            taxModeSelect.value = 'PERCENT';
+        }
+
+        if (currentType === 'BOTH') {
+            const half = (rate / 2).toFixed(2);
+            if (taxValInput) taxValInput.value = half;
+            if (cgstValInput) cgstValInput.value = half;
+        } else if (currentType === 'IGST' || currentType === 'CGST' || currentType === 'SGST') {
+            if (taxValInput) taxValInput.value = rate.toFixed(2);
+            if (cgstValInput) cgstValInput.value = '0';
+        } else {
+            // EXEMPTED
+            if (taxValInput) taxValInput.value = '0';
+            if (cgstValInput) cgstValInput.value = '0';
+        }
+
+        updateTaxInputs(card);
     }
     function calculateItemTax(item, grossAmount) {
         const taxTreatment = item.querySelector('.item-tax-treatment')?.value || 'INCLUDED';
@@ -1770,7 +1885,12 @@
         card.querySelectorAll('input, select').forEach(input => {
             input.addEventListener('input', updateRawMaterialSummary);
             input.addEventListener('change', () => {
-                updateTaxInputs(card);
+                if (input.classList.contains('item-gst-type')) {
+                    const hsn = card.querySelector('.rm-hsn')?.value || '';
+                    applyHsnTaxRules(card, hsn, input.value);
+                } else {
+                    updateTaxInputs(card);
+                }
                 updateRawMaterialSummary();
             });
             input.addEventListener('keyup', updateRawMaterialSummary);
@@ -1779,21 +1899,8 @@
         const hsnHidden = card.querySelector('.rm-hsn');
         if (hsnHidden) {
             hsnHidden.addEventListener('change', () => {
-                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
-                if (found && found.gst_rate) {
-                    const rate = parseFloat(found.gst_rate);
-                    const gstTypeSelect = card.querySelector('.item-gst-type');
-                    if (gstTypeSelect && rate > 0) {
-                        gstTypeSelect.value = 'BOTH';
-                        updateTaxInputs(card);
-                        const half = (rate / 2).toFixed(2);
-                        const taxVal = card.querySelector('.item-tax-value');
-                        const cgstVal = card.querySelector('.item-cgst-value');
-                        if (taxVal) taxVal.value = half;
-                        if (cgstVal) cgstVal.value = half;
-                        updateRawMaterialSummary();
-                    }
-                }
+                applyHsnTaxRules(card, hsnHidden.value);
+                updateRawMaterialSummary();
             });
         }
 
@@ -1974,7 +2081,12 @@
         card.querySelectorAll('input, select').forEach(input => {
             input.addEventListener('input', updateThirdPartySummary);
             input.addEventListener('change', () => {
-                updateTaxInputs(card);
+                if (input.classList.contains('item-gst-type')) {
+                    const hsn = card.querySelector('.tp-hsn')?.value || '';
+                    applyHsnTaxRules(card, hsn, input.value);
+                } else {
+                    updateTaxInputs(card);
+                }
                 updateThirdPartySummary();
             });
             input.addEventListener('keyup', updateThirdPartySummary);
@@ -1983,21 +2095,8 @@
         const hsnHidden = card.querySelector('.tp-hsn');
         if (hsnHidden) {
             hsnHidden.addEventListener('change', () => {
-                const found = (window.hsnCodesList || []).find(h => String(h.hsn_code).toUpperCase() === hsnHidden.value.toUpperCase());
-                if (found && found.gst_rate) {
-                    const rate = parseFloat(found.gst_rate);
-                    const gstTypeSelect = card.querySelector('.item-gst-type');
-                    if (gstTypeSelect && rate > 0) {
-                        gstTypeSelect.value = 'BOTH';
-                        updateTaxInputs(card);
-                        const half = (rate / 2).toFixed(2);
-                        const taxVal = card.querySelector('.item-tax-value');
-                        const cgstVal = card.querySelector('.item-cgst-value');
-                        if (taxVal) taxVal.value = half;
-                        if (cgstVal) cgstVal.value = half;
-                        updateThirdPartySummary();
-                    }
-                }
+                applyHsnTaxRules(card, hsnHidden.value);
+                updateThirdPartySummary();
             });
         }
 
@@ -2187,6 +2286,14 @@
 
         initHsnDropdown(card, '.roll-hsn');
 
+        const rollHsnHidden = card.querySelector('.roll-hsn');
+        if (rollHsnHidden) {
+            rollHsnHidden.addEventListener('change', () => {
+                applyHsnTaxRules(card, rollHsnHidden.value);
+                updateCodes();
+            });
+        }
+
         card.querySelector('.remove-roll').addEventListener('click', () => {
             card.remove();
             Array.from(rollsContainer.children).forEach((item, i) => item.querySelector('.roll-title').textContent = 'ROLL #' + (i + 1));
@@ -2195,7 +2302,12 @@
         card.querySelectorAll('input, select').forEach(input => {
             input.addEventListener('input', updateCodes);
             input.addEventListener('change', () => {
-                updateTaxInputs(card);
+                if (input.classList.contains('item-gst-type')) {
+                    const hsn = card.querySelector('.roll-hsn')?.value || '';
+                    applyHsnTaxRules(card, hsn, input.value);
+                } else {
+                    updateTaxInputs(card);
+                }
                 updateCodes();
             });
             input.addEventListener('keyup', updateCodes);

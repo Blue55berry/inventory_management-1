@@ -133,6 +133,24 @@
                 </div>
             </div>
 
+            <div class="mb-4 pb-3 border-bottom">
+                <label class="form-label fw-bold text-dark mb-2 fs-6">
+                    <i class="bi bi-building me-1 text-primary"></i>
+                    Filter by Consignee / Destination Warehouse
+                </label>
+                <select name="warehouse_ids[]" class="form-select" multiple size="5" aria-describedby="warehouseFilterHelp">
+                    <?php foreach ($warehouses as $warehouse): ?>
+                        <option value="<?= (int)$warehouse['id'] ?>">
+                            <?= e($warehouse['name']) ?><?= !empty($warehouse['code']) ? ' (' . e($warehouse['code']) . ')' : '' ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <div id="warehouseFilterHelp" class="form-text">
+                    Select one or more warehouses to filter the outward dispatch and detailed stock ledger data. Leave all unselected to include every warehouse.
+                    The current dispatch records identify the destination warehouse; they do not have a separate consignee-name field.
+                </div>
+            </div>
+
             <!-- 2. Data Modules Selection -->
             <div class="mb-4 pb-3 border-bottom">
                 <div class="d-flex justify-content-between align-items-center mb-3">

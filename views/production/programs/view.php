@@ -207,11 +207,6 @@
         </button>
     </li>
     <li class="nav-item">
-        <button class="nav-link fw-semibold" id="labels-tab" data-bs-toggle="tab" data-bs-target="#labels-pane" type="button">
-            <i class="bi bi-tags me-1 text-secondary"></i> Labels (<?= count($labels) ?>)
-        </button>
-    </li>
-    <li class="nav-item">
         <button class="nav-link fw-semibold" id="qc-tab" data-bs-toggle="tab" data-bs-target="#qc-pane" type="button">
             <i class="bi bi-patch-check me-1 text-danger"></i> QC Inspections (<?= count($qc) ?>)
         </button>
@@ -373,61 +368,7 @@
         </div>
     </div>
 
-    <!-- 4. LABELS TAB -->
-    <div class="tab-pane fade" id="labels-pane" role="tabpanel">
-        <div class="card">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Label Batch #</th>
-                                <th>Required</th>
-                                <th>Printed</th>
-                                <th>Used</th>
-                                <th>Damaged</th>
-                                <th>Status</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php if (empty($labels)): ?>
-                                <tr><td colspan="7" class="text-center py-4 text-muted">No label batches.</td></tr>
-                            <?php else: ?>
-                                <?php foreach ($labels as $lb): ?>
-                                    <tr>
-                                        <td><strong><?= e($lb['batch_number']) ?></strong></td>
-                                        <td><?= number_format($lb['required_qty']) ?></td>
-                                        <td class="text-success"><?= number_format($lb['printed_qty']) ?></td>
-                                        <td><?= number_format($lb['used_qty']) ?></td>
-                                        <td class="text-danger"><?= number_format($lb['damaged_qty']) ?></td>
-                                        <td><span class="badge bg-secondary"><?= e($lb['status']) ?></span></td>
-                                        <td class="text-end">
-                                            <div class="action-btns-group justify-content-end">
-                                                <a href="<?= url('production/labels/edit/' . $lb['id']) ?>" class="btn btn-outline-primary btn-action-icon" title="Edit Label Batch">
-                                                    <i class="bi bi-pencil"></i>
-                                                </a>
-                                                <?php if (hasPermission('labels', 'delete')): ?>
-                                                <form method="POST" action="<?= url('production/labels/delete/' . $lb['id']) ?>" class="d-inline" onsubmit="return confirm('Are you sure you want to delete Label Batch <?= e(addslashes($lb['batch_number'] ?: ('#' . $lb['id']))) ?>? This cannot be undone.');">
-                                                    <?= CSRF::field() ?>
-                                                    <button type="submit" class="btn btn-outline-danger btn-action-icon" title="Delete Label Batch">
-                                                        <i class="bi bi-trash"></i>
-                                                    </button>
-                                                </form>
-                                                <?php endif; ?>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 5. QC TAB -->
+    <!-- 4. QC TAB -->
     <div class="tab-pane fade" id="qc-pane" role="tabpanel">
         <div class="card">
             <div class="card-body p-0">

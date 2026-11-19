@@ -21,7 +21,6 @@ class QCBatch {
                     COALESCE(sc.name, sc_pp.name) as subcategory_name,
                     COALESCE(ssc.name, ssc_pp.name) as sub_subcategory_name,
                     sb.id as stitching_batch_id, sb.batch_number as stitching_batch_number,
-                    lb.id as label_batch_id, lb.batch_number as label_batch_number,
                     u.full_name as inspector_name
              FROM qc_batches qb
              JOIN production_programs pp ON qb.program_id = pp.id
@@ -33,7 +32,6 @@ class QCBatch {
              LEFT JOIN sub_subcategories ssc ON p.sub_subcategory_id = ssc.id
              LEFT JOIN sub_subcategories ssc_pp ON pp.sub_subcategory_id = ssc_pp.id
              LEFT JOIN stitching_batches sb ON qb.stitching_batch_id = sb.id
-             LEFT JOIN label_batches lb ON qb.label_batch_id = lb.id
              LEFT JOIN users u ON qb.inspector_id = u.id
              WHERE qb.id = ?",
             [$id]
@@ -123,13 +121,12 @@ class QCBatch {
         }
         Database::execute(
             "INSERT INTO qc_batches 
-             (batch_number, program_id, stitching_batch_id, label_batch_id, inspector_id, total_qty, passed_qty, rejected_qty, rework_qty, status, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             (batch_number, program_id, stitching_batch_id, inspector_id, total_qty, passed_qty, rejected_qty, rework_qty, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 $data['batch_number'],
                 $data['program_id'],
                 $data['stitching_batch_id'] ?? null,
-                $data['label_batch_id'] ?? null,
                 $data['inspector_id'] ?? null,
                 $data['total_qty'] ?? 0,
                 $data['passed_qty'] ?? 0,
@@ -227,11 +224,7 @@ class QCBatch {
                     COALESCE(pv.sku, CONCAT(COALESCE(qi.size_name, s.name, 'Size'), '-', COALESCE(qi.color_name, c.name, 'Color'))) as sku,
                     cat.name as category_name, cat.code as category_code,
                     subcat.name as subcategory_name, subcat.code as subcategory_code,
-                    subsubcat.name as sub_subcategory_name, subsubcat.code as sub_subcategory_code,
-                    li.start_seq as label_start_seq,
-                    li.end_seq as label_end_seq,
-                    li.start_code as label_start_code,
-                    li.end_code as label_end_code
+                    subsubcat.name as sub_subcategory_name, subsubcat.code as sub_subcategory_code
              FROM qc_items qi
              JOIN qc_batches qb ON qi.qc_batch_id = qb.id
              LEFT JOIN product_variants pv ON qi.variant_id = pv.id
@@ -240,18 +233,6 @@ class QCBatch {
              LEFT JOIN categories cat ON qi.category_id = cat.id
              LEFT JOIN subcategories subcat ON qi.subcategory_id = subcat.id
              LEFT JOIN sub_subcategories subsubcat ON qi.sub_subcategory_id = subsubcat.id
-             LEFT JOIN label_items li ON (
-                 (qb.label_batch_id IS NOT NULL AND li.label_batch_id = qb.label_batch_id AND (
-                     (qi.variant_id IS NOT NULL AND li.variant_id = qi.variant_id)
-                     OR (LOWER(TRIM(li.size_name)) = LOWER(TRIM(qi.size_name)) AND LOWER(TRIM(li.color_name)) = LOWER(TRIM(qi.color_name)))
-                 ))
-                 OR (qb.label_batch_id IS NULL AND qb.stitching_batch_id IS NOT NULL AND li.label_batch_id = (
-                     SELECT lb_sub.id FROM label_batches lb_sub WHERE lb_sub.stitching_batch_id = qb.stitching_batch_id ORDER BY lb_sub.id DESC LIMIT 1
-                 ) AND (
-                     (qi.variant_id IS NOT NULL AND li.variant_id = qi.variant_id)
-                     OR (LOWER(TRIM(li.size_name)) = LOWER(TRIM(qi.size_name)) AND LOWER(TRIM(li.color_name)) = LOWER(TRIM(qi.color_name)))
-                 ))
-             )
              WHERE qi.qc_batch_id = ?
              ORDER BY qi.id ASC",
             [$batchId]

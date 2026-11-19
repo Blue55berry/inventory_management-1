@@ -112,15 +112,27 @@ if (empty($currentDept)) $currentDept = 'all';
                 <input type="hidden" name="department" id="filterDepartment" value="<?= e($currentDept) ?>">
 
                 <!-- Search Input -->
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-lg-3 col-md-4">
                     <div class="input-group">
                         <span class="input-group-text bg-white text-muted border-end-0"><i class="bi bi-search"></i></span>
                         <input type="text" name="search" id="searchInput" class="form-control border-start-0 ps-0" placeholder="Search by name, username, or email..." value="<?= e($filters['search'] ?? '') ?>" autocomplete="off">
                     </div>
                 </div>
 
+                <!-- Concern Filter Dropdown -->
+                <div class="col-12 col-lg-3 col-md-4">
+                    <select name="concern_id" id="concernSelect" class="form-select">
+                        <option value="">All Authorized Concerns</option>
+                        <?php foreach (($concerns ?? []) as $concern): ?>
+                            <option value="<?= $concern['id'] ?>" <?= (string)($filters['concern_id'] ?? '') === (string)$concern['id'] ? 'selected' : '' ?>>
+                                <?= e($concern['code']) ?> - <?= e($concern['name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
                 <!-- Roles Dropdown -->
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-lg-2 col-md-4">
                     <select name="role_id" id="roleSelect" class="form-select">
                         <option value="">All Roles</option>
                         <?php foreach ($roles as $role): ?>
@@ -132,7 +144,7 @@ if (empty($currentDept)) $currentDept = 'all';
                 </div>
 
                 <!-- Facility / Unit Dropdown -->
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-lg-2 col-md-4">
                     <?php if ($currentDept === 'production'): ?>
                         <select name="production_unit_id" id="unitSelect" class="form-select">
                             <option value="">All Production Units</option>
@@ -152,7 +164,7 @@ if (empty($currentDept)) $currentDept = 'all';
                 </div>
 
                 <!-- Reset Button & Live Status Indicator -->
-                <div class="col-12 col-md-2 d-flex gap-2">
+                <div class="col-12 col-lg-2 col-md-4 d-flex gap-2">
                     <button type="button" id="resetFiltersBtn" class="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-center gap-1">
                         <i class="bi bi-arrow-counterclockwise"></i>
                         <span>Reset</span>
@@ -175,17 +187,18 @@ if (empty($currentDept)) $currentDept = 'all';
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th class="ps-4" style="min-width: 220px;">Staff Member</th>
-                            <th style="min-width: 150px;">Department &amp; Scope</th>
-                            <th style="min-width: 180px;">Role &amp; Facility</th>
-                            <th style="min-width: 100px;">Status</th>
-                            <th class="text-end pe-4" style="min-width: 420px;">Actions</th>
+                            <th class="ps-4" style="min-width: 200px;">Staff Member</th>
+                            <th style="min-width: 130px;">Department &amp; Scope</th>
+                            <th style="min-width: 170px;">Role &amp; Facility</th>
+                            <th style="min-width: 160px;">Authorized Concerns</th>
+                            <th style="min-width: 90px;">Status</th>
+                            <th class="text-end pe-4" style="min-width: 280px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($staff)): ?>
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted">
+                                <td colspan="6" class="text-center py-5 text-muted">
                                     <i class="bi bi-person-x fs-1 d-block mb-2"></i>
                                     No staff members found for this criteria.
                                 </td>
@@ -262,6 +275,25 @@ if (empty($currentDept)) $currentDept = 'all';
                                                 <span class="fst-italic text-muted">All Units / Channels</span>
                                             <?php endif; ?>
                                         </div>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($s['assigned_concerns_str'])): ?>
+                                            <?php 
+                                            $concernEntries = explode('||', $s['assigned_concerns_str']);
+                                            foreach ($concernEntries as $idx => $entry):
+                                                if (empty(trim($entry))) continue;
+                                                $parts = explode(':', $entry, 2);
+                                                $cCode = $parts[0] ?? '';
+                                                $cName = $parts[1] ?? '';
+                                                $isDefault = ($idx === 0);
+                                            ?>
+                                                <span class="badge <?= $isDefault ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-light text-secondary border' ?> mb-1 me-1" title="<?= e($cName) ?><?= $isDefault ? ' (Default Session)' : '' ?>">
+                                                    <i class="bi <?= $isDefault ? 'bi-star-fill text-warning me-1' : 'bi-building me-1' ?>"></i><?= e($cCode) ?>
+                                                </span>
+                                            <?php endforeach; ?>
+                                        <?php else: ?>
+                                            <span class="text-muted small fst-italic">None assigned</span>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php if ($s['is_active']): ?>

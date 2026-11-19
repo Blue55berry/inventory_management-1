@@ -468,13 +468,14 @@ class StockService {
             self::upsertBalance($variantId, $fromLocationType, $fromLocationId, $fromStockState, -$quantity);
             self::upsertBalance($variantId, $toLocationType, $toLocationId, $toStockState, $quantity);
 
+            $cid = currentConcernId();
             Database::execute(
                 "INSERT INTO stock_transactions 
-                 (variant_id, from_location_type, from_location_id, to_location_type, to_location_id, 
+                 (concern_id, variant_id, from_location_type, from_location_id, to_location_type, to_location_id, 
                   transaction_type, quantity, reference_type, reference_id, created_by, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
-                    $variantId, $fromLocationType, $fromLocationId, $toLocationType, $toLocationId,
+                    $cid, $variantId, $fromLocationType, $fromLocationId, $toLocationType, $toLocationId,
                     $transactionType, $quantity, $referenceType, $referenceId,
                     $userId ?? (Session::userId() ?? 1),
                     $notes ?: "Moved $quantity pcs from $fromStockState to $toStockState"
@@ -620,11 +621,12 @@ class StockService {
      * Insert or update a stock balance record.
      */
     private static function upsertBalance(int $variantId, string $locationType, int $locationId, string $stockState, float $quantity): void {
+        $cid = currentConcernId();
         Database::execute(
-            "INSERT INTO stock_balances (variant_id, location_type, location_id, stock_state, quantity, last_updated, created_at)
-             VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-             ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), last_updated = NOW()",
-            [$variantId, $locationType, $locationId, $stockState, $quantity]
+            "INSERT INTO stock_balances (concern_id, variant_id, location_type, location_id, stock_state, quantity, last_updated, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), concern_id = COALESCE(VALUES(concern_id), concern_id), last_updated = NOW()",
+            [$cid, $variantId, $locationType, $locationId, $stockState, $quantity]
         );
 
         // Keep master products.quantity cached total synchronized

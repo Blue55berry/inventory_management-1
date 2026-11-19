@@ -657,8 +657,6 @@ class BackupService {
             'stitching_batches',
             'stitching_items',
             'stitching_wastage_sales',
-            'label_batches',
-            'label_items',
             'qc_batches',
             'qc_items',
             'production_batches',

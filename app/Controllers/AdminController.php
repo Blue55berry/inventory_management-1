@@ -96,6 +96,7 @@ class AdminController {
         $filters = [
             'search'             => $_GET['search'] ?? '',
             'role_id'            => $_GET['role_id'] ?? '',
+            'concern_id'         => $_GET['concern_id'] ?? '',
             'department'         => strtolower($department) === 'all' ? '' : $department,
             'production_unit_id' => $_GET['production_unit_id'] ?? '',
             'warehouse_id'       => $_GET['warehouse_id'] ?? '',
@@ -103,6 +104,23 @@ class AdminController {
         ];
         if ($status !== null) {
             $filters['is_active'] = $status;
+        }
+
+        // Concern scoping: non-superadmin only views authorized concerns
+        $availConcerns = getAvailableUserConcerns();
+        $availConcernIds = array_column($availConcerns, 'id');
+
+        if (!isSuperAdmin()) {
+            if (!empty($filters['concern_id'])) {
+                if (!in_array((int)$filters['concern_id'], $availConcernIds)) {
+                    $filters['concern_id'] = currentConcernId();
+                }
+            } else {
+                $filters['concern_id'] = currentConcernId();
+            }
+            $concerns = $availConcerns;
+        } else {
+            $concerns = Database::fetchAll("SELECT id, name, code FROM concerns WHERE is_active = 1 ORDER BY name ASC") ?: [];
         }
 
         $staff           = User::getAll($filters);
@@ -127,6 +145,7 @@ class AdminController {
             'staff'           => $staff,
             'roles'           => $roles,
             'productionUnits' => $productionUnits,
+            'concerns'        => $concerns,
             'filters'         => $filters,
         ]);
     }
@@ -145,6 +164,8 @@ class AdminController {
             'Sales Channel'   => $staff['channel_name'] ?? null,
         ]);
 
+        $userConcerns = User::getConcerns((int)$staff['id']);
+
         Response::view('admin.staff_view', [
             'pageTitle'    => 'Staff Details',
             'activeModule' => 'staff',
@@ -155,6 +176,7 @@ class AdminController {
             ],
             'staff'        => $staff,
             'assignments'  => $assignments,
+            'userConcerns' => $userConcerns,
             'hierarchicalModules' => Role::getHierarchicalPermissions(),
             'staffPermissions'    => User::getPermissionIds((int)$staff['id']),
         ]);
@@ -171,6 +193,8 @@ class AdminController {
 
         $roles            = Role::getActive();
         $productionUnits  = ProductionUnit::getWithMetrics();
+        $concerns         = getAvailableUserConcerns();
+        $curConcernId     = currentConcernId() ?? (!empty($concerns) ? (int)$concerns[0]['id'] : 1);
 
         Response::view('admin.staff_form', [
             'pageTitle'           => 'Create Staff',
@@ -182,6 +206,9 @@ class AdminController {
             ],
             'roles'               => $roles,
             'productionUnits'     => $productionUnits,
+            'concerns'            => $concerns,
+            'staffConcerns'       => [$curConcernId],
+            'defaultConcernId'    => $curConcernId,
             'hierarchicalModules' => Role::getHierarchicalPermissions(),
             'rolePermissionsMap'  => Role::getAllRolePermissionsMap(),
             'staffPermissions'    => [],
@@ -239,6 +266,34 @@ class AdminController {
         }
 
         try {
+            // Process concern assignment and default login session concern
+            $assignedConcerns = isset($_POST['concerns']) && is_array($_POST['concerns']) ? array_filter($_POST['concerns']) : [];
+            $defaultConcernId = !empty($_POST['default_concern_id']) ? (int)$_POST['default_concern_id'] : null;
+
+            if (!isSuperAdmin()) {
+                $allowedCids = array_column(getAvailableUserConcerns(), 'id');
+                $assignedConcerns = array_values(array_intersect(array_map('intval', $assignedConcerns), $allowedCids));
+                if (empty($assignedConcerns)) {
+                    $assignedConcerns = [currentConcernId() ?? 1];
+                }
+                if (!$defaultConcernId || !in_array($defaultConcernId, $allowedCids)) {
+                    $defaultConcernId = $assignedConcerns[0];
+                }
+            }
+
+            if (empty($assignedConcerns)) {
+                $fallbackCid = currentConcernId() ?? 1;
+                $assignedConcerns = [$fallbackCid];
+                $defaultConcernId = $fallbackCid;
+            }
+
+            if (!$defaultConcernId || !in_array($defaultConcernId, array_map('intval', $assignedConcerns))) {
+                $defaultConcernId = (int)$assignedConcerns[0];
+            }
+
+            $_POST['concerns'] = $assignedConcerns;
+            $_POST['default_concern_id'] = $defaultConcernId;
+
             $id = User::create($_POST);
 
             // Save explicitly checked custom permissions for this staff member
@@ -300,6 +355,29 @@ class AdminController {
             $snapshot['Custom Permissions'] = count($data['permissions']) . ' specific permissions assigned';
         }
 
+        $concernInfo = '-';
+        if (!empty($data['concerns']) && is_array($data['concerns'])) {
+            $cids = array_map('intval', $data['concerns']);
+            if (!empty($cids)) {
+                $inClause = implode(',', $cids);
+                $cNames = Database::fetchAll("SELECT CONCAT(code, ': ', name) as ctitle FROM concerns WHERE id IN ($inClause)");
+                $concernInfo = implode(', ', array_column($cNames, 'ctitle'));
+            }
+        } elseif (!empty($userRecord['assigned_concerns_str'])) {
+            $concernInfo = str_replace('||', ', ', $userRecord['assigned_concerns_str']);
+        }
+
+        $defaultConcernName = '-';
+        if (!empty($data['default_concern_id'])) {
+            $dc = Database::fetchOne("SELECT name, code FROM concerns WHERE id = ?", [(int)$data['default_concern_id']]);
+            if ($dc) $defaultConcernName = "{$dc['code']} - {$dc['name']}";
+        } elseif (!empty($userRecord['default_concern_name'])) {
+            $defaultConcernName = ($userRecord['default_concern_code'] ?? '') . ' - ' . $userRecord['default_concern_name'];
+        }
+
+        $snapshot['Authorized Concerns'] = $concernInfo;
+        $snapshot['Default Concern'] = $defaultConcernName;
+
         return $snapshot;
     }
 
@@ -322,6 +400,12 @@ class AdminController {
 
         $roles            = Role::getActive();
         $productionUnits  = ProductionUnit::getWithMetrics();
+        $concerns         = getAvailableUserConcerns();
+        $staffConcerns    = User::getConcernIds($staffId);
+        $defaultConcernId = (int)($staff['default_concern_id'] ?? 0);
+        if ($defaultConcernId === 0 && !empty($staffConcerns)) {
+            $defaultConcernId = $staffConcerns[0];
+        }
 
         Response::view('admin.staff_form', [
             'pageTitle'           => 'Edit Staff',
@@ -333,6 +417,9 @@ class AdminController {
             ],
             'roles'               => $roles,
             'productionUnits'     => $productionUnits,
+            'concerns'            => $concerns,
+            'staffConcerns'       => $staffConcerns,
+            'defaultConcernId'    => $defaultConcernId,
             'hierarchicalModules' => Role::getHierarchicalPermissions(),
             'rolePermissionsMap'  => Role::getAllRolePermissionsMap(),
             'staffPermissions'    => User::getPermissionIds($staffId),
@@ -388,6 +475,36 @@ class AdminController {
         }
 
         try {
+            // Process concern assignment and default login session concern
+            if (isset($_POST['concerns'])) {
+                $assignedConcerns = is_array($_POST['concerns']) ? array_filter($_POST['concerns']) : [];
+                $defaultConcernId = !empty($_POST['default_concern_id']) ? (int)$_POST['default_concern_id'] : null;
+
+                if (!isSuperAdmin()) {
+                    $allowedCids = array_column(getAvailableUserConcerns(), 'id');
+                    $assignedConcerns = array_values(array_intersect(array_map('intval', $assignedConcerns), $allowedCids));
+                    if (empty($assignedConcerns)) {
+                        $assignedConcerns = [currentConcernId() ?? 1];
+                    }
+                    if (!$defaultConcernId || !in_array($defaultConcernId, $allowedCids)) {
+                        $defaultConcernId = $assignedConcerns[0];
+                    }
+                }
+
+                if (empty($assignedConcerns)) {
+                    $fallbackCid = currentConcernId() ?? 1;
+                    $assignedConcerns = [$fallbackCid];
+                    $defaultConcernId = $fallbackCid;
+                }
+
+                if (!$defaultConcernId || !in_array($defaultConcernId, array_map('intval', $assignedConcerns))) {
+                    $defaultConcernId = (int)$assignedConcerns[0];
+                }
+
+                $_POST['concerns'] = $assignedConcerns;
+                $_POST['default_concern_id'] = $defaultConcernId;
+            }
+
             $oldSnapshot = $this->prepareStaffSnapshot([], $oldStaff);
             $newSnapshot = $this->prepareStaffSnapshot($_POST, $oldStaff);
             User::update($staffId, $_POST);
@@ -613,6 +730,7 @@ class AdminController {
             'permMap'                => $permMap,
             'hierarchicalModules'    => Role::getHierarchicalPermissions(),
             'assignedPermissionIds'  => [],
+            'concerns'               => Database::fetchAll("SELECT id, name, code, is_active FROM concerns ORDER BY id ASC"),
         ]);
     }
 
@@ -629,11 +747,13 @@ class AdminController {
             Response::back('error', 'Invalid form submission.');
         }
 
-        $name          = trim($_POST['name'] ?? '');
-        $slugInput     = trim($_POST['slug'] ?? '');
-        $description   = trim($_POST['description'] ?? '');
-        $isActive      = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
-        $permissionIds = array_map('intval', $_POST['permissions'] ?? []);
+        $name               = trim($_POST['name'] ?? '');
+        $slugInput          = trim($_POST['slug'] ?? '');
+        $description        = trim($_POST['description'] ?? '');
+        $concernScope       = trim($_POST['concern_scope'] ?? 'ALL');
+        $applicableConcerns = $_POST['applicable_concerns'] ?? [];
+        $isActive           = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
+        $permissionIds      = array_map('intval', $_POST['permissions'] ?? []);
 
         if (empty($name)) {
             Response::back('error', 'Role Name is required.');
@@ -649,10 +769,12 @@ class AdminController {
 
         try {
             $roleId = Role::create([
-                'name'        => $name,
-                'slug'        => $slug,
-                'description' => $description,
-                'is_active'   => $isActive
+                'name'               => $name,
+                'slug'               => $slug,
+                'description'        => $description,
+                'concern_scope'      => $concernScope,
+                'applicable_concerns'=> $applicableConcerns,
+                'is_active'          => $isActive
             ]);
 
             // Save selected permissions
@@ -701,6 +823,7 @@ class AdminController {
             'permMap'                => $permMap,
             'hierarchicalModules'    => Role::getHierarchicalPermissions(),
             'assignedPermissionIds'  => $assignedPermissionIds,
+            'concerns'               => Database::fetchAll("SELECT id, name, code, is_active FROM concerns ORDER BY id ASC"),
         ]);
     }
 
@@ -717,15 +840,17 @@ class AdminController {
             Response::back('error', 'Invalid form submission.');
         }
 
-        $roleId        = (int) $id;
-        $role          = Role::findById($roleId);
+        $roleId             = (int) $id;
+        $role               = Role::findById($roleId);
         if (!$role) Response::error(404, 'Role not found.');
 
-        $name          = trim($_POST['name'] ?? '');
-        $slugInput     = trim($_POST['slug'] ?? '');
-        $description   = trim($_POST['description'] ?? '');
-        $isActive      = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
-        $permissionIds = array_map('intval', $_POST['permissions'] ?? []);
+        $name               = trim($_POST['name'] ?? '');
+        $slugInput          = trim($_POST['slug'] ?? '');
+        $description        = trim($_POST['description'] ?? '');
+        $concernScope       = trim($_POST['concern_scope'] ?? 'ALL');
+        $applicableConcerns = $_POST['applicable_concerns'] ?? [];
+        $isActive           = isset($_POST['is_active']) ? (int)$_POST['is_active'] : 1;
+        $permissionIds      = array_map('intval', $_POST['permissions'] ?? []);
 
         if (empty($name)) {
             Response::back('error', 'Role Name is required.');
@@ -740,10 +865,12 @@ class AdminController {
 
         try {
             Role::update($roleId, [
-                'name'        => $name,
-                'slug'        => $slug,
-                'description' => $description,
-                'is_active'   => $isActive
+                'name'               => $name,
+                'slug'               => $slug,
+                'description'        => $description,
+                'concern_scope'      => $concernScope,
+                'applicable_concerns'=> $applicableConcerns,
+                'is_active'          => $isActive
             ]);
 
             // Sync updated permissions

@@ -253,19 +253,7 @@ class ProductionBatch {
             );
         }
 
-        // 5. Label Batches
-        $labels = [];
-        if ($progId > 0) {
-            $labels = Database::fetchAll(
-                "SELECT lb.*
-                 FROM label_batches lb
-                 WHERE lb.program_id = ?
-                 ORDER BY lb.id ASC",
-                [$progId]
-            );
-        }
-
-        // 6. QC Inspection Batch
+        // 5. QC Inspection Batch
         $qc = null;
         $qcBatchId = (int)($batch['qc_batch_id'] ?? 0);
         if ($qcBatchId > 0 || $progId > 0) {
@@ -390,7 +378,6 @@ class ProductionBatch {
             'rolls'           => $rolls,
             'cutting'         => $cutting,
             'stitching'       => $stitching,
-            'labels'          => $labels,
             'qc'              => $qc,
             'outward'         => $outward,
             'transactions'    => $transactions,
@@ -618,14 +605,13 @@ class ProductionBatch {
             }
         }
 
-        // Resolve production QR code tag ranges and piece tags from QC and Label Batches
+        // Resolve production QR piece tags from approved QC pieces.
         $qcBatchId = (int)($batch['qc_batch_id'] ?? 0);
         $qcItems = [];
         $piecesData = [];
-        $labelItems = [];
 
         if ($qcBatchId > 0) {
-            $qbRow = Database::fetchOne("SELECT id, pieces_data, label_batch_id FROM qc_batches WHERE id = ?", [$qcBatchId]);
+            $qbRow = Database::fetchOne("SELECT id, pieces_data FROM qc_batches WHERE id = ?", [$qcBatchId]);
             if ($qbRow) {
                 $qcItems = Database::fetchAll("SELECT * FROM qc_items WHERE qc_batch_id = ?", [$qcBatchId]);
                 $rawPiecesData = (string)($qbRow['pieces_data'] ?? '');
@@ -639,14 +625,7 @@ class ProductionBatch {
                 if (!is_array($piecesData)) {
                     $piecesData = [];
                 }
-                $lblBatchId = (int)($qbRow['label_batch_id'] ?? 0);
-                if ($lblBatchId > 0) {
-                    $labelItems = Database::fetchAll("SELECT * FROM label_items WHERE label_batch_id = ?", [$lblBatchId]);
-                }
             }
-        }
-        if (empty($labelItems) && $progId > 0) {
-            $labelItems = Database::fetchAll("SELECT li.* FROM label_items li JOIN label_batches lb ON lb.id = li.label_batch_id WHERE lb.program_id = ? ORDER BY lb.id DESC", [$progId]);
         }
 
         foreach ($items as &$it) {
@@ -687,38 +666,19 @@ class ProductionBatch {
                 }
             }
 
-            $matchedLabelItem = null;
-            foreach ($labelItems as $li) {
-                if (!empty($li['variant_id']) && (int)$li['variant_id'] === $vid) {
-                    $matchedLabelItem = $li;
-                    break;
-                }
-                if (strcasecmp(trim($li['size_name'] ?? ''), $sizeName) === 0 && strcasecmp(trim($li['color_name'] ?? ''), $colorName) === 0) {
-                    $matchedLabelItem = $li;
-                    break;
-                }
-            }
-
-            $startSeq = $matchedLabelItem ? (int)$matchedLabelItem['start_seq'] : null;
-            $endSeq = $matchedLabelItem ? (int)$matchedLabelItem['end_seq'] : null;
-            $startCode = $matchedLabelItem['start_code'] ?? ($matchedQcItem['tag_code'] ?? null);
-            $endCode = $matchedLabelItem['end_code'] ?? null;
+            $startCode = $matchedQcItem['tag_code'] ?? null;
+            $endCode = null;
+            $startSeq = null;
+            $endSeq = null;
 
             $variantPieces = [];
             if (!empty($piecesData)) {
                 foreach ($piecesData as $p) {
                     $tag = trim($p['tag_code'] ?? '');
-                    if (!$tag) continue;
-                    $isMatch = false;
-                    if ($matchedQcItem && isset($p['item_id']) && (int)$p['item_id'] === (int)$matchedQcItem['id']) {
-                        $isMatch = true;
-                    } elseif ($startSeq && $endSeq && preg_match('/(\d+)$/', $tag, $m)) {
-                        $seq = (int)$m[1];
-                        if ($seq >= $startSeq && $seq <= $endSeq) {
-                            $isMatch = true;
-                        }
+                    if ($tag === '') {
+                        continue;
                     }
-                    if ($isMatch) {
+                    if ($matchedQcItem && isset($p['item_id']) && (int)$p['item_id'] === (int)$matchedQcItem['id']) {
                         $variantPieces[] = [
                             'tag_code' => $tag,
                             'status'   => $p['status'] ?? 'APPROVED',
@@ -727,22 +687,35 @@ class ProductionBatch {
                 }
             }
 
-            if (empty($variantPieces) && $startCode && $startSeq) {
-                $prefix = preg_match('/^([A-Z0-9]+?)(\d{2,4})$/i', $startCode, $m) ? $m[1] : substr($startCode, 0, -2);
-                $calcEndSeq = $endSeq ?: ($startSeq + $qty - 1);
-                for ($s = $startSeq; $s <= $calcEndSeq; $s++) {
+            if (empty($variantPieces) && $startCode) {
+                if (preg_match('/^(.*?)(\d+)$/', (string)$startCode, $m)) {
+                    $prefix = $m[1];
+                    $seq = (int)$m[2];
+                    $width = strlen($m[2]);
+                    for ($s = 0; $s < max(1, $qty); $s++) {
+                        $variantPieces[] = [
+                            'tag_code' => $prefix . str_pad((string)($seq + $s), $width, '0', STR_PAD_LEFT),
+                            'status'   => 'APPROVED',
+                        ];
+                    }
+                } else {
                     $variantPieces[] = [
-                        'tag_code' => $prefix . sprintf('%02d', $s),
+                        'tag_code' => $startCode,
                         'status'   => 'APPROVED',
                     ];
                 }
             }
 
             if (!empty($variantPieces)) {
-                if (!$startCode) $startCode = $variantPieces[0]['tag_code'];
-                if (!$endCode) $endCode = end($variantPieces)['tag_code'];
-                if (!$startSeq && preg_match('/(\d+)$/', $startCode, $m)) $startSeq = (int)$m[1];
-                if (!$endSeq && preg_match('/(\d+)$/', $endCode, $m)) $endSeq = (int)$m[1];
+                if (!$endCode) {
+                    $endCode = end($variantPieces)['tag_code'];
+                }
+                if (preg_match('/(\d+)$/', (string)$startCode, $m)) {
+                    $startSeq = (int)$m[1];
+                }
+                if (preg_match('/(\d+)$/', (string)$endCode, $m)) {
+                    $endSeq = (int)$m[1];
+                }
             }
 
             $it['start_seq']   = $startSeq;

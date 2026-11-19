@@ -18,9 +18,18 @@ class ExportService
      * Fetch complete dataset for the given date range and selected modules,
      * including executive financial P&L and operational stock reconciliation metrics.
      */
-    public static function getReportData(string $startDate, string $endDate, array $selectedModules, ?int $productionUnitId = null): array
+    public static function getReportData(
+        string $startDate,
+        string $endDate,
+        array $selectedModules,
+        ?int $productionUnitId = null,
+        array $warehouseIds = []
+    ): array
     {
         $data = [];
+        $warehouseIds = array_values(array_unique(array_filter(array_map('intval', $warehouseIds), static function (int $id): bool {
+            return $id > 0;
+        })));
 
         // Prepare optimized SARGable timestamp boundaries for MariaDB/MySQL index utilization
         $startDateTime = $startDate . ' 00:00:00';
@@ -162,6 +171,12 @@ class ExportService
 
         // 7. Production Outward & Dispatches
         if (in_array('outward', $selectedModules, true)) {
+            $outwardWarehouseFilter = '';
+            $outwardParams = [$startDateOnly, $endDateOnly, $startDateTime, $endDateTime];
+            if ($warehouseIds) {
+                $outwardWarehouseFilter = ' AND po.warehouse_id IN (' . implode(',', array_fill(0, count($warehouseIds), '?')) . ')';
+                $outwardParams = array_merge($outwardParams, $warehouseIds);
+            }
             $data['outward'] = Database::fetchAll(
                 "SELECT po.id, po.outward_number, pb.batch_number,
                         COALESCE(w.name, 'Central Distribution Warehouse') AS warehouse_name,
@@ -178,10 +193,58 @@ class ExportService
                  FROM production_outwards po
                  LEFT JOIN production_batches pb ON pb.id = po.production_batch_id
                  LEFT JOIN warehouses w ON w.id = po.warehouse_id
-                 WHERE (po.dispatch_date >= ? AND po.dispatch_date <= ?)
-                    OR (po.dispatch_date IS NULL AND po.created_at >= ? AND po.created_at <= ?)
+                 WHERE ((po.dispatch_date >= ? AND po.dispatch_date <= ?)
+                    OR (po.dispatch_date IS NULL AND po.created_at >= ? AND po.created_at <= ?))
+                 $outwardWarehouseFilter
                  ORDER BY po.id DESC",
-                [$startDateOnly, $endDateOnly, $startDateTime, $endDateTime]
+                $outwardParams
+            );
+        }
+
+        // Detailed warehouse stock ledger. StockService records increases as
+        // positive quantities and decreases as negative quantities.
+        if (in_array('stock_ledger', $selectedModules, true)) {
+            $warehouseFilter = '';
+            $stockParams = [$startDateTime, $endDateTime];
+            if ($warehouseIds) {
+                $warehouseFilter = ' AND st.location_id IN (' . implode(',', array_fill(0, count($warehouseIds), '?')) . ')';
+                $stockParams = array_merge($stockParams, $warehouseIds);
+            }
+
+            $data['stock_ledger'] = Database::fetchAll(
+                "SELECT st.id AS transaction_id, st.created_at AS transaction_date,
+                        st.location_id AS warehouse_id, w.name AS warehouse_name, w.code AS warehouse_code,
+                        st.stock_state, st.transaction_type, st.quantity AS movement_quantity,
+                        CASE WHEN st.quantity > 0 THEN st.quantity ELSE 0 END AS stock_in,
+                        CASE WHEN st.quantity < 0 THEN -st.quantity ELSE 0 END AS stock_out,
+                        st.balance_after, st.reference_type, st.reference_id, st.notes,
+                        st.source_type, st.source_id, st.dest_type, st.dest_id,
+                        pv.id AS variant_id, pv.variant_code, pv.sku, pv.qr_code, pv.qr_type,
+                        pv.series_start_code, pv.series_end_code, pv.is_complementary,
+                        pv.hsn_code, pv.gst_rate, pv.mrp, pv.purchase_price, pv.production_cost,
+                        pv.selling_price, pv.weight,
+                        p.name AS product_name, p.code AS product_code, p.material, p.description,
+                        cat.name AS category_name, sub.name AS subcategory_name,
+                        subsub.name AS sub_subcategory_name,
+                        sz.name AS size_name, col.name AS color_name,
+                        d.name AS design_name, d.code AS design_code,
+                        u.full_name AS performed_by
+                 FROM stock_transactions st
+                 INNER JOIN product_variants pv ON pv.id = st.variant_id
+                 LEFT JOIN products p ON p.id = pv.product_id
+                 LEFT JOIN categories cat ON cat.id = p.category_id
+                 LEFT JOIN subcategories sub ON sub.id = p.subcategory_id
+                 LEFT JOIN sub_subcategories subsub ON subsub.id = p.sub_subcategory_id
+                 LEFT JOIN sizes sz ON sz.id = pv.size_id
+                 LEFT JOIN colors col ON col.id = pv.color_id
+                 LEFT JOIN designs d ON d.id = pv.design_id
+                 LEFT JOIN warehouses w ON w.id = st.location_id
+                 LEFT JOIN users u ON u.id = st.user_id
+                 WHERE st.location_type = 'WAREHOUSE'
+                   AND st.created_at >= ? AND st.created_at <= ?
+                   $warehouseFilter
+                 ORDER BY st.created_at ASC, st.id ASC",
+                $stockParams
             );
         }
 
@@ -705,6 +768,84 @@ class ExportService
                     $o['status'],
                     !empty($o['dispatch_date']) ? date('d M Y', strtotime($o['dispatch_date'])) : '-',
                 ]);
+            }
+            fputcsv($out, []);
+        }
+
+        if (array_key_exists('stock_ledger', $data)) {
+            fputcsv($out, ['=== DETAILED WAREHOUSE STOCK MOVEMENT LEDGER ===']);
+            fputcsv($out, ['Each month is a separate table. Positive movements are stock added; negative movements are stock removed. Balance is the recorded balance after each transaction.']);
+
+            $monthlyLedger = [];
+            foreach ($data['stock_ledger'] as $movement) {
+                $monthKey = date('Y-m', strtotime($movement['transaction_date']));
+                $monthlyLedger[$monthKey][] = $movement;
+            }
+
+            if (!$monthlyLedger) {
+                fputcsv($out, ['No warehouse stock movements found for the selected period and warehouses.']);
+            }
+
+            foreach ($monthlyLedger as $monthKey => $movements) {
+                fputcsv($out, []);
+                fputcsv($out, ['=== ' . date('F Y', strtotime($monthKey . '-01')) . ' — WAREHOUSE STOCK MOVEMENTS ===']);
+                fputcsv($out, [
+                    'Date & Time', 'Transaction ID', 'Warehouse', 'Stock State', 'Transaction Type',
+                    'QR Code', 'QR Type', 'QR Series Start', 'QR Series End', 'Variant ID', 'Variant Code', 'SKU',
+                    'Product', 'Product Code', 'Material', 'Description', 'Category', 'Subcategory', 'Sub-Subcategory',
+                    'Size', 'Color', 'Design / Pattern', 'Design Code', 'HSN', 'GST %', 'Weight',
+                    'MRP (INR)', 'Purchase Price (INR)', 'Production Cost (INR)', 'Selling Price (INR)',
+                    'Stock Added', 'Stock Removed', 'Net Movement', 'Balance After',
+                    'Complementary', 'Source Type', 'Source ID', 'Destination Type', 'Destination ID',
+                    'Reference Type', 'Reference ID', 'Notes', 'Updated By',
+                ]);
+                foreach ($movements as $movement) {
+                    fputcsv($out, [
+                        $movement['transaction_date'],
+                        (int)$movement['transaction_id'],
+                        $movement['warehouse_name'] ?? '-',
+                        $movement['stock_state'],
+                        $movement['transaction_type'],
+                        $movement['qr_code'] ?? '-',
+                        $movement['qr_type'] ?? '-',
+                        $movement['series_start_code'] ?? '-',
+                        $movement['series_end_code'] ?? '-',
+                        (int)$movement['variant_id'],
+                        $movement['variant_code'] ?? '-',
+                        $movement['sku'] ?? '-',
+                        $movement['product_name'] ?? '-',
+                        $movement['product_code'] ?? '-',
+                        $movement['material'] ?? '-',
+                        str_replace(["\r\n", "\n", "\r"], ' ', (string)($movement['description'] ?? '')),
+                        $movement['category_name'] ?? '-',
+                        $movement['subcategory_name'] ?? '-',
+                        $movement['sub_subcategory_name'] ?? '-',
+                        $movement['size_name'] ?? '-',
+                        $movement['color_name'] ?? '-',
+                        $movement['design_name'] ?? '-',
+                        $movement['design_code'] ?? '-',
+                        $movement['hsn_code'] ?? '-',
+                        number_format((float)($movement['gst_rate'] ?? 0), 2, '.', ''),
+                        number_format((float)($movement['weight'] ?? 0), 3, '.', ''),
+                        number_format((float)($movement['mrp'] ?? 0), 2, '.', ''),
+                        number_format((float)($movement['purchase_price'] ?? 0), 2, '.', ''),
+                        number_format((float)($movement['production_cost'] ?? 0), 2, '.', ''),
+                        number_format((float)($movement['selling_price'] ?? 0), 2, '.', ''),
+                        number_format((float)$movement['stock_in'], 2, '.', ''),
+                        number_format((float)$movement['stock_out'], 2, '.', ''),
+                        number_format((float)$movement['movement_quantity'], 2, '.', ''),
+                        number_format((float)$movement['balance_after'], 2, '.', ''),
+                        !empty($movement['is_complementary']) ? 'YES' : 'NO',
+                        $movement['source_type'] ?? '-',
+                        $movement['source_id'] ?? '-',
+                        $movement['dest_type'] ?? '-',
+                        $movement['dest_id'] ?? '-',
+                        $movement['reference_type'] ?? '-',
+                        $movement['reference_id'] ?? '-',
+                        str_replace(["\r\n", "\n", "\r"], ' ', (string)($movement['notes'] ?? '')),
+                        $movement['performed_by'] ?? '-',
+                    ]);
+                }
             }
             fputcsv($out, []);
         }

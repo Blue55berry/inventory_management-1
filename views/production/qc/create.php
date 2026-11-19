@@ -1,7 +1,7 @@
 <div class="page-header mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-patch-check me-2 text-danger"></i>Initialize QC Inspection Batch</h2>
-        <span class="text-muted">Select completed labeling batch or stitching batch to begin quality control inspection</span>
+        <span class="text-muted">Select a completed stitching batch to begin quality control inspection</span>
     </div>
     <a href="<?= url('production/qc') ?>" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-left me-1"></i> Back to QC List
@@ -18,21 +18,10 @@
                     <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-info-circle me-2 text-primary"></i>QC Batch Info</h5>
                 </div>
                 <div class="card-body p-4">
-                    <!-- Source Selection: Label Batch or Stitching Batch -->
+                    <!-- Source Selection: Stitching Batch -->
                     <div class="mb-3">
                         <label class="form-label fw-bold">Select Source Batch <span class="text-danger">*</span></label>
-                        <select name="label_batch_id" id="labelBatchSelect" class="form-select form-select-lg border-primary mb-2" onchange="if(this.value) window.location.href='<?= url('production/qc/create?label_batch_id=') ?>' + this.value">
-                            <option value="">-- Choose Label Batch --</option>
-                            <?php foreach ($labelBatches as $lb): ?>
-                                <option value="<?= $lb['id'] ?>" <?= ($selectedLabel && $selectedLabel['id'] == $lb['id']) ? 'selected' : '' ?>>
-                                    <?= e($lb['batch_number']) ?> (<?= e($lb['program_number'] ?? '') ?> — <?= e($lb['product_name'] ?? '') ?>)
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-
-                        <div class="text-center text-muted small my-2 fw-semibold">— OR SELECT STITCHING BATCH —</div>
-
-                        <select name="stitching_batch_id" id="stitchingBatchSelect" class="form-select border-secondary" onchange="if(this.value) window.location.href='<?= url('production/qc/create?stitching_batch_id=') ?>' + this.value">
+                        <select name="stitching_batch_id" id="stitchingBatchSelect" class="form-select form-select-lg border-primary" onchange="if(this.value) window.location.href='<?= url('production/qc/create?stitching_batch_id=') ?>' + this.value">
                             <option value="">-- Choose Stitching Batch --</option>
                             <?php foreach ($stitchingBatches as $sb): ?>
                                 <option value="<?= $sb['id'] ?>" <?= ($selectedStitching && $selectedStitching['id'] == $sb['id']) ? 'selected' : '' ?>>
@@ -40,9 +29,9 @@
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <?php if (empty($labelBatches) && empty($stitchingBatches) && !$selectedLabel && !$selectedStitching): ?>
+                        <?php if (empty($stitchingBatches) && !$selectedStitching): ?>
                             <div class="alert alert-warning py-2 px-3 small mt-2 mb-0">
-                                <i class="bi bi-info-circle me-1"></i> All available label and stitching batches have already undergone QC inspection.
+                                <i class="bi bi-info-circle me-1"></i> All available stitching batches have already undergone QC inspection.
                             </div>
                         <?php endif; ?>
                     </div>
@@ -132,14 +121,14 @@
                 <?php endif; ?>
 
                 <div class="card-body p-0">
-                    <?php if (!$selectedStitching && !$selectedLabel): ?>
+                    <?php if (!$selectedStitching): ?>
                         <div class="p-5 text-center text-muted">
                             <div class="mb-3">
                                 <div class="d-inline-flex p-3 rounded-circle bg-light">
                                     <i class="bi bi-qr-code-scan fs-1 text-primary"></i>
                                 </div>
                             </div>
-                            <h5 class="fw-bold text-dark">Select a Label or Stitching Batch</h5>
+                            <h5 class="fw-bold text-dark">Select a Stitching Batch</h5>
                             <p class="text-muted mb-0">Choose a batch on the left to initialize QC inspection for all sizes and colors.</p>
                         </div>
                     <?php else: ?>
@@ -167,10 +156,6 @@
                                                 <input type="hidden" name="items[<?= $idx ?>][color_name]" value="<?= e($it['color_name']) ?>">
                                                 <input type="hidden" name="items[<?= $idx ?>][base_price]" value="<?= e($it['base_price']) ?>">
                                                 <input type="hidden" name="items[<?= $idx ?>][discount_price]" value="<?= e($it['discount_price']) ?>">
-                                                <input type="hidden" name="items[<?= $idx ?>][start_seq]" value="<?= e($it['start_seq'] ?? '') ?>">
-                                                <input type="hidden" name="items[<?= $idx ?>][end_seq]" value="<?= e($it['end_seq'] ?? '') ?>">
-                                                <input type="hidden" name="items[<?= $idx ?>][start_code]" value="<?= e($it['start_code'] ?? '') ?>">
-                                                <input type="hidden" name="items[<?= $idx ?>][end_code]" value="<?= e($it['end_code'] ?? '') ?>">
                                                 
                                                 <div class="mb-1">
                                                     <span class="badge bg-primary-subtle text-primary border text-wrap text-start" style="font-size: 0.72rem; line-height: 1.2;">
@@ -181,11 +166,6 @@
                                                     <span class="badge bg-secondary-subtle text-secondary border px-2 py-1"><?= e($it['size_name']) ?></span>
                                                     <span class="badge bg-dark-subtle text-dark border px-2 py-1"><?= e($it['color_name']) ?></span>
                                                     <code class="text-muted fs-8 ms-1"><?= e($it['sku']) ?></code>
-                                                    <?php if (!empty($it['start_code'])): ?>
-                                                        <span class="badge bg-dark text-white font-monospace ms-1" style="font-size: 0.75rem;">
-                                                            <i class="bi bi-tag-fill me-1 text-warning"></i><?= e($it['start_code']) ?> &ndash; <?= e($it['end_code']) ?>
-                                                        </span>
-                                                    <?php endif; ?>
                                                 </div>
                                             </td>
                                             <td class="text-center">
@@ -201,7 +181,7 @@
                         </div>
                     <?php endif; ?>
                 </div>
-                <?php if ($selectedStitching || $selectedLabel): ?>
+                <?php if ($selectedStitching): ?>
                     <div class="card-footer bg-white p-3 d-flex justify-content-between border-top">
                         <a href="<?= url('production/qc') ?>" class="btn btn-outline-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary px-4 fw-semibold">

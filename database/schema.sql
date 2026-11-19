@@ -1,7 +1,7 @@
 -- ============================================================
 -- GRM INVENTORY SOFTWARE — CLEAN MASTER DATABASE SCHEMA
 -- Generated: 2026-11-17 12:15:20
--- Total Tables: 82 (All unused/orphan tables purged)
+-- Total Tables: 80 (All unused/orphan tables purged)
 -- Includes: Core System, Production, Finishing, Packing, QC,
 --           Warehouse, POS/Billing, Assets, Staff & Permissions
 -- ============================================================
@@ -375,66 +375,6 @@ CREATE TABLE `hsn_codes` (
   `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_hsn_code` (`hsn_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ------------------------------------------------------------
--- [15/82] Table structure for `label_batches`
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `label_batches`;
-CREATE TABLE `label_batches` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `program_id` int(10) unsigned NOT NULL,
-  `stitching_batch_id` int(10) unsigned DEFAULT NULL,
-  `batch_number` varchar(50) NOT NULL,
-  `required_qty` int(11) NOT NULL DEFAULT 0,
-  `printed_qty` int(11) DEFAULT 0,
-  `used_qty` int(11) DEFAULT 0,
-  `damaged_qty` int(11) DEFAULT 0,
-  `status` enum('PENDING','IN_PROGRESS','COMPLETED') DEFAULT 'PENDING',
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `total_qty` int(11) NOT NULL DEFAULT 0,
-  `applied_qty` int(11) DEFAULT 0,
-  `session_data` longtext DEFAULT NULL,
-  `notes` text DEFAULT NULL,
-  `created_by` int(10) unsigned DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `batch_number` (`batch_number`),
-  KEY `program_id` (`program_id`),
-  KEY `fk_label_batches_stitching` (`stitching_batch_id`),
-  CONSTRAINT `fk_label_batches_stitching` FOREIGN KEY (`stitching_batch_id`) REFERENCES `stitching_batches` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `label_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ------------------------------------------------------------
--- [16/82] Table structure for `label_items`
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `label_items`;
-CREATE TABLE `label_items` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `label_batch_id` int(10) unsigned NOT NULL,
-  `variant_id` int(10) unsigned DEFAULT NULL,
-  `category_id` int(10) unsigned DEFAULT NULL,
-  `subcategory_id` int(10) unsigned DEFAULT NULL,
-  `sub_subcategory_id` int(10) unsigned DEFAULT NULL,
-  `catalog_hierarchy` varchar(255) DEFAULT NULL,
-  `size_name` varchar(100) DEFAULT NULL,
-  `color_name` varchar(100) DEFAULT NULL,
-  `base_price` decimal(10,2) DEFAULT 0.00,
-  `discount_price` decimal(10,2) DEFAULT 0.00,
-  `required_qty` int(11) NOT NULL DEFAULT 0,
-  `printed_qty` int(11) DEFAULT 0,
-  `used_qty` int(11) DEFAULT 0,
-  `damaged_qty` int(11) DEFAULT 0,
-  `start_seq` int(11) DEFAULT 1,
-  `end_seq` int(11) DEFAULT 1,
-  `start_code` varchar(50) DEFAULT NULL,
-  `end_code` varchar(50) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  KEY `label_batch_id` (`label_batch_id`),
-  KEY `variant_id` (`variant_id`),
-  CONSTRAINT `label_items_ibfk_1` FOREIGN KEY (`label_batch_id`) REFERENCES `label_batches` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `label_items_ibfk_2` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -1417,7 +1357,6 @@ CREATE TABLE `qc_batches` (
   `qc_number` varchar(50) DEFAULT NULL,
   `program_id` int(10) unsigned NOT NULL,
   `stitching_batch_id` int(10) unsigned DEFAULT NULL,
-  `label_batch_id` int(10) unsigned DEFAULT NULL,
   `inspector_id` int(10) unsigned DEFAULT NULL,
   `total_qty` int(11) NOT NULL DEFAULT 0,
   `passed_qty` int(11) DEFAULT 0,
@@ -1437,8 +1376,6 @@ CREATE TABLE `qc_batches` (
   KEY `program_id` (`program_id`),
   KEY `stitching_batch_id` (`stitching_batch_id`),
   KEY `inspector_id` (`inspector_id`),
-  KEY `fk_qc_label_batch` (`label_batch_id`),
-  CONSTRAINT `fk_qc_label_batch` FOREIGN KEY (`label_batch_id`) REFERENCES `label_batches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `qc_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`),
   CONSTRAINT `qc_batches_ibfk_2` FOREIGN KEY (`stitching_batch_id`) REFERENCES `stitching_batches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `qc_batches_ibfk_3` FOREIGN KEY (`inspector_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
