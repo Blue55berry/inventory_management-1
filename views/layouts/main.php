@@ -76,7 +76,7 @@ if (!empty($authUser['production_unit_name'])) {
                     $modAssets     = isSuperAdmin() || hasConcernModule('assets');
 
                     $canViewProduction = (
-                        ($modPurchases && (hasPermission('sellers', 'view') || hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view')))
+                        ($modPurchases && (hasPermission('sellers', 'view') || hasPermission('production_purchases', 'view') || hasPermission('production_purchase_mapping', 'view') || hasPermission('purchases', 'view')))
                         || ($modProduction && (hasPermission('production', 'view') || hasPermission('damages', 'view') || hasPermission('catalog', 'view') || hasPermission('variants', 'view') || hasPermission('qr_generation', 'view') || hasPermission('programs', 'view') || hasPermission('cutting', 'view') || hasPermission('wastage', 'view') || hasPermission('stitching', 'view') || hasPermission('stitching_wastage', 'view') || hasPermission('qc', 'view')))
                         || ($modWarehouse && (hasPermission('inventory', 'view') || hasPermission('inward', 'view') || hasPermission('stock_adjustments', 'view') || hasPermission('batches', 'view') || hasPermission('outward', 'view') || hasPermission('production_stock_requests', 'view') || hasPermission('warehouse_rework', 'view')))
                         || ($modExpenses && hasPermission('production_expenses', 'view'))
@@ -97,7 +97,10 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php endif; ?>
                             <?php if ($modPurchases && (hasPermission('production_purchases', 'view') || hasPermission('purchases', 'view'))): ?>
                             <li><a href="<?= url('production/purchases') ?>" class="<?= in_array($activeMenu ?? '', ['purchases', 'prod-purchases']) ? 'active' : '' ?>">Purchases</a></li>
-                            <li><a href="<?= url('production/purchases/mapping') ?>" class="<?= in_array($activeMenu ?? '', ['purchases-mapping', 'prod-purchases-mapping']) ? 'active' : '' ?>">Third-Party Product Mapping</a></li>
+                            <?php endif; ?>
+                            <?php if ($modPurchases && hasPermission('production_purchase_mapping', 'view')): ?>
+                            <li><a href="<?= url('production/purchases/mapping') ?>" class="<?= in_array($activeMenu ?? '', ['purchases-mapping', 'prod-purchases-mapping']) ? 'active' : '' ?>">Product Mapping</a></li>
+                            <li><a href="<?= url('production/third-party-catalog') ?>" class="<?= ($activeMenu ?? '') === 'prod-third-party-catalog' ? 'active' : '' ?>">Third-Party Catalog</a></li>
                             <?php endif; ?>
                             <?php if ($modProduction && hasPermission('damages', 'view')): ?>
                             <li><a href="<?= url('production/damages') ?>" class="<?= ($activeMenu ?? '') === 'prod-damages' ? 'active' : '' ?>">Damage Management</a></li>
@@ -110,6 +113,7 @@ if (!empty($authUser['production_unit_name'])) {
                             <?php endif; ?>
                             <?php if ($modProduction && (hasPermission('qr_generation', 'view') || hasPermission('catalog', 'view'))): ?>
                             <li><a href="<?= url('production/qr-generations') ?>" class="<?= ($activeMenu ?? '') === 'prod-qr-generation' ? 'active' : '' ?>">QR Generations</a></li>
+                            <li><a href="<?= url('production/purchased-stock') ?>" class="<?= ($activeMenu ?? '') === 'prod-purchased-stock' ? 'active' : '' ?>">Purchased Stock</a></li>
                             <?php endif; ?>
                             <?php if ($modProduction && hasPermission('programs', 'view')): ?>
                             <li><a href="<?= url('production/programs') ?>" class="<?= ($activeMenu ?? '') === 'programs' ? 'active' : '' ?>">Production Programs</a></li>

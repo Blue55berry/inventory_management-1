@@ -270,6 +270,67 @@ class PurchaseMappingFulfillmentService {
             );
         }
 
+        // Maintain independent third_party_products master catalog table
+        $tpProductId = (int)($item['third_party_product_id'] ?? 0);
+        $tpCode = trim((string)($item['vendor_sku'] ?? '')) ?: ('TP-' . $code);
+        if ($tpProductId <= 0) {
+            $existingTp = Database::fetchOne("SELECT id FROM third_party_products WHERE code = ? OR (name = ? AND category_id = ?)", [$tpCode, $itemName, $categoryId]);
+            if ($existingTp) {
+                $tpProductId = (int)$existingTp['id'];
+            } else {
+                Database::execute(
+                    "INSERT INTO third_party_products
+                        (concern_id, name, code, vendor_sku, category_id, subcategory_id, sub_subcategory_id,
+                         category_code, subcategory_code, sub_subcategory_code, seller_id, color, size, unit,
+                         hsn_code, mrp, selling_price, purchase_rate, attributes, is_complementary, is_active)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+                    [
+                        $item['concern_id'] ?? null,
+                        $itemName,
+                        $tpCode,
+                        $item['vendor_sku'] ?: null,
+                        $categoryId,
+                        $subcategoryId,
+                        $subSubcategoryId,
+                        $hierarchy['category_code'] ?? null,
+                        $hierarchy['subcategory_code'] ?? null,
+                        $hierarchy['sub_subcategory_code'] ?? null,
+                        (int)($item['seller_id'] ?? 0) ?: null,
+                        $item['color'] ?: null,
+                        $item['size'] ?: null,
+                        $item['unit'] ?: 'PCS',
+                        $item['hsn_code'] ?: null,
+                        (float)($item['mrp'] ?? 0),
+                        (float)($item['selling_price'] ?? 0),
+                        (float)($item['unit_price'] ?? 0),
+                        $attributes,
+                        $isComplementary
+                    ]
+                );
+                $tpProductId = (int)Database::lastInsertId();
+            }
+        } else {
+            Database::execute(
+                "UPDATE third_party_products
+                 SET category_id = ?, subcategory_id = ?, sub_subcategory_id = ?,
+                     category_code = COALESCE(?, category_code),
+                     subcategory_code = COALESCE(?, subcategory_code),
+                     sub_subcategory_code = COALESCE(?, sub_subcategory_code),
+                     attributes = ?, is_complementary = ?, mrp = ?, selling_price = ?
+                 WHERE id = ?",
+                [
+                    $categoryId, $subcategoryId, $subSubcategoryId,
+                    $hierarchy['category_code'] ?? null,
+                    $hierarchy['subcategory_code'] ?? null,
+                    $hierarchy['sub_subcategory_code'] ?? null,
+                    $attributes, $isComplementary, (float)($item['mrp'] ?? 0), (float)($item['selling_price'] ?? 0),
+                    $tpProductId
+                ]
+            );
+        }
+
+        Database::execute("UPDATE production_purchase_items SET third_party_product_id = ? WHERE id = ?", [$tpProductId, $itemId]);
+
         $variantId = (int)($item['variant_id'] ?? 0);
         if ($variantId <= 0) {
             $variant = VariantService::findOrCreateVariantForInward($productId, [

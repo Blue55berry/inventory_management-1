@@ -127,6 +127,7 @@ class QrGenerationController {
             'tabs'             => $tabs,
             'activeTab'        => $activeTab,
             'purchaseGroups'   => self::getPurchaseGroups(),
+            'stitchingBatches' => self::getStitchingBatches(),
             'breadcrumb'       => [
                 ['label' => 'Production', 'url' => url('purchases')],
                 ['label' => 'QR Generations', 'url' => url('production/qr-generations')],
@@ -139,7 +140,7 @@ class QrGenerationController {
      * Group purchasable lines by the QR tab they belong to.
      */
     private static function getPurchaseGroups(): array {
-        $cid = currentConcernId();
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
         $groups = [
             QrGenerationService::SOURCE_FABRIC      => [],
             QrGenerationService::SOURCE_RAW         => [],
@@ -173,7 +174,11 @@ class QrGenerationController {
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
              LEFT JOIN product_variants pv ON pv.id = ppi.variant_id
              WHERE ppi.item_type IN ({$itemTypesSql})
-               AND ppi.is_mapped = 1
+               AND (
+                   (ppi.item_type IN ('FABRIC_ROLL', 'RAW_MATERIAL'))
+                   OR
+                   (ppi.item_type = 'THIRD_PARTY' AND ppi.is_mapped = 1)
+               )
                AND ppi.qr_generation_id IS NULL
                AND (ppi.qr_batch_code IS NULL OR TRIM(ppi.qr_batch_code) = '')
                AND NOT EXISTS (
@@ -276,6 +281,81 @@ class QrGenerationController {
             Session::flash('error', $e->getMessage());
             Response::redirect(url('production/qr-generations/create?tab=' . $tab));
         }
+    }
+
+    /**
+     * Handle QR generation from a completed Stitching Unit batch.
+     */
+    public function storeStitchingBatch(): void {
+        $stitchingBatchId = (int)($_POST['stitching_batch_id'] ?? 0);
+        if ($stitchingBatchId <= 0) {
+            Session::flash('error', 'Please select a Stitching Batch.');
+            Response::redirect(url('production/qr-generations/create?tab=production_product'));
+            return;
+        }
+
+        try {
+            $result = QrGenerationService::generateStitchingBatch($_POST);
+            Session::flash('success', "Production Product QR Batch {$result['batch_code']} generated with {$result['quantity']} pieces and moved to Quality Control (QC)!");
+            Response::redirect(url('production/qr-generations/view/' . $result['generation_id'] . '?tab=production_product'));
+        } catch (Throwable $e) {
+            Session::flash('error', $e->getMessage());
+            Response::redirect(url('production/qr-generations/create?tab=production_product'));
+        }
+    }
+
+    /**
+     * Get completed stitching batches ready for production QR generation.
+     */
+    public static function getStitchingBatches(): array {
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $concernWhere = "";
+        $params = [];
+        if ($cid) {
+            if ($cid === 1) {
+                $concernWhere = " AND (sb.concern_id = ? OR sb.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND sb.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
+        $batches = Database::fetchAll("
+            SELECT sb.id, sb.batch_number, sb.name, sb.program_id, sb.category_id,
+                   sb.stitched_qty, sb.received_qty, sb.created_at, sb.status,
+                   pp.program_number, pp.name AS program_name,
+                   p.name AS product_name, p.code AS product_code,
+                   c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name
+            FROM stitching_batches sb
+            INNER JOIN production_programs pp ON pp.id = sb.program_id
+            LEFT JOIN products p ON p.id = pp.product_id
+            LEFT JOIN categories c ON c.id = COALESCE(sb.category_id, p.category_id)
+            LEFT JOIN subcategories sc ON sc.id = COALESCE(sb.subcategory_id, p.subcategory_id)
+            LEFT JOIN sub_subcategories ssc ON ssc.id = COALESCE(sb.sub_subcategory_id, p.sub_subcategory_id)
+            WHERE (sb.qr_generation_id IS NULL OR sb.qr_generation_id = 0)
+              {$concernWhere}
+            ORDER BY sb.id DESC
+            LIMIT 200
+        ", $params);
+
+        foreach ($batches as &$b) {
+            $items = Database::fetchAll("
+                SELECT si.id, si.size_name, si.color_name,
+                       COALESCE(NULLIF(si.stitched_qty, 0), NULLIF(si.stitched_quantity, 0), si.received_qty, 0) as qty,
+                       si.catalog_hierarchy, si.base_price, si.discount_price
+                FROM stitching_items si
+                WHERE si.stitching_batch_id = ?
+            ", [$b['id']]);
+            $b['items'] = $items;
+            $calcTotal = 0;
+            foreach ($items as $it) {
+                $calcTotal += (int)$it['qty'];
+            }
+            $b['total_pieces'] = $calcTotal > 0 ? $calcTotal : max(1, (int)($b['stitched_qty'] ?: $b['received_qty']));
+        }
+        unset($b);
+
+        return $batches;
     }
 
     /**

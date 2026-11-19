@@ -1205,6 +1205,46 @@ CREATE TABLE `products` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
+-- Table structure for `third_party_products`
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `third_party_products`;
+CREATE TABLE `third_party_products` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `concern_id` int(11) DEFAULT NULL,
+  `name` varchar(255) NOT NULL,
+  `code` varchar(100) NOT NULL,
+  `vendor_sku` varchar(100) DEFAULT NULL,
+  `category_id` int(10) unsigned DEFAULT NULL,
+  `subcategory_id` int(10) unsigned DEFAULT NULL,
+  `sub_subcategory_id` int(10) unsigned DEFAULT NULL,
+  `category_code` varchar(50) DEFAULT NULL,
+  `subcategory_code` varchar(50) DEFAULT NULL,
+  `sub_subcategory_code` varchar(50) DEFAULT NULL,
+  `brand_id` int(10) unsigned DEFAULT NULL,
+  `seller_id` int(10) unsigned DEFAULT NULL,
+  `color` varchar(100) DEFAULT NULL,
+  `size` varchar(50) DEFAULT NULL,
+  `unit` varchar(30) DEFAULT 'PCS',
+  `hsn_code` varchar(20) DEFAULT NULL,
+  `mrp` decimal(10,2) DEFAULT 0.00,
+  `selling_price` decimal(10,2) DEFAULT 0.00,
+  `purchase_rate` decimal(10,2) DEFAULT 0.00,
+  `attributes` text DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `is_complementary` tinyint(1) DEFAULT 0,
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_by` int(10) unsigned DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `code` (`code`),
+  KEY `idx_tp_cat` (`category_id`),
+  KEY `idx_tp_subcat` (`subcategory_id`),
+  KEY `idx_tp_seller` (`seller_id`),
+  KEY `idx_tp_concern` (`concern_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
 -- [43/82] Table structure for `purchase_inward_items`
 -- ------------------------------------------------------------
 DROP TABLE IF EXISTS `purchase_inward_items`;

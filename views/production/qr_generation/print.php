@@ -6,6 +6,7 @@
     <title><?= e($batch['brand_name']) ?> — QR Labels (<?= count($batch['items']) ?> pcs)</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         body {
@@ -98,17 +99,6 @@
             font-weight: 800;
         }
 
-        .label-footer {
-            border-top: 1.5px solid #000;
-            padding-top: 3px;
-            margin-top: 5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 10px;
-            font-weight: 800;
-        }
-
         @media print {
             body {
                 background: #fff;
@@ -139,6 +129,9 @@
                 </small>
             </div>
             <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-dark fw-bold" data-bs-toggle="modal" data-bs-target="#printerSettingsModal">
+                    <i class="bi bi-sliders me-1 text-primary"></i> QR Format Config
+                </button>
                 <button onclick="window.print()" class="btn btn-primary fw-bold">
                     <i class="bi bi-printer-fill me-1"></i> Print All <?= count($batch['items']) ?> Labels
                 </button>
@@ -149,8 +142,23 @@
         </div>
 
         <!-- Labels Grid -->
+        <?php
+            $isFabricBatch = strtoupper((string)($batch['qr_source'] ?? '')) === QrGenerationService::SOURCE_FABRIC;
+            $sourcePurchaseDate = trim((string)($batch['source_purchase_date'] ?? ''));
+            if ($sourcePurchaseDate === '') {
+                $sourcePurchaseDate = trim((string)($batch['created_at'] ?? ''));
+            }
+            $sourcePurchaseTimestamp = $sourcePurchaseDate !== '' ? strtotime($sourcePurchaseDate) : false;
+            $fabricMonthYear = $sourcePurchaseTimestamp !== false ? date('m/Y', $sourcePurchaseTimestamp) : '';
+        ?>
         <div class="labels-grid">
             <?php foreach ($batch['items'] as $item): ?>
+            <?php
+                $displayQrLabel = $isFabricBatch ? $fabricMonthYear : trim((string)($batch['variant_code'] ?? ''));
+                if (!$isFabricBatch && $displayQrLabel === '') {
+                    $displayQrLabel = (string)($item['qr_code'] ?? '');
+                }
+            ?>
             <div class="garment-label-card">
                 <!-- Top Brand Header: Given Brand Name Print -->
                 <div class="label-header">
@@ -168,7 +176,7 @@
                     <div class="qr-canvas-box print-qr-item" data-code="<?= e($item['qr_code']) ?>"></div>
                     <div class="label-meta flex-grow-1">
                         <div class="font-monospace fw-bold text-dark" style="font-size: 10px; word-break: break-all;">
-                            <?= e($item['qr_code']) ?>
+                            <?= e($displayQrLabel) ?>
                         </div>
                         <?php if (!empty($batch['color_name'])): ?>
                         <div><strong>Col:</strong> <?= e($batch['color_name']) ?></div>
@@ -181,21 +189,34 @@
                         <?php endif; ?>
                     </div>
                 </div>
-
-                <!-- Footer: Pricing -->
-                <div class="label-footer">
-                    <?php if ((float)$batch['mrp'] > 0): ?>
-                    <div class="text-muted">MRP: ₹<?= number_format((float)$batch['mrp'], 2) ?></div>
-                    <?php endif; ?>
-                    <div class="text-dark">PRICE: ₹<?= number_format((float)$batch['selling_price'], 2) ?></div>
-                </div>
             </div>
             <?php endforeach; ?>
         </div>
     </div>
 
     <script>
+        function applyPrintSheetSettings(config) {
+            if (!config) return;
+            const grid = document.querySelector('.labels-grid');
+            if (grid && config.columns) {
+                grid.style.gridTemplateColumns = `repeat(${config.columns}, 1fr)`;
+                grid.style.gap = `${config.gapMm || 2}mm`;
+            }
+            const cards = document.querySelectorAll('.garment-label-card');
+            cards.forEach(card => {
+                if (config.labelWidthMm) card.style.minWidth = `${config.labelWidthMm}mm`;
+                if (config.labelHeightMm) card.style.minHeight = `${config.labelHeightMm}mm`;
+            });
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
+            const savedConfig = localStorage.getItem('grm_qr_printer_config');
+            if (savedConfig) {
+                try {
+                    applyPrintSheetSettings(JSON.parse(savedConfig));
+                } catch(e) {}
+            }
+
             document.querySelectorAll('.print-qr-item').forEach(function(el) {
                 new QRCode(el, {
                     text: el.dataset.code,
@@ -206,5 +227,7 @@
             });
         });
     </script>
+
+    <?php require __DIR__ . '/_qr_format_modal.php'; ?>
 </body>
 </html>

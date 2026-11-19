@@ -135,27 +135,38 @@ foreach ($items as $billItem) {
 
         <div class="card border shadow-sm mb-4">
             <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-success"></i>Product Lines &amp; Catalog Mapping</h5>
-                <span class="small text-muted">Category is required. MRP and selling price are saved with the mapped catalog variant.</span>
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-success"></i>Product Lines &amp; Catalog Mapping</h5>
+                    <span class="small text-muted">Category is required. MRP and selling price are saved with the mapped catalog variant.</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="<?= url('production/third-party-catalog') ?>" target="_blank" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1.5">
+                        <i class="bi bi-collection"></i> Third-Party Catalog
+                    </a>
+                    <button type="button" class="btn btn-sm btn-primary d-inline-flex align-items-center gap-1.5 shadow-xs" data-bs-toggle="modal" data-bs-target="#modalAddBillProduct">
+                        <i class="bi bi-plus-circle-fill"></i> Add Product Line to Bill
+                    </button>
+                </div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0 bill-mapping-table">
                         <thead class="table-light">
                             <tr>
-                                <th style="width:50px;">#</th>
-                                <th style="min-width:250px;">Product / Bill Line</th>
-                                <th class="text-end" style="min-width:100px;">Bill Qty</th>
-                                <th class="text-end" style="min-width:110px;">Purchase Rate</th>
-                                <th class="text-end" style="min-width:120px;">Line Amount</th>
-                                <th class="text-end" style="min-width:120px;">MRP (₹) *</th>
-                                <th class="text-end" style="min-width:130px;">Selling (₹) *</th>
-                                <th style="min-width:170px;">Category *</th>
-                                <th style="min-width:170px;">Subcategory</th>
-                                <th style="min-width:180px;">Sub-Subcategory</th>
-                                <th class="text-center" style="min-width:120px;">Attributes</th>
-                                <th style="min-width:145px;">QR / GRN</th>
-                                <th class="text-center" style="min-width:90px;">Compl.</th>
+                                <th style="width:40px;">#</th>
+                                <th style="min-width:230px;">Product / Bill Line</th>
+                                <th class="text-end" style="min-width:90px;">Bill Qty</th>
+                                <th class="text-end" style="min-width:100px;">Purchase Rate</th>
+                                <th class="text-end" style="min-width:110px;">Line Amount</th>
+                                <th class="text-end" style="min-width:110px;">MRP (₹) *</th>
+                                <th class="text-end" style="min-width:110px;">Selling (₹) *</th>
+                                <th style="min-width:165px;">Category *</th>
+                                <th style="min-width:165px;">Subcategory</th>
+                                <th style="min-width:165px;">Sub-Subcategory</th>
+                                <th class="text-center" style="min-width:105px;">Attributes</th>
+                                <th style="min-width:130px;">QR / GRN</th>
+                                <th class="text-center" style="min-width:70px;">Compl.</th>
+                                <th class="text-center" style="width:50px;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -221,12 +232,22 @@ foreach ($items as $billItem) {
                                             <?php endforeach; ?>
                                         </select>
                                     </td>
-                                    <td data-subcategory-label="<?= $itemId ?>"><span class="text-muted small">—</span></td>
-                                    <td data-subsubcategory-label="<?= $itemId ?>"><span class="text-muted small">—</span></td>
+                                    <td>
+                                        <select name="items[<?= $itemId ?>][subcategory_id]" id="subcategory_<?= $itemId ?>"
+                                                class="form-select form-select-sm" data-subcategory disabled>
+                                            <option value="">-- Select Subcategory --</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="items[<?= $itemId ?>][sub_subcategory_id]" id="subsubcategory_<?= $itemId ?>"
+                                                class="form-select form-select-sm" data-subsubcategory disabled>
+                                            <option value="">-- Select Sub-Subcategory --</option>
+                                        </select>
+                                    </td>
                                     <td class="text-center">
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle-attributes="<?= $itemId ?>"
-                                                title="Show category attributes">
-                                            <i class="bi bi-sliders me-1"></i>Attributes
+                                        <button type="button" class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-1" data-toggle-attributes="<?= $itemId ?>"
+                                                title="View / Edit Attributes &amp; Specifications">
+                                            <i class="bi bi-sliders"></i>Specs
                                         </button>
                                     </td>
                                     <td>
@@ -256,33 +277,26 @@ foreach ($items as $billItem) {
                                                data-complementary-item="<?= $itemId ?>"
                                                <?= !empty($item['is_complementary']) ? 'checked' : '' ?>>
                                     </td>
+                                    <td class="text-center">
+                                        <?php if (empty($item['is_mapped'])): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-danger p-1" title="Remove line from purchase bill" onclick="deleteBillProduct(<?= $itemId ?>, '<?= e(addslashes($item['item_name'])) ?>')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                    </td>
                                 </tr>
 
                                 <tr id="attr_row_<?= $itemId ?>" class="d-none" data-attribute-row="<?= $itemId ?>">
-                                    <td colspan="13" class="bg-light p-4">
-                                        <div class="row g-3 align-items-end">
-                                            <div class="col-lg-6">
-                                                <label class="form-label fw-bold small" for="subcategory_<?= $itemId ?>">Subcategory</label>
-                                                <select name="items[<?= $itemId ?>][subcategory_id]" id="subcategory_<?= $itemId ?>"
-                                                        class="form-select form-select-sm" data-subcategory disabled>
-                                                    <option value="">-- Select Subcategory --</option>
-                                                </select>
+                                    <td colspan="14" class="bg-light p-3">
+                                        <div class="border rounded-3 p-3 bg-white shadow-xs">
+                                            <div class="d-flex align-items-center justify-content-between border-bottom pb-2 mb-3">
+                                                <h6 class="fw-bold mb-0 text-dark">
+                                                    <i class="bi bi-sliders text-success me-1.5"></i>Category Attributes &amp; Specifications for <span class="text-primary"><?= e($item['item_name']) ?></span>
+                                                </h6>
+                                                <button type="button" class="btn-close btn-sm" aria-label="Close" onclick="document.getElementById('attr_row_<?= $itemId ?>').classList.add('d-none')"></button>
                                             </div>
-                                            <div class="col-lg-6">
-                                                <label class="form-label fw-bold small" for="subsubcategory_<?= $itemId ?>">Sub-Subcategory</label>
-                                                <select name="items[<?= $itemId ?>][sub_subcategory_id]" id="subsubcategory_<?= $itemId ?>"
-                                                        class="form-select form-select-sm" data-subsubcategory disabled>
-                                                    <option value="">-- Select Sub-Subcategory --</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div class="mt-4">
-                                            <h6 class="fw-bold border-bottom pb-2 mb-3">
-                                                <i class="bi bi-sliders text-success me-1"></i>Category Attributes &amp; Specifications
-                                            </h6>
-                                            <div data-attributes-notice class="text-muted small text-center py-3">
-                                                <i class="bi bi-info-circle me-1"></i>Select a category to load configured attributes.
+                                            <div data-attributes-notice class="text-muted small text-center py-2">
+                                                <i class="bi bi-info-circle me-1"></i>Select a category above to load configured specifications.
                                             </div>
                                             <div data-attributes-fields class="row g-3 d-none"></div>
                                         </div>
@@ -295,7 +309,7 @@ foreach ($items as $billItem) {
                                 <th colspan="2" class="text-end">Bill Totals</th>
                                 <th class="text-end"><?= number_format($totalQty, 2) ?></th>
                                 <th colspan="2"></th>
-                                <th colspan="8" class="text-start">
+                                <th colspan="9" class="text-start">
                                     <span class="small text-muted">Total line value: <strong class="text-dark">₹<?= number_format($totalAmount, 2) ?></strong></span>
                                 </th>
                             </tr>
@@ -319,6 +333,143 @@ foreach ($items as $billItem) {
         </div>
     </form>
 <?php endif; ?>
+
+<!-- ========================================================================= -->
+<!-- MODAL: ADD PRODUCT LINE DIRECTLY TO PURCHASE BILL -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="modalAddBillProduct" tabindex="-1" aria-labelledby="modalAddBillProductLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <form class="modal-content" id="formAddBillProduct" onsubmit="submitAddBillProduct(event)">
+            <?= CSRF::field() ?>
+            <input type="hidden" name="purchase_id" value="<?= (int)$purchase['id'] ?>">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold" id="modalAddBillProductLabel">
+                    <i class="bi bi-plus-circle text-primary me-2"></i>Add Product Line to Purchase Bill
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="addBillProductAlert" class="alert alert-danger d-none py-2 px-3 small"></div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-7">
+                        <label class="form-label fw-semibold small">Product / Item Name <span class="text-danger">*</span></label>
+                        <input type="text" name="new_item_name" id="new_item_name" class="form-control" placeholder="e.g. Men's Cotton Polo T-Shirt" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label fw-semibold small">Vendor SKU / Code</label>
+                        <input type="text" name="new_vendor_sku" id="new_vendor_sku" class="form-control font-monospace text-uppercase" placeholder="e.g. TP-POLO-NAVY-M">
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold small">Color / Shade</label>
+                        <input type="text" name="new_color" id="new_color" class="form-control" placeholder="e.g. Navy Blue">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold small">Size</label>
+                        <input type="text" name="new_size" id="new_size" class="form-control font-monospace" placeholder="e.g. M / 38 / Free Size">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold small">HSN Code</label>
+                        <input type="text" name="new_hsn_code" id="new_hsn_code" class="form-control font-monospace" placeholder="e.g. 61091000">
+                    </div>
+                </div>
+
+                <div class="card bg-light border-0 p-3 mb-3">
+                    <h6 class="fw-bold mb-2 small text-dark"><i class="bi bi-currency-rupee text-success me-1"></i>Pricing, Quantity &amp; Taxes</h6>
+                    <div class="row g-2">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Bill Quantity <span class="text-danger">*</span></label>
+                            <input type="number" name="new_quantity" id="new_quantity" class="form-control font-monospace text-end" min="0.01" step="0.01" value="1.00" required oninput="calcNewProductTotals()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Unit</label>
+                            <select name="new_unit" id="new_unit" class="form-select">
+                                <option value="PCS" selected>PCS</option>
+                                <option value="MTR">MTR</option>
+                                <option value="KGS">KGS</option>
+                                <option value="SET">SET</option>
+                                <option value="BOX">BOX</option>
+                                <option value="DOZEN">DOZEN</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold small">Purchase Rate (₹) <span class="text-danger">*</span></label>
+                            <input type="number" name="new_unit_price" id="new_unit_price" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required oninput="calcNewProductTotals()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">MRP (₹) <span class="text-danger">*</span></label>
+                            <input type="number" name="new_mrp" id="new_mrp" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required oninput="calcNewProductTotals()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold small">Selling (₹) <span class="text-danger">*</span></label>
+                            <input type="number" name="new_selling_price" id="new_selling_price" class="form-control font-monospace text-end" min="0.01" step="0.01" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mt-2 align-items-center">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small mb-1">GST Tax Rate</label>
+                            <select name="new_gst_rate" id="new_gst_rate" class="form-select form-select-sm" onchange="calcNewProductTotals()">
+                                <option value="5" selected>5% GST (Standard Garments)</option>
+                                <option value="12">12% GST</option>
+                                <option value="18">18% GST</option>
+                                <option value="0">0% (Exempted)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8 text-end">
+                            <span class="small text-muted me-3">Base: <strong id="newProductBaseDisplay">₹0.00</strong></span>
+                            <span class="small text-muted me-3">Tax: <strong id="newProductTaxDisplay">₹0.00</strong></span>
+                            <span class="fw-bold text-dark">Line Total: <span class="text-success fs-6" id="newProductTotalDisplay">₹0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border border-primary-subtle bg-primary-subtle bg-opacity-10 p-3 mb-3">
+                    <h6 class="fw-bold mb-2 small text-primary"><i class="bi bi-diagram-3 me-1"></i>Catalog Category Assignment</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">Category <span class="text-danger">*</span></label>
+                            <select name="new_category_id" id="new_category_id" class="form-select form-select-sm" required onchange="loadNewProductSubcategories()">
+                                <option value="">-- Select Category --</option>
+                                <?php foreach ($categories as $c): ?>
+                                    <option value="<?= (int)$c['id'] ?>"><?= e($c['name']) ?> (<?= e($c['code']) ?>)</option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">Subcategory</label>
+                            <select name="new_subcategory_id" id="new_subcategory_id" class="form-select form-select-sm" disabled onchange="loadNewProductSubSubcategories()">
+                                <option value="">-- Select Subcategory --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold small">Sub-Subcategory</label>
+                            <select name="new_sub_subcategory_id" id="new_sub_subcategory_id" class="form-select form-select-sm" disabled>
+                                <option value="">-- Select Sub-Subcategory --</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="new_is_complementary" id="new_is_complementary" value="1">
+                    <label class="form-check-label small" for="new_is_complementary">
+                        This is a complementary / gift product (packed with main product, does not affect primary pricing)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer bg-light py-2.5">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary fw-bold" id="btnSubmitNewBillProduct">
+                    <i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <style>
 .bill-mapping-table thead th {
@@ -356,10 +507,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const row = document.getElementById('attr_row_' + id);
             if (!row) return;
             row.classList.toggle('d-none');
-            if (!row.classList.contains('d-none')) {
-                const select = document.querySelector(`#category_${id}`);
-                if (select) select.focus();
-            }
         });
     });
 
@@ -368,16 +515,15 @@ document.addEventListener('DOMContentLoaded', function() {
         const savedItem = itemData.find(item => String(item.id) === itemId) || {};
         const detailRow = document.getElementById('attr_row_' + itemId);
         const category = row.querySelector('[data-category]');
-        const subcategory = detailRow.querySelector('[data-subcategory]');
-        const subsubcategory = detailRow.querySelector('[data-subsubcategory]');
-        const notice = detailRow.querySelector('[data-attributes-notice]');
-        const fields = detailRow.querySelector('[data-attributes-fields]');
+        const subcategory = row.querySelector('[data-subcategory]');
+        const subsubcategory = row.querySelector('[data-subsubcategory]');
+        const notice = detailRow ? detailRow.querySelector('[data-attributes-notice]') : null;
+        const fields = detailRow ? detailRow.querySelector('[data-attributes-fields]') : null;
         const mrp = row.querySelector(`#mrp_${itemId}`);
         const sellingPrice = row.querySelector(`#selling_price_${itemId}`);
-        const subcategoryLabel = row.querySelector(`[data-subcategory-label="${itemId}"]`);
-        const subsubcategoryLabel = row.querySelector(`[data-subsubcategory-label="${itemId}"]`);
 
         function validatePrices() {
+            if (!mrp || !sellingPrice) return;
             const mrpValue = Number(mrp.value);
             const sellingValue = Number(sellingPrice.value);
             sellingPrice.setCustomValidity(
@@ -387,48 +533,48 @@ document.addEventListener('DOMContentLoaded', function() {
             );
         }
 
-        function updateHierarchyLabels() {
-            if (subcategoryLabel) {
-                subcategoryLabel.innerHTML = subcategory.value
-                    ? `<span class="badge bg-info-subtle text-info border">${subcategory.options[subcategory.selectedIndex].text}</span>`
-                    : '<span class="text-muted small">—</span>';
-            }
-            if (subsubcategoryLabel) {
-                subsubcategoryLabel.innerHTML = subsubcategory.value
-                    ? `<span class="badge bg-light text-dark border">${subsubcategory.options[subsubcategory.selectedIndex].text}</span>`
-                    : '<span class="text-muted small">—</span>';
-            }
-        }
+        if (mrp) mrp.addEventListener('input', validatePrices);
+        if (sellingPrice) sellingPrice.addEventListener('input', validatePrices);
 
-        mrp.addEventListener('input', validatePrices);
-        sellingPrice.addEventListener('input', validatePrices);
-        category.addEventListener('change', () => loadHierarchy(0, 0));
-        subcategory.addEventListener('change', () => loadSubSubcategories(0));
-        subsubcategory.addEventListener('change', () => {
-            loadAttributes(parseInt(category.value, 10) || 0, parseInt(subcategory.value, 10) || 0, parseInt(subsubcategory.value, 10) || 0);
-            updateHierarchyLabels();
-        });
+        if (category) {
+            category.addEventListener('change', () => loadHierarchy(0, 0));
+        }
+        if (subcategory) {
+            subcategory.addEventListener('change', () => loadSubSubcategories(0));
+        }
+        if (subsubcategory) {
+            subsubcategory.addEventListener('change', () => {
+                loadAttributes(parseInt(category.value, 10) || 0, parseInt(subcategory.value, 10) || 0, parseInt(subsubcategory.value, 10) || 0);
+            });
+        }
 
         function loadHierarchy(preselectedSubcategory, preselectedSubSubcategory) {
             const categoryId = parseInt(category.value, 10) || 0;
-            subcategory.innerHTML = '<option value="">-- Select Subcategory --</option>';
-            subcategory.disabled = true;
-            subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-            subsubcategory.disabled = true;
-            updateHierarchyLabels();
+            if (subcategory) {
+                subcategory.innerHTML = '<option value="">-- Select Subcategory --</option>';
+                subcategory.disabled = true;
+            }
+            if (subsubcategory) {
+                subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
+                subsubcategory.disabled = true;
+            }
 
             if (!categoryId) {
-                notice.classList.remove('d-none');
-                notice.innerHTML = '<i class="bi bi-info-circle me-1"></i>Select a category to load configured attributes.';
-                fields.classList.add('d-none');
-                fields.innerHTML = '';
+                if (notice) {
+                    notice.classList.remove('d-none');
+                    notice.innerHTML = '<i class="bi bi-info-circle me-1"></i>Select a category above to load configured specifications.';
+                }
+                if (fields) {
+                    fields.classList.add('d-none');
+                    fields.innerHTML = '';
+                }
                 return;
             }
 
-            fetch('<?= url("api/subcategories/") ?>' + categoryId)
+            fetch('<?= url("api/subcategories") ?>/' + categoryId)
                 .then(response => response.json())
                 .then(data => {
-                    if (!Array.isArray(data)) return;
+                    if (!Array.isArray(data) || !subcategory) return;
                     data.forEach(sub => {
                         const option = document.createElement('option');
                         option.value = sub.id;
@@ -436,9 +582,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         option.selected = Number(sub.id) === Number(preselectedSubcategory);
                         subcategory.appendChild(option);
                     });
-                    subcategory.disabled = data.length === 0;
-                    if (preselectedSubcategory) loadSubSubcategories(preselectedSubSubcategory);
-                    updateHierarchyLabels();
+                    if (data.length > 0) {
+                        subcategory.disabled = false;
+                    } else {
+                        subcategory.innerHTML = '<option value="">-- No Subcategories --</option>';
+                        subcategory.disabled = true;
+                    }
+                    if (preselectedSubcategory) {
+                        loadSubSubcategories(preselectedSubSubcategory);
+                    }
                 })
                 .catch(error => console.error(error));
 
@@ -446,19 +598,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         function loadSubSubcategories(preselectedSubSubcategory) {
-            const subcategoryId = parseInt(subcategory.value, 10) || 0;
-            subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
-            subsubcategory.disabled = true;
+            const subcategoryId = subcategory ? (parseInt(subcategory.value, 10) || 0) : 0;
+            if (subsubcategory) {
+                subsubcategory.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
+                subsubcategory.disabled = true;
+            }
             if (!subcategoryId) {
                 loadAttributes(parseInt(category.value, 10) || 0, 0, 0);
-                updateHierarchyLabels();
                 return;
             }
 
-            fetch('<?= url("api/sub-subcategories/") ?>' + subcategoryId)
+            fetch('<?= url("api/sub-subcategories") ?>/' + subcategoryId)
                 .then(response => response.json())
                 .then(data => {
-                    if (!Array.isArray(data)) return;
+                    if (!Array.isArray(data) || !subsubcategory) return;
                     data.forEach(sub => {
                         const option = document.createElement('option');
                         option.value = sub.id;
@@ -466,8 +619,12 @@ document.addEventListener('DOMContentLoaded', function() {
                         option.selected = Number(sub.id) === Number(preselectedSubSubcategory);
                         subsubcategory.appendChild(option);
                     });
-                    subsubcategory.disabled = data.length === 0;
-                    updateHierarchyLabels();
+                    if (data.length > 0) {
+                        subsubcategory.disabled = false;
+                    } else {
+                        subsubcategory.innerHTML = '<option value="">-- No Sub-Subcategories --</option>';
+                        subsubcategory.disabled = true;
+                    }
                 })
                 .catch(error => console.error(error));
 
@@ -475,13 +632,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         function loadAttributes(categoryId, subcategoryId, subSubcategoryId) {
-            if (!categoryId) return;
+            if (!categoryId || !notice || !fields) return;
             notice.classList.remove('d-none');
             notice.innerHTML = '<span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>Loading category attributes...';
             fields.classList.add('d-none');
             fields.innerHTML = '';
 
-            let endpoint = '<?= url("api/categories/attributes/") ?>' + categoryId;
+            let endpoint = '<?= url("api/categories/attributes") ?>/' + categoryId;
             const params = [];
             if (subcategoryId) params.push('subcategory_id=' + subcategoryId);
             if (subSubcategoryId) params.push('sub_subcategory_id=' + subSubcategoryId);
@@ -571,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         validatePrices();
         const initialCategory = parseInt(savedItem.mapped_category_id, 10) || 0;
-        if (initialCategory) {
+        if (initialCategory && category) {
             category.value = initialCategory;
             loadHierarchy(
                 parseInt(savedItem.mapped_subcategory_id, 10) || 0,
@@ -580,4 +737,159 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+// Modal: Calculate live totals for new product
+function calcNewProductTotals() {
+    const qty = parseFloat(document.getElementById('new_quantity').value) || 0;
+    const rate = parseFloat(document.getElementById('new_unit_price').value) || 0;
+    const gstRate = parseFloat(document.getElementById('new_gst_rate').value) || 0;
+
+    const base = qty * rate;
+    const tax = base * (gstRate / 100);
+    const total = base + tax;
+
+    document.getElementById('newProductBaseDisplay').textContent = '₹' + base.toFixed(2);
+    document.getElementById('newProductTaxDisplay').textContent = '₹' + tax.toFixed(2);
+    document.getElementById('newProductTotalDisplay').textContent = '₹' + total.toFixed(2);
+
+    // Auto-suggest selling price if empty
+    const mrpInput = document.getElementById('new_mrp');
+    const spInput = document.getElementById('new_selling_price');
+    if (mrpInput && mrpInput.value && (!spInput.value || parseFloat(spInput.value) <= 0)) {
+        spInput.value = mrpInput.value;
+    }
+}
+
+// Modal: Load Subcategories for new product
+function loadNewProductSubcategories() {
+    const catId = document.getElementById('new_category_id').value;
+    const subSelect = document.getElementById('new_subcategory_id');
+    const subSubSelect = document.getElementById('new_sub_subcategory_id');
+
+    subSelect.innerHTML = '<option value="">-- Select Subcategory --</option>';
+    subSelect.disabled = true;
+    subSubSelect.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
+    subSubSelect.disabled = true;
+
+    if (!catId) return;
+
+    fetch('<?= url("api/subcategories") ?>/' + catId)
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+                data.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.id;
+                    opt.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
+                    subSelect.appendChild(opt);
+                });
+                subSelect.disabled = false;
+            } else {
+                subSelect.innerHTML = '<option value="">-- No Subcategories --</option>';
+            }
+        })
+        .catch(err => console.error(err));
+}
+
+// Modal: Load Sub-Subcategories for new product
+function loadNewProductSubSubcategories() {
+    const subId = document.getElementById('new_subcategory_id').value;
+    const subSubSelect = document.getElementById('new_sub_subcategory_id');
+
+    subSubSelect.innerHTML = '<option value="">-- Select Sub-Subcategory --</option>';
+    subSubSelect.disabled = true;
+
+    if (!subId) return;
+
+    fetch('<?= url("api/sub-subcategories") ?>/' + subId)
+        .then(res => res.json())
+        .then(data => {
+            if (Array.isArray(data) && data.length > 0) {
+                data.forEach(sub => {
+                    const opt = document.createElement('option');
+                    opt.value = sub.id;
+                    opt.textContent = sub.name + (sub.code ? ' (' + sub.code + ')' : '');
+                    subSubSelect.appendChild(opt);
+                });
+                subSubSelect.disabled = false;
+            } else {
+                subSubSelect.innerHTML = '<option value="">-- No Sub-Subcategories --</option>';
+            }
+        })
+        .catch(err => console.error(err));
+}
+
+// Submit Modal form to add product to bill
+async function submitAddBillProduct(e) {
+    e.preventDefault();
+    const alertBox = document.getElementById('addBillProductAlert');
+    const btn = document.getElementById('btnSubmitNewBillProduct');
+    alertBox.classList.add('d-none');
+    alertBox.textContent = '';
+
+    const mrp = parseFloat(document.getElementById('new_mrp').value) || 0;
+    const sp = parseFloat(document.getElementById('new_selling_price').value) || 0;
+    if (sp > mrp) {
+        alertBox.textContent = 'Selling price (₹' + sp.toFixed(2) + ') cannot exceed MRP (₹' + mrp.toFixed(2) + ').';
+        alertBox.classList.remove('d-none');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Adding...';
+
+    const formData = new FormData(document.getElementById('formAddBillProduct'));
+
+    try {
+        const resp = await fetch('<?= url("purchases/mapping/add-product") ?>', {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+            // Reload page to reflect updated bill items and totals
+            window.location.reload();
+        } else {
+            alertBox.textContent = result.message || 'Error adding product.';
+            alertBox.classList.remove('d-none');
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill';
+        }
+    } catch (err) {
+        alertBox.textContent = 'Network or server error: ' + err.message;
+        alertBox.classList.remove('d-none');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Add to Purchase Bill';
+    }
+}
+
+// Delete an unmapped product from the bill
+async function deleteBillProduct(itemId, itemName) {
+    if (!confirm('Are you sure you want to remove product "' + itemName + '" from this purchase bill?')) {
+        return;
+    }
+
+    try {
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+        const formData = new FormData();
+        formData.append('csrf_token', csrfToken);
+
+        const resp = await fetch('<?= url("purchases/mapping/delete-product") ?>/' + itemId, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+            window.location.reload();
+        } else {
+            alert(result.message || 'Error removing product line.');
+        }
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
 </script>

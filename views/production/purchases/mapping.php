@@ -1,6 +1,15 @@
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
-        <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Purchase Item Mapping</h2>
+        <h2 class="mb-1"><i class="bi bi-diagram-3 me-2 text-primary"></i>Third-Party Product Mapping</h2>
+        <span class="text-muted small">Exclusively for mapping third-party purchased products to catalog categories &amp; variants. Fabric rolls &amp; raw materials move directly to QR Generations.</span>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a href="<?= url('production/third-party-catalog') ?>" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-collection me-1"></i> Third-Party Catalog
+        </a>
+        <a href="<?= url('production/third-party-catalog/create') ?>" class="btn btn-primary btn-sm shadow-sm">
+            <i class="bi bi-plus-circle-fill me-1"></i> Create Third-Party Catalog
+        </a>
     </div>
 </div>
 
@@ -9,7 +18,7 @@
     <div class="col-md-3 col-sm-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-body">
-                <div class="text-muted small text-uppercase fw-semibold">Total Purchase Items</div>
+                <div class="text-muted small text-uppercase fw-semibold">Third-Party Products</div>
                 <div class="fs-3 fw-bold text-dark"><?= number_format((int)($metrics['total_items'] ?? 0)) ?></div>
                 <div class="small text-muted"><?= number_format((float)($metrics['total_quantity'] ?? 0)) ?> purchased units (pcs)</div>
             </div>
@@ -29,7 +38,7 @@
             <div class="card-body">
                 <div class="text-muted small text-uppercase fw-semibold">Successfully Mapped</div>
                 <div class="fs-3 fw-bold text-success"><?= number_format((int)($metrics['mapped_count'] ?? 0)) ?></div>
-                <div class="small text-muted">Configured in master catalog</div>
+                <div class="small text-muted">Configured in third-party catalog</div>
             </div>
         </div>
     </div>
@@ -74,7 +83,7 @@
                     </a>
                     <a href="<?= url('purchases/mapping?status=all' . ($search ? '&search=' . urlencode($search) : '')) ?>" 
                        class="btn btn-sm <?= ($status === 'all') ? 'btn-primary fw-bold' : 'btn-outline-secondary' ?>">
-                        All Items (<?= number_format((int)($metrics['total_items'] ?? 0)) ?>)
+                        All Third-Party (<?= number_format((int)($metrics['total_items'] ?? 0)) ?>)
                     </a>
                 </div>
             </div>
@@ -88,15 +97,7 @@
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-2">
-                <select name="item_type" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- All Item Types --</option>
-                    <?php foreach (['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'] as $type): ?>
-                        <option value="<?= e($type) ?>" <?= (($itemType ?? '') === $type) ? 'selected' : '' ?>><?= e(str_replace('_', ' ', $type)) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="col-md-3 ms-auto">
+            <div class="col-md-4 ms-auto">
                 <div class="input-group input-group-sm">
                     <input type="hidden" name="status" value="<?= e($status) ?>">
                     <input type="text" name="search" class="form-control" placeholder="Search item, vendor SKU, purchase #, vendor..." value="<?= e($search) ?>">

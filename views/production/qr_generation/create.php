@@ -60,6 +60,17 @@ $activeMeta = $tabs[$activeTab] ?? reset($tabs);
     </div>
     <?php endif; ?>
 
+    <?php if (isset($tabs['production_product'])): ?>
+    <!-- 4. PRODUCTION PRODUCTS (POST-STITCHING) -->
+    <div class="tab-pane fade <?= $activeTab === 'production_product' ? 'show active' : '' ?>" id="productionProductMode" role="tabpanel">
+        <?php
+            $sourceKey = 'production_product';
+            $sourceMeta = $tabs['production_product'];
+            require __DIR__ . '/_production_product_form.php';
+        ?>
+    </div>
+    <?php endif; ?>
+
     <?php if (isset($tabs['return'])): ?>
     <!-- RETURN QR (UI ONLY) -->
     <div class="tab-pane fade <?= $activeTab === 'return' ? 'show active' : '' ?>" id="returnMode" role="tabpanel">

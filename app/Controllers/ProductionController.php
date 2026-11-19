@@ -3086,10 +3086,17 @@ class ProductionController {
         $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'unmapped';
         $search = isset($_GET['search']) ? trim((string)$_GET['search']) : '';
         $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : 0;
-        $itemType = !empty($_GET['item_type']) ? strtoupper(trim((string)$_GET['item_type'])) : '';
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
 
         $where = [];
         $params = [];
+
+        // Strictly restrict mapping to Third-Party Products only
+        $where[] = "ppi.item_type = 'THIRD_PARTY'";
+        if ($cid) {
+            $where[] = ($cid === 1) ? "(pp.concern_id = ? OR pp.concern_id IS NULL)" : "pp.concern_id = ?";
+            $params[] = $cid;
+        }
 
         if ($status === 'unmapped') {
             $where[] = "ppi.is_mapped = 0";
@@ -3118,10 +3125,6 @@ class ProductionController {
             $where[] = "ppi.mapped_category_id = ?";
             $params[] = $categoryId;
         }
-        if (in_array($itemType, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY', 'OWN_PRODUCT'], true)) {
-            $where[] = "ppi.item_type = ?";
-            $params[] = $itemType;
-        }
 
         $whereClause = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
         $billFilterWhereClause = str_replace(
@@ -3148,7 +3151,7 @@ class ProductionController {
              LEFT JOIN subcategories sub ON sub.id = ppi.mapped_subcategory_id
              LEFT JOIN sub_subcategories subsub ON subsub.id = ppi.mapped_sub_subcategory_id
              LEFT JOIN users u ON u.id = ppi.mapped_by
-             WHERE ppi.purchase_id IN (
+             WHERE ppi.item_type = 'THIRD_PARTY' AND ppi.purchase_id IN (
                  SELECT DISTINCT filter_ppi.purchase_id
                  FROM production_purchase_items filter_ppi
                  INNER JOIN production_purchases filter_pp ON filter_pp.id = filter_ppi.purchase_id
@@ -3159,16 +3162,26 @@ class ProductionController {
             $params
         );
 
+        $metricWhere = "WHERE ppi.item_type = 'THIRD_PARTY'";
+        $metricParams = [];
+        if ($cid) {
+            $metricWhere .= ($cid === 1) ? " AND (pp.concern_id = ? OR pp.concern_id IS NULL)" : " AND pp.concern_id = ?";
+            $metricParams[] = $cid;
+        }
+
         $metrics = Database::fetchOne(
             "SELECT
                 COUNT(*) AS total_items,
-                COUNT(CASE WHEN is_mapped = 0 THEN 1 END) AS unmapped_count,
-                COUNT(CASE WHEN is_mapped = 1 THEN 1 END) AS mapped_count,
-                COUNT(CASE WHEN is_complementary = 1 THEN 1 END) AS complementary_count,
-                COUNT(CASE WHEN qr_generation_id IS NOT NULL THEN 1 END) AS qr_count,
-                COUNT(CASE WHEN grn_id IS NOT NULL THEN 1 END) AS grn_count,
-                COALESCE(SUM(quantity), 0) AS total_quantity
-             FROM production_purchase_items"
+                COUNT(CASE WHEN ppi.is_mapped = 0 THEN 1 END) AS unmapped_count,
+                COUNT(CASE WHEN ppi.is_mapped = 1 THEN 1 END) AS mapped_count,
+                COUNT(CASE WHEN ppi.is_complementary = 1 THEN 1 END) AS complementary_count,
+                COUNT(CASE WHEN ppi.qr_generation_id IS NOT NULL THEN 1 END) AS qr_count,
+                COUNT(CASE WHEN ppi.grn_id IS NOT NULL THEN 1 END) AS grn_count,
+                COALESCE(SUM(ppi.quantity), 0) AS total_quantity
+             FROM production_purchase_items ppi
+             INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+             {$metricWhere}",
+            $metricParams
         );
 
         $categories = Database::fetchAll(
@@ -3185,7 +3198,6 @@ class ProductionController {
             'status' => $status,
             'search' => $search,
             'categoryId' => $categoryId,
-            'itemType' => $itemType,
             'breadcrumb' => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
                 ['label' => 'Purchase Item Mapping'],
@@ -3219,7 +3231,7 @@ class ProductionController {
         $items = Database::fetchAll(
             "SELECT ppi.*
              FROM production_purchase_items ppi
-             WHERE ppi.purchase_id = ?
+             WHERE ppi.purchase_id = ? AND ppi.item_type = 'THIRD_PARTY'
              ORDER BY ppi.id ASC",
             [$purchaseId]
         );
@@ -3538,6 +3550,176 @@ class ProductionController {
         $item['parsed_attributes'] = $mappedAttributes;
 
         Response::json(['success' => true, 'item' => $item]);
+    }
+
+    /**
+     * AJAX endpoint to add a new product line directly to a purchase bill from the mapping interface.
+     */
+    public function ajaxAddBillMappingProduct(): void {
+        PurchaseMappingFulfillmentService::ensureSchema();
+
+        $purchaseId = (int)($_POST['purchase_id'] ?? 0);
+        $purchase = Database::fetchOne("SELECT * FROM production_purchases WHERE id = ?", [$purchaseId]);
+        if (!$purchase) {
+            Response::json(['success' => false, 'message' => 'Purchase bill not found.'], 404);
+            return;
+        }
+
+        $itemName = trim($_POST['new_item_name'] ?? '');
+        $qty = (float)($_POST['new_quantity'] ?? 0);
+        $rate = (float)($_POST['new_unit_price'] ?? 0);
+        $mrp = (float)($_POST['new_mrp'] ?? 0);
+        $sellingPrice = (float)($_POST['new_selling_price'] ?? 0);
+        $categoryId = (int)($_POST['new_category_id'] ?? 0);
+        $subcategoryId = !empty($_POST['new_subcategory_id']) ? (int)$_POST['new_subcategory_id'] : null;
+        $subSubcategoryId = !empty($_POST['new_sub_subcategory_id']) ? (int)$_POST['new_sub_subcategory_id'] : null;
+
+        if (empty($itemName)) {
+            Response::json(['success' => false, 'message' => 'Product Name is required.'], 422);
+            return;
+        }
+        if ($qty <= 0) {
+            Response::json(['success' => false, 'message' => 'Quantity must be greater than zero.'], 422);
+            return;
+        }
+        if ($rate < 0) {
+            Response::json(['success' => false, 'message' => 'Purchase Rate cannot be negative.'], 422);
+            return;
+        }
+        if ($mrp <= 0) {
+            Response::json(['success' => false, 'message' => 'MRP must be greater than zero.'], 422);
+            return;
+        }
+        if ($sellingPrice <= 0 || $sellingPrice > $mrp) {
+            Response::json(['success' => false, 'message' => 'Selling price must be greater than 0 and cannot exceed MRP.'], 422);
+            return;
+        }
+        if ($categoryId <= 0) {
+            Response::json(['success' => false, 'message' => 'Please select a Category.'], 422);
+            return;
+        }
+
+        $unit = strtoupper(trim($_POST['new_unit'] ?? 'PCS')) ?: 'PCS';
+        $vendorSku = trim($_POST['new_vendor_sku'] ?? '');
+        if (empty($vendorSku)) {
+            $prefix = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $itemName), 0, 5)) ?: 'PRD';
+            $vendorSku = 'TP-' . $prefix . '-' . strtoupper(substr(uniqid(), -4));
+        }
+        $color = trim($_POST['new_color'] ?? '');
+        $size = trim($_POST['new_size'] ?? '');
+        $hsn = trim($_POST['new_hsn_code'] ?? '5525');
+        $isComplementary = !empty($_POST['new_is_complementary']) ? 1 : 0;
+
+        // Calculate taxes
+        $gstRate = isset($_POST['new_gst_rate']) ? (float)$_POST['new_gst_rate'] : 5.0;
+        $baseTotal = round($qty * $rate, 2);
+        $taxAmount = round($baseTotal * ($gstRate / 100), 2);
+        $totalPrice = $baseTotal + $taxAmount;
+
+        $gstType = ($gstRate > 0) ? 'BOTH' : 'EXEMPTED';
+        $sgstVal = ($gstRate > 0) ? round($gstRate / 2, 2) : 0;
+        $cgstVal = ($gstRate > 0) ? round($gstRate / 2, 2) : 0;
+        $sgstAmt = round($taxAmount / 2, 2);
+        $cgstAmt = round($taxAmount / 2, 2);
+
+        $db = Database::getInstance();
+        $db->beginTransaction();
+        try {
+            $stmt = $db->prepare("
+                INSERT INTO production_purchase_items (
+                    purchase_id, item_type, item_name, product_code, vendor_sku,
+                    quantity, inwarded_qty, unit, unit_price, mrp, selling_price,
+                    total_price, gst_type, tax_input_type, tax_treatment,
+                    sgst_value, cgst_value, igst_value, sgst_amount, cgst_amount, igst_amount,
+                    color, size, hsn_code, is_complementary,
+                    mapped_category_id, mapped_subcategory_id, mapped_sub_subcategory_id,
+                    is_mapped, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, 0, ?, ?, ?, ?,
+                    ?, ?, 'PERCENT', 'EXCLUDED',
+                    ?, ?, 0, ?, ?, 0,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    0, NOW()
+                )
+            ");
+            $stmt->execute([
+                $purchaseId,
+                $purchase['purchase_type'] ?: 'THIRD_PARTY',
+                $itemName,
+                $vendorSku,
+                $vendorSku,
+                $qty,
+                $unit,
+                $rate,
+                $mrp,
+                $sellingPrice,
+                $totalPrice,
+                $gstType,
+                $sgstVal,
+                $cgstVal,
+                $sgstAmt,
+                $cgstAmt,
+                $color ?: null,
+                $size ?: null,
+                $hsn ?: null,
+                $isComplementary,
+                $categoryId,
+                $subcategoryId ?: null,
+                $subSubcategoryId ?: null
+            ]);
+            $newItemId = (int)$db->lastInsertId();
+
+            // Update purchase total_amount
+            $db->prepare("
+                UPDATE production_purchases
+                SET total_amount = (SELECT COALESCE(SUM(total_price), 0) FROM production_purchase_items WHERE purchase_id = ?),
+                    updated_at = NOW()
+                WHERE id = ?
+            ")->execute([$purchaseId, $purchaseId]);
+
+            $db->commit();
+            Response::json(['success' => true, 'message' => "Product '{$itemName}' added to bill successfully!", 'item_id' => $newItemId]);
+        } catch (Throwable $e) {
+            $db->rollBack();
+            Response::json(['success' => false, 'message' => 'Error adding product: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * AJAX endpoint to delete an unmapped product line from the purchase bill.
+     */
+    public function ajaxDeleteBillMappingProduct(string $id): void {
+        $itemId = (int)$id;
+        $item = Database::fetchOne("SELECT id, purchase_id, item_name, is_mapped FROM production_purchase_items WHERE id = ?", [$itemId]);
+        if (!$item) {
+            Response::json(['success' => false, 'message' => 'Item not found.'], 404);
+            return;
+        }
+        if (!empty($item['is_mapped'])) {
+            Response::json(['success' => false, 'message' => 'Cannot delete an item that has already been mapped.'], 422);
+            return;
+        }
+
+        $purchaseId = (int)$item['purchase_id'];
+        $db = Database::getInstance();
+        $db->beginTransaction();
+        try {
+            $db->prepare("DELETE FROM production_purchase_items WHERE id = ?")->execute([$itemId]);
+            $db->prepare("
+                UPDATE production_purchases
+                SET total_amount = (SELECT COALESCE(SUM(total_price), 0) FROM production_purchase_items WHERE purchase_id = ?),
+                    updated_at = NOW()
+                WHERE id = ?
+            ")->execute([$purchaseId, $purchaseId]);
+
+            $db->commit();
+            Response::json(['success' => true, 'message' => "Product '{$item['item_name']}' removed from bill."]);
+        } catch (Throwable $e) {
+            $db->rollBack();
+            Response::json(['success' => false, 'message' => 'Error deleting product: ' . $e->getMessage()], 500);
+        }
     }
 
     public function deleteSellerRoll(string $id): void {
@@ -7543,7 +7725,7 @@ class ProductionController {
 
     public function ajaxSubcategories(int $categoryId): void {
         try {
-            $sql = "SELECT sc.id, sc.name, sc.slug FROM subcategories sc
+            $sql = "SELECT sc.id, sc.name, sc.code, sc.slug FROM subcategories sc
                     WHERE sc.category_id = ? AND sc.is_active = 1";
             if (!empty($_GET['catalog_only'])) {
                 $sql .= " AND EXISTS (
@@ -7652,7 +7834,7 @@ class ProductionController {
 
     public function ajaxSubSubcategories(int $subcategoryId): void {
         try {
-            $sql = "SELECT ssc.id, ssc.name, ssc.slug FROM sub_subcategories ssc
+            $sql = "SELECT ssc.id, ssc.name, ssc.code, ssc.slug FROM sub_subcategories ssc
                     WHERE ssc.subcategory_id = ? AND ssc.is_active = 1";
             if (!empty($_GET['catalog_only'])) {
                 $sql .= " AND EXISTS (
@@ -18554,5 +18736,366 @@ class ProductionController {
         }
 
         Response::json(['valid' => true, 'available' => true, 'message' => '']);
+    }
+
+    /**
+     * =========================================================================
+     * THIRD-PARTY PRODUCT CATALOG (Independent master table: third_party_products)
+     * =========================================================================
+     */
+
+    public function thirdPartyCatalogList(): void {
+        $search = trim($_GET['search'] ?? '');
+        $categoryId = !empty($_GET['category_id']) ? (int)$_GET['category_id'] : null;
+        $subcategoryId = !empty($_GET['subcategory_id']) ? (int)$_GET['subcategory_id'] : null;
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
+
+        $where = ["tp.is_active = 1"];
+        $params = [];
+
+        if ($cid) {
+            $where[] = ($cid === 1) ? "(tp.concern_id = ? OR tp.concern_id IS NULL)" : "tp.concern_id = ?";
+            $params[] = $cid;
+        }
+
+        if (!empty($search)) {
+            $where[] = "(tp.name LIKE ? OR tp.code LIKE ? OR tp.vendor_sku LIKE ? OR tp.hsn_code LIKE ? OR c.name LIKE ? OR sc.name LIKE ? OR s.company LIKE ? OR s.name LIKE ?)";
+            $term = '%' . $search . '%';
+            $params = array_merge($params, [$term, $term, $term, $term, $term, $term, $term, $term]);
+        }
+
+        if ($categoryId) {
+            $where[] = "tp.category_id = ?";
+            $params[] = $categoryId;
+        }
+        if ($subcategoryId) {
+            $where[] = "tp.subcategory_id = ?";
+            $params[] = $subcategoryId;
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        $products = Database::fetchAll("
+            SELECT tp.*,
+                   c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                   s.name AS seller_name, s.company AS seller_company,
+                   u.full_name AS created_by_name
+            FROM third_party_products tp
+            LEFT JOIN categories c ON c.id = tp.category_id
+            LEFT JOIN subcategories sc ON sc.id = tp.subcategory_id
+            LEFT JOIN sub_subcategories ssc ON ssc.id = tp.sub_subcategory_id
+            LEFT JOIN sellers s ON s.id = tp.seller_id
+            LEFT JOIN users u ON u.id = tp.created_by
+            WHERE {$whereSql}
+            ORDER BY tp.id DESC
+        ", $params);
+
+        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
+        $subcategories = $categoryId ? Database::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [$categoryId]) : [];
+
+        $metrics = Database::fetchOne("
+            SELECT COUNT(*) AS total_styles,
+                   COALESCE(AVG(selling_price), 0) AS avg_selling,
+                   COALESCE(AVG(mrp), 0) AS avg_mrp,
+                   COUNT(DISTINCT category_id) AS total_categories
+            FROM third_party_products
+            WHERE is_active = 1
+        ");
+
+        Response::view('production.third_party_catalog.index', [
+            'pageTitle'     => 'Third-Party Product Catalog',
+            'activeModule'  => 'purchases',
+            'activeMenu'    => 'prod-third-party-catalog',
+            'products'      => $products,
+            'categories'    => $categories,
+            'subcategories' => $subcategories,
+            'categoryId'    => $categoryId,
+            'subcategoryId' => $subcategoryId,
+            'search'        => $search,
+            'metrics'       => $metrics,
+            'breadcrumb'    => [
+                ['label' => 'Purchases', 'url' => url('purchases')],
+                ['label' => 'Product Mapping', 'url' => url('purchases/mapping')],
+                ['label' => 'Third-Party Catalog'],
+            ],
+        ]);
+    }
+
+    public function createThirdPartyCatalog(): void {
+        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
+        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
+
+        Response::view('production.third_party_catalog.create', [
+            'pageTitle'    => 'Add Third-Party Catalog Style',
+            'activeModule' => 'purchases',
+            'activeMenu'   => 'prod-third-party-catalog',
+            'categories'   => $categories,
+            'sellers'      => $sellers,
+            'breadcrumb'   => [
+                ['label' => 'Purchases', 'url' => url('purchases')],
+                ['label' => 'Third-Party Catalog', 'url' => url('production/third-party-catalog')],
+                ['label' => 'Add Style'],
+            ],
+        ]);
+    }
+
+    public function storeThirdPartyCatalog(): void {
+        $name = trim($_POST['name'] ?? '');
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+        $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
+        $subSubcategoryId = !empty($_POST['sub_subcategory_id']) ? (int)$_POST['sub_subcategory_id'] : null;
+        $mrp = (float)($_POST['mrp'] ?? 0);
+        $sellingPrice = (float)($_POST['selling_price'] ?? 0);
+        $purchaseRate = (float)($_POST['purchase_rate'] ?? 0);
+        $sellerId = !empty($_POST['seller_id']) ? (int)$_POST['seller_id'] : null;
+        $color = trim($_POST['color'] ?? '');
+        $size = trim($_POST['size'] ?? '');
+        $unit = strtoupper(trim($_POST['unit'] ?? 'PCS')) ?: 'PCS';
+        $hsn = trim($_POST['hsn_code'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        $rawAttrs = $_POST['attributes'] ?? [];
+
+        if (empty($name)) {
+            Session::flash('error', 'Product / Style Name is required.');
+            Response::back();
+            return;
+        }
+        if ($categoryId <= 0) {
+            Session::flash('error', 'Please select a Category.');
+            Response::back();
+            return;
+        }
+        if ($mrp <= 0) {
+            Session::flash('error', 'MRP must be greater than zero.');
+            Response::back();
+            return;
+        }
+        if ($sellingPrice <= 0 || $sellingPrice > $mrp) {
+            Session::flash('error', 'Selling price must be greater than 0 and cannot exceed MRP.');
+            Response::back();
+            return;
+        }
+
+        $code = trim($_POST['code'] ?? '');
+        if (empty($code)) {
+            $prefix = strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $name), 0, 5)) ?: 'TP';
+            $code = 'TP-' . $prefix . '-' . strtoupper(substr(uniqid(), -4));
+        }
+
+        $cat = Database::fetchOne("SELECT code FROM categories WHERE id = ?", [$categoryId]);
+        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM subcategories WHERE id = ?", [$subcategoryId]) : null;
+        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
+
+        $encodedAttrs = !empty($rawAttrs) ? json_encode($rawAttrs, JSON_UNESCAPED_UNICODE) : null;
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $userId = (int)(Session::get('user_id') ?? 0);
+
+        Database::execute("
+            INSERT INTO third_party_products (
+                concern_id, name, code, vendor_sku, category_id, subcategory_id, sub_subcategory_id,
+                category_code, subcategory_code, sub_subcategory_code, seller_id, color, size, unit,
+                hsn_code, mrp, selling_price, purchase_rate, attributes, description, is_active, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        ", [
+            $cid, $name, $code, $code, $categoryId, $subcategoryId, $subSubcategoryId,
+            $cat['code'] ?? null, $subcat['code'] ?? null, $subsub['code'] ?? null,
+            $sellerId, $color ?: null, $size ?: null, $unit,
+            $hsn ?: null, $mrp, $sellingPrice, $purchaseRate, $encodedAttrs, $description ?: null, $userId ?: null
+        ]);
+
+        Session::flash('success', "Third-party product style '{$name}' created successfully!");
+        Response::redirect(url('production/third-party-catalog'));
+    }
+
+    public function editThirdPartyCatalog(string $id): void {
+        $product = Database::fetchOne("SELECT * FROM third_party_products WHERE id = ?", [(int)$id]);
+        if (!$product) {
+            Session::flash('error', 'Third-party catalog item not found.');
+            Response::redirect(url('production/third-party-catalog'));
+            return;
+        }
+
+        $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY name ASC");
+        $subcategories = $product['category_id'] ? Database::fetchAll("SELECT id, name, code FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['category_id']]) : [];
+        $subSubcategories = $product['subcategory_id'] ? Database::fetchAll("SELECT id, name, code FROM sub_subcategories WHERE subcategory_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['subcategory_id']]) : [];
+        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
+
+        $parsedAttrs = !empty($product['attributes']) ? (json_decode($product['attributes'], true) ?: []) : [];
+
+        Response::view('production.third_party_catalog.edit', [
+            'pageTitle'        => 'Edit Third-Party Catalog Style',
+            'activeModule'     => 'purchases',
+            'activeMenu'       => 'prod-third-party-catalog',
+            'product'          => $product,
+            'categories'       => $categories,
+            'subcategories'    => $subcategories,
+            'subSubcategories' => $subSubcategories,
+            'sellers'          => $sellers,
+            'parsedAttrs'      => $parsedAttrs,
+            'breadcrumb'       => [
+                ['label' => 'Purchases', 'url' => url('purchases')],
+                ['label' => 'Third-Party Catalog', 'url' => url('production/third-party-catalog')],
+                ['label' => 'Edit ' . $product['name']],
+            ],
+        ]);
+    }
+
+    public function updateThirdPartyCatalog(string $id): void {
+        $tpId = (int)$id;
+        $product = Database::fetchOne("SELECT id FROM third_party_products WHERE id = ?", [$tpId]);
+        if (!$product) {
+            Session::flash('error', 'Product not found.');
+            Response::redirect(url('production/third-party-catalog'));
+            return;
+        }
+
+        $name = trim($_POST['name'] ?? '');
+        $categoryId = (int)($_POST['category_id'] ?? 0);
+        $subcategoryId = !empty($_POST['subcategory_id']) ? (int)$_POST['subcategory_id'] : null;
+        $subSubcategoryId = !empty($_POST['sub_subcategory_id']) ? (int)$_POST['sub_subcategory_id'] : null;
+        $mrp = (float)($_POST['mrp'] ?? 0);
+        $sellingPrice = (float)($_POST['selling_price'] ?? 0);
+        $purchaseRate = (float)($_POST['purchase_rate'] ?? 0);
+        $sellerId = !empty($_POST['seller_id']) ? (int)$_POST['seller_id'] : null;
+        $color = trim($_POST['color'] ?? '');
+        $size = trim($_POST['size'] ?? '');
+        $unit = strtoupper(trim($_POST['unit'] ?? 'PCS')) ?: 'PCS';
+        $hsn = trim($_POST['hsn_code'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        $rawAttrs = $_POST['attributes'] ?? [];
+
+        if (empty($name)) {
+            Session::flash('error', 'Product / Style Name is required.');
+            Response::back();
+            return;
+        }
+        if ($categoryId <= 0) {
+            Session::flash('error', 'Please select a Category.');
+            Response::back();
+            return;
+        }
+        if ($mrp <= 0 || $sellingPrice <= 0 || $sellingPrice > $mrp) {
+            Session::flash('error', 'Selling price must be greater than 0 and cannot exceed MRP.');
+            Response::back();
+            return;
+        }
+
+        $cat = Database::fetchOne("SELECT code FROM categories WHERE id = ?", [$categoryId]);
+        $subcat = $subcategoryId ? Database::fetchOne("SELECT code FROM subcategories WHERE id = ?", [$subcategoryId]) : null;
+        $subsub = $subSubcategoryId ? Database::fetchOne("SELECT code FROM sub_subcategories WHERE id = ?", [$subSubcategoryId]) : null;
+        $encodedAttrs = !empty($rawAttrs) ? json_encode($rawAttrs, JSON_UNESCAPED_UNICODE) : null;
+
+        Database::execute("
+            UPDATE third_party_products SET
+                name = ?, category_id = ?, subcategory_id = ?, sub_subcategory_id = ?,
+                category_code = ?, subcategory_code = ?, sub_subcategory_code = ?,
+                seller_id = ?, color = ?, size = ?, unit = ?, hsn_code = ?,
+                mrp = ?, selling_price = ?, purchase_rate = ?, attributes = ?, description = ?
+            WHERE id = ?
+        ", [
+            $name, $categoryId, $subcategoryId, $subSubcategoryId,
+            $cat['code'] ?? null, $subcat['code'] ?? null, $subsub['code'] ?? null,
+            $sellerId, $color ?: null, $size ?: null, $unit, $hsn ?: null,
+            $mrp, $sellingPrice, $purchaseRate, $encodedAttrs, $description ?: null, $tpId
+        ]);
+
+        Session::flash('success', "Third-party product '{$name}' updated successfully!");
+        Response::redirect(url('production/third-party-catalog'));
+    }
+
+    public function deleteThirdPartyCatalog(string $id): void {
+        $tpId = (int)$id;
+        Database::execute("UPDATE third_party_products SET is_active = 0 WHERE id = ?", [$tpId]);
+        Session::flash('success', 'Third-party catalog style removed.');
+        Response::redirect(url('production/third-party-catalog'));
+    }
+
+    /**
+     * =========================================================================
+     * PURCHASED STOCK SUB-MODULE
+     * Displays all purchased items (Fabric Rolls, Raw Materials, Third-Party)
+     * that have been QR generated and added to warehouse stock.
+     * =========================================================================
+     */
+    public function purchasedStockIndex(): void {
+        $typeFilter = trim($_GET['type'] ?? 'ALL');
+        $search = trim($_GET['search'] ?? '');
+        $cid = function_exists('currentConcernId') ? currentConcernId() : null;
+
+        $where = ["qrg.stock_added = 1"];
+        $params = [];
+
+        if ($cid) {
+            $where[] = ($cid === 1) ? "(qrg.concern_id = ? OR qrg.concern_id IS NULL)" : "qrg.concern_id = ?";
+            $params[] = $cid;
+        }
+
+        if ($typeFilter !== 'ALL' && in_array($typeFilter, ['FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY'], true)) {
+            $where[] = "ppi.item_type = ?";
+            $params[] = $typeFilter;
+        }
+
+        if (!empty($search)) {
+            $where[] = "(ppi.item_name LIKE ? OR qrg.batch_code LIKE ? OR pp.purchase_number LIKE ? OR s.name LIKE ? OR s.company LIKE ? OR ppi.vendor_sku LIKE ? OR ppi.roll_number LIKE ?)";
+            $term = '%' . $search . '%';
+            $params = array_merge($params, [$term, $term, $term, $term, $term, $term, $term]);
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        $stockItems = Database::fetchAll("
+            SELECT qrg.id AS generation_id, qrg.batch_code, qrg.qr_source, qrg.quantity AS qr_quantity,
+                   qrg.stock_added_at, qrg.brand_name, qrg.color_name, qrg.size_name, qrg.mrp, qrg.selling_price,
+                   ppi.id AS item_id, ppi.item_type, ppi.item_name, ppi.unit, ppi.weight_kg, ppi.unit_price,
+                   ppi.total_price, ppi.vendor_sku, ppi.product_code, ppi.roll_number, ppi.quantity AS purchase_qty,
+                   pp.id AS purchase_id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
+                   s.name AS seller_name, s.company AS seller_company,
+                   c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
+                   u.full_name AS stock_added_by_name
+            FROM qr_generations qrg
+            INNER JOIN production_purchase_items ppi ON ppi.id = qrg.source_purchase_item_id
+            INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
+            LEFT JOIN sellers s ON s.id = pp.seller_id
+            LEFT JOIN categories c ON c.id = COALESCE(qrg.category_id, ppi.mapped_category_id)
+            LEFT JOIN subcategories sc ON sc.id = COALESCE(qrg.subcategory_id, ppi.mapped_subcategory_id)
+            LEFT JOIN sub_subcategories ssc ON ssc.id = COALESCE(qrg.sub_subcategory_id, ppi.mapped_sub_subcategory_id)
+            LEFT JOIN users u ON u.id = qrg.stock_added_by
+            WHERE {$whereSql}
+            ORDER BY qrg.stock_added_at DESC, qrg.id DESC
+        ", $params);
+
+        // Overall Stock Metrics
+        $metricWhere = "WHERE qrg.stock_added = 1";
+        $metricParams = [];
+        if ($cid) {
+            $metricWhere .= ($cid === 1) ? " AND (qrg.concern_id = ? OR qrg.concern_id IS NULL)" : " AND qrg.concern_id = ?";
+            $metricParams[] = $cid;
+        }
+
+        $metrics = Database::fetchOne("
+            SELECT COUNT(*) AS total_batches,
+                   COALESCE(SUM(qrg.quantity), 0) AS total_units,
+                   COUNT(CASE WHEN ppi.item_type = 'FABRIC_ROLL' THEN 1 END) AS fabric_count,
+                   COUNT(CASE WHEN ppi.item_type = 'RAW_MATERIAL' THEN 1 END) AS raw_count,
+                   COUNT(CASE WHEN ppi.item_type = 'THIRD_PARTY' THEN 1 END) AS third_party_count,
+                   COALESCE(SUM(ppi.total_price), 0) AS total_stock_value
+            FROM qr_generations qrg
+            INNER JOIN production_purchase_items ppi ON ppi.id = qrg.source_purchase_item_id
+            {$metricWhere}
+        ", $metricParams);
+
+        Response::view('production.purchased_stock.index', [
+            'pageTitle'    => 'Purchased Stock Inventory',
+            'activeModule' => 'production',
+            'activeMenu'   => 'prod-purchased-stock',
+            'stockItems'   => $stockItems,
+            'typeFilter'   => $typeFilter,
+            'search'       => $search,
+            'metrics'      => $metrics,
+            'breadcrumb'   => [
+                ['label' => 'Production', 'url' => url('purchases')],
+                ['label' => 'Purchased Stock'],
+            ],
+        ]);
     }
 }

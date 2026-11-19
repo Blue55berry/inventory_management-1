@@ -4,6 +4,9 @@
         <p class="text-muted small mb-0">Generate standalone or catalog-linked QR identities with custom brand prefixes and batch thermal labels.</p>
     </div>
     <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-dark shadow-sm" data-bs-toggle="modal" data-bs-target="#printerSettingsModal">
+            <i class="bi bi-sliders me-1 text-primary"></i> QR Format Configuration
+        </button>
         <a href="<?= url('production/qr-generations/create?tab=' . e($activeTab)) ?>" class="btn btn-primary shadow-sm">
             <i class="bi bi-plus-circle-fill me-1"></i> Generate New QR Batch
         </a>
@@ -233,3 +236,5 @@
         </div>
     </div>
 </div>
+
+<?php require __DIR__ . '/_qr_format_modal.php'; ?>

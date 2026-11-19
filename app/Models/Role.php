@@ -5,6 +5,21 @@
  */
 
 class Role {
+    private static bool $scopeSchemaEnsured = false;
+
+    /**
+     * Additive compatibility for databases created before role scope fields existed.
+     */
+    private static function ensureScopeSchema(): void {
+        if (self::$scopeSchemaEnsured) {
+            return;
+        }
+
+        Database::ensureColumn('roles', 'concern_scope', "VARCHAR(20) NOT NULL DEFAULT 'ALL' AFTER `description`");
+        Database::ensureColumn('roles', 'applicable_concerns', 'TEXT DEFAULT NULL AFTER `concern_scope`');
+        self::$scopeSchemaEnsured = true;
+    }
+
     /**
      * Get all roles (excluding root Super Admin).
      */
@@ -20,7 +35,7 @@ class Role {
      */
     public const DEPT_MODULE_MAP = [
         'PRODUCTION' => [
-            'production', 'sellers', 'production_purchases', 'damages', 'catalog', 'programs', 'cutting', 'wastage',
+            'production', 'sellers', 'production_purchases', 'production_purchase_mapping', 'damages', 'catalog', 'programs', 'cutting', 'wastage',
             'stitching', 'stitching_wastage', 'qc', 'inventory', 'production_expenses',
             'production_billing', 'production_returns', 'batches', 'outward', 'production_stock_requests',
             'warehouse_rework', 'reports'
@@ -170,6 +185,7 @@ class Role {
      * Create a new role.
      */
     public static function create(array $data): int {
+        self::ensureScopeSchema();
         Database::execute(
             "INSERT INTO roles (name, slug, description, concern_scope, applicable_concerns, is_active, created_at) VALUES (?, ?, ?, ?, ?, 1, NOW())",
             [
@@ -187,6 +203,7 @@ class Role {
      * Update a role.
      */
     public static function update(int $id, array $data): void {
+        self::ensureScopeSchema();
         Database::execute(
             "UPDATE roles SET name = ?, slug = ?, description = ?, concern_scope = ?, applicable_concerns = ?, is_active = ? WHERE id = ?",
             [
@@ -227,6 +244,13 @@ class Role {
             ['production_purchases', 'create', 'Create Production Purchase Record', 'production_purchases.create', 'sellers'],
             ['production_purchases', 'edit', 'Edit Production Purchase & Invoices', 'production_purchases.edit', 'sellers'],
             ['production_purchases', 'delete', 'Delete Production Purchase Record', 'production_purchases.delete', 'sellers'],
+
+            ['production_purchase_mapping', 'view', 'View Product Mapping', 'production_purchase_mapping.view', 'production_purchases'],
+            ['production_purchase_mapping', 'create', 'Add Purchase Lines to Product Mapping', 'production_purchase_mapping.create', 'production_purchases'],
+            ['production_purchase_mapping', 'edit', 'Map Products to Catalog Variants', 'production_purchase_mapping.edit', 'production_purchases'],
+            ['production_purchase_mapping', 'delete', 'Remove Product Mapping Lines', 'production_purchase_mapping.delete', 'production_purchases'],
+
+            ['reports', 'view', 'View Reports & Data Export', 'reports.view', null],
 
             ['production_billing', 'view', 'View Production Sales Invoices & Bills', 'production_billing.view', 'production'],
             ['production_billing', 'create', 'Create Production Billing Invoices', 'production_billing.create', 'production'],
@@ -632,6 +656,29 @@ class Role {
                              SELECT id, ? FROM roles WHERE slug IN ('super-admin', 'super_admin')",
                             [$newId]
                         );
+                        if ($mod === 'production_purchase_mapping') {
+                            $legacyAction = in_array($act, ['create', 'delete'], true) ? 'edit' : $act;
+                            Database::execute(
+                                "INSERT IGNORE INTO role_permissions (role_id, permission_id)
+                                 SELECT DISTINCT legacy_rp.role_id, ?
+                                 FROM role_permissions legacy_rp
+                                 JOIN permissions legacy_p ON legacy_p.id = legacy_rp.permission_id
+                                 WHERE legacy_p.module IN ('production_purchases', 'purchases')
+                                   AND legacy_p.action = ?",
+                                [$newId, $legacyAction]
+                            );
+                            if (Database::fetchOne("SHOW TABLES LIKE 'user_permissions'")) {
+                                Database::execute(
+                                    "INSERT IGNORE INTO user_permissions (user_id, permission_id)
+                                     SELECT DISTINCT legacy_up.user_id, ?
+                                     FROM user_permissions legacy_up
+                                     JOIN permissions legacy_p ON legacy_p.id = legacy_up.permission_id
+                                     WHERE legacy_p.module IN ('production_purchases', 'purchases')
+                                       AND legacy_p.action = ?",
+                                    [$newId, $legacyAction]
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -703,6 +750,7 @@ class Role {
                     'production'                => ['name' => 'Dashboard', 'icon' => 'bi-speedometer', 'desc' => 'Plant overview, line throughput, and live tracking', 'department' => 'PRODUCTION'],
                     'sellers'                   => ['name' => 'Sellers', 'icon' => 'bi-person-badge', 'desc' => 'Job worker directory, vendor ledgers, and contract rates', 'department' => 'PRODUCTION'],
                     'production_purchases'      => ['name' => 'Purchases', 'icon' => 'bi-cart-check', 'desc' => 'Production fabric, yarn, raw material purchases and supplier invoices', 'department' => 'PRODUCTION'],
+                    'production_purchase_mapping' => ['name' => 'Product Mapping', 'icon' => 'bi-diagram-3', 'desc' => 'Map purchase items to catalog categories, variants, and prices', 'department' => 'PRODUCTION'],
                     'damages'                   => ['name' => 'Damages', 'icon' => 'bi-exclamation-octagon', 'desc' => 'Defective fabric, floor damages, and scrap recovery logs', 'department' => 'PRODUCTION'],
                     'catalog'                   => ['name' => 'Catalog', 'icon' => 'bi-journal-bookmark', 'desc' => 'Design catalogs, style codes, and Bill of Materials (BOM)', 'department' => 'PRODUCTION'],
                     'variants'                  => ['name' => 'Product Variants', 'icon' => 'bi-tags', 'desc' => 'Manage sellable variants, collision-safe Variant IDs, and SKUs', 'department' => 'PRODUCTION'],
@@ -733,6 +781,15 @@ class Role {
                 'submodules' => [
                     'asset_register'    => ['name' => 'Asset Register', 'icon' => 'bi-cpu', 'desc' => 'Plant machinery, stitching machines, cutters, and equipment records', 'department' => 'ASSETS'],
                     'asset_maintenance' => ['name' => 'Asset Maintenance', 'icon' => 'bi-wrench-adjustable-circle', 'desc' => 'Machinery service logs, technician repairs, and downtime tracking', 'department' => 'ASSETS'],
+                ]
+            ],
+            'export' => [
+                'title'      => 'Export',
+                'icon'       => 'bi-file-earmark-arrow-down',
+                'badge'      => 'bg-info-subtle text-info border-info',
+                'department' => 'ALL',
+                'submodules' => [
+                    'reports' => ['name' => 'Data Export Center', 'icon' => 'bi-file-earmark-spreadsheet', 'desc' => 'View and export operational reports and CSV data', 'department' => 'ALL'],
                 ]
             ],
                         'concerns' => [
