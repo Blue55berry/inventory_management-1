@@ -443,7 +443,8 @@ class ExportService
             $data['variants'] = Database::fetchAll(
                 "SELECT pv.id, pv.sku, pv.variant_code, pv.hsn_code, pv.gst_rate, pv.qr_code,
                         pv.mrp, pv.selling_price, pv.purchase_price, pv.production_cost,
-                        pv.weight, pv.is_active, pv.created_at,
+                        pv.weight, pv.created_at,
+                        COALESCE(stock.available_quantity, 0) AS available_quantity,
                         p.name AS product_name, p.code AS parent_sku,
                         c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name,
                         col.name AS color_name, d.name AS design_name, s.name AS size_name
@@ -455,6 +456,12 @@ class ExportService
                  LEFT JOIN colors col ON col.id = pv.color_id
                  LEFT JOIN designs d ON d.id = pv.design_id
                  LEFT JOIN sizes s ON s.id = pv.size_id
+                 LEFT JOIN (
+                     SELECT variant_id, SUM(quantity) AS available_quantity
+                     FROM stock_balances
+                     WHERE stock_state = 'AVAILABLE'
+                     GROUP BY variant_id
+                 ) stock ON stock.variant_id = pv.id
                  WHERE (pv.created_at >= ? AND pv.created_at <= ?) OR pv.is_active = 1
                  ORDER BY pv.id DESC",
                 [$startDateTime, $endDateTime]
@@ -1329,7 +1336,7 @@ class ExportService
                 'Selling Price (INR)',
                 'Cost Per Piece (INR)',
                 'QR Code / Barcode',
-                'Status',
+                'Available Qty',
                 'Created Date'
             ]);
             foreach ($data['variants'] as $v) {
@@ -1349,7 +1356,7 @@ class ExportService
                     number_format((float)($v['selling_price'] ?? 0), 2, '.', ''),
                     number_format((float)($v['production_cost'] ?: ($v['purchase_price'] ?? 0)), 2, '.', ''),
                     $v['qr_code'] ?: '-',
-                    !empty($v['is_active']) ? 'ACTIVE' : 'INACTIVE',
+                    number_format((float)($v['available_quantity'] ?? 0), 0, '.', ''),
                     !empty($v['created_at']) ? date('d M Y', strtotime($v['created_at'])) : '-',
                 ]);
             }

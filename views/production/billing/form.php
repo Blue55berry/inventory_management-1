@@ -4,6 +4,7 @@ $escape = static fn($value): string => htmlspecialchars((string)$value, ENT_QUOT
 $existingItems = array_map(static function (array $item): array {
     return [
         'qc_item_id' => (int)$item['qc_item_id'],
+        'variant_id' => (int)($item['variant_id'] ?? 0),
         'product_name' => (string)$item['product_name'],
         'sku' => (string)($item['sku'] ?? ''),
         'hsn_code' => (string)($item['hsn_code'] ?? '6109'),
@@ -19,8 +20,10 @@ $existingItems = array_map(static function (array $item): array {
         'cgst_rate' => (float)($item['cgst_rate'] ?? ((float)$item['gst_percentage'] / 2)),
         'igst_rate' => (float)($item['igst_rate'] ?? 0),
         'tags' => $item['tags'],
+        'available_tags' => $item['tags'],
     ];
 }, $billItems ?? []);
+$selectedBuyerType = $bill['buyer_type'] ?? 'COMPANY';
 ?>
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
     <div>
@@ -49,17 +52,18 @@ $existingItems = array_map(static function (array $item): array {
                     <div id="productionUnitDetails" class="small text-muted mt-2" aria-live="polite"></div>
                 </div>
             </div>
+
             <div class="card border-0 shadow-sm mb-3">
                 <div class="card-body">
                     <label class="form-label fw-semibold" for="buyerType">Bill To</label>
-                    <select class="form-select" name="buyer_type" id="buyerType">
+                    <select class="form-select fw-semibold text-primary" name="buyer_type" id="buyerType">
                         <option value="COMPANY" <?= ($bill['buyer_type'] ?? 'COMPANY') === 'COMPANY' ? 'selected' : '' ?>>Company</option>
                         <option value="CUSTOMER" <?= ($bill['buyer_type'] ?? '') === 'CUSTOMER' ? 'selected' : '' ?>>Customer</option>
                     </select>
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm mb-3" id="companyFields">
+            <div class="card border-0 shadow-sm mb-3 <?= $selectedBuyerType === 'COMPANY' ? '' : 'd-none' ?>" id="companyFields">
                 <div class="card-header bg-white fw-semibold"><i class="bi bi-building me-2 text-primary"></i>Company (Buyer)</div>
                 <div class="card-body">
                     <div class="mb-3"><label class="form-label">Company name <span class="text-danger">*</span></label><input class="form-control" name="company_name" data-required-for="COMPANY" value="<?= $escape($bill['company_name'] ?? '') ?>"></div>
@@ -72,7 +76,7 @@ $existingItems = array_map(static function (array $item): array {
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm mb-3" id="customerFields">
+            <div class="card border-0 shadow-sm mb-3 <?= $selectedBuyerType === 'CUSTOMER' ? '' : 'd-none' ?>" id="customerFields">
                 <div class="card-header bg-white fw-semibold"><i class="bi bi-person-vcard me-2 text-primary"></i>Customer / Contact</div>
                 <div class="card-body">
                     <div class="mb-3"><label class="form-label">Customer name <span class="text-danger">*</span></label><input class="form-control" name="customer_name" data-required-for="CUSTOMER" value="<?= $escape($bill['customer_name'] ?? '') ?>"></div>
@@ -147,8 +151,8 @@ $existingItems = array_map(static function (array $item): array {
             <div class="card border-0 shadow-sm mb-3">
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
-                        <thead class="table-light"><tr><th>Product / QR codes</th><th class="text-end">MRP</th><th style="width:100px">Discount %</th><th style="width:120px">Price / piece<br><small>incl. tax</small></th><th style="min-width:330px">GST / Tax details</th><th class="text-end">Tax (Incl.)</th><th class="text-end">Total</th><th></th></tr></thead>
-                        <tbody id="billCart"><tr><td colspan="7" class="text-center text-muted py-5">Scan or search for items to add to this bill.</td></tr></tbody>
+                        <thead class="table-light"><tr><th>Product / QR codes</th><th class="text-center" style="width:130px">Qty</th><th class="text-end">MRP</th><th style="width:100px">Discount %</th><th style="width:120px">Price / piece<br><small>incl. tax</small></th><th style="min-width:330px">GST / Tax details</th><th class="text-end">Tax (Incl.)</th><th class="text-end">Total</th><th></th></tr></thead>
+                        <tbody id="billCart"><tr><td colspan="9" class="text-center text-muted py-5">Scan or search for items to add to this bill.</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -176,8 +180,46 @@ $existingItems = array_map(static function (array $item): array {
     </div>
 </form>
 
+<!-- Modern Floating POS Stock Notification Toast -->
+<div id="modernStockAlertToast" class="position-fixed top-0 start-50 translate-middle-x mt-4 d-none shadow-lg rounded-4" style="z-index: 9999; min-width: 340px; max-width: 92vw; transition: all 0.3s ease;">
+    <div class="card border-0 rounded-4 overflow-hidden shadow" style="background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(12px); border-left: 6px solid #fd7e14 !important;">
+        <div class="card-body p-3 d-flex align-items-center gap-3">
+            <div class="rounded-circle bg-warning-subtle text-warning-emphasis d-flex align-items-center justify-content-center flex-shrink-0 shadow-sm" style="width: 46px; height: 46px;">
+                <i class="bi bi-box-seam-fill fs-4 text-warning"></i>
+            </div>
+            <div class="flex-grow-1 pe-2">
+                <div class="fw-bold text-dark mb-0 fs-6" id="stockAlertToastTitle">Available stock limit reached</div>
+                <div class="text-secondary small mb-0 lh-sm mt-1" id="stockAlertToastMessage"></div>
+            </div>
+            <button type="button" class="btn-close flex-shrink-0" id="stockAlertToastClose" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
+
+<!-- Modern Inventory Limit Modal -->
+<div class="modal fade" id="inventoryLimitModal" tabindex="-1" aria-labelledby="inventoryLimitTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header border-0 bg-warning-subtle py-2 px-3 d-flex justify-content-between align-items-center">
+                <span class="badge bg-warning text-dark fw-bold px-2 py-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>POS Limit Alert</span>
+                <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center p-4">
+                <div class="rounded-circle bg-warning-subtle text-warning-emphasis d-inline-flex align-items-center justify-content-center mb-3 shadow-sm" style="width:64px;height:64px">
+                    <i class="bi bi-box-seam-fill fs-2 text-warning"></i>
+                </div>
+                <h5 class="fw-bold mb-2 text-dark" id="inventoryLimitTitle">Available Stock Limit Reached</h5>
+                <p class="text-secondary small mb-0 lh-base" id="inventoryLimitMessage" aria-live="polite"></p>
+            </div>
+            <div class="modal-footer border-0 justify-content-center pt-0 pb-3">
+                <button type="button" class="btn btn-primary px-4 rounded-pill shadow-sm" data-bs-dismiss="modal">Got it</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-(() => {
+document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('productionBillForm');
     const initialItems = <?= json_encode($existingItems, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const billId = <?= (int)($bill['id'] ?? 0) ?>;
@@ -192,6 +234,109 @@ $existingItems = array_map(static function (array $item): array {
     let searchTimer;
     let cameraScanner = null;
     let cameraScanBusy = false;
+    let toastTimer = null;
+    let limitModalInstance = null;
+
+    // POS Audio feedback using Web Audio API
+    function playBeep(type = 'success') {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            if (type === 'success') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime);
+                gain.gain.setValueAtTime(0.08, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.12);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.12);
+            } else {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(320, ctx.currentTime);
+                gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.28);
+            }
+        } catch (e) {
+            // Audio context not allowed without prior user gesture, fail gracefully
+        }
+    }
+
+    function getLimitModal() {
+        if (!limitModalInstance && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            const el = document.getElementById('inventoryLimitModal');
+            if (el) limitModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+        }
+        return limitModalInstance;
+    }
+
+    function showInventoryLimit(title, message, targetInput = null) {
+        playBeep('warning');
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            try { navigator.vibrate([80, 40, 80]); } catch (e) {}
+        }
+
+        // 1. Floating Modern Toast Notification
+        const toastEl = document.getElementById('modernStockAlertToast');
+        const toastTitle = document.getElementById('stockAlertToastTitle');
+        const toastMsg = document.getElementById('stockAlertToastMessage');
+        if (toastEl && toastTitle && toastMsg) {
+            toastTitle.textContent = title;
+            toastMsg.textContent = message;
+            toastEl.classList.remove('d-none');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toastEl.classList.add('d-none');
+            }, 4500);
+        }
+
+        // 2. Modern Bootstrap Modal
+        const modal = getLimitModal();
+        const modalTitle = document.getElementById('inventoryLimitTitle');
+        const modalMsg = document.getElementById('inventoryLimitMessage');
+        if (modalTitle) modalTitle.textContent = title;
+        if (modalMsg) modalMsg.textContent = message;
+        if (modal) {
+            modal.show();
+        }
+
+        // 3. Highlight Target Input
+        if (targetInput) {
+            targetInput.classList.add('is-invalid', 'border-warning');
+            setTimeout(() => {
+                targetInput.classList.remove('is-invalid', 'border-warning');
+            }, 2000);
+            targetInput.focus();
+        }
+
+        // 4. Cart Message Box
+        const cartMsg = document.getElementById('cartMessage');
+        if (cartMsg) {
+            cartMsg.innerHTML = `<div class="alert alert-warning py-1.5 px-3 fw-semibold small mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i> ${message}</div>`;
+        }
+    }
+
+    function showSuccessToast(message) {
+        playBeep('success');
+        const cartMsg = document.getElementById('cartMessage');
+        if (cartMsg) {
+            cartMsg.innerHTML = `<span class="text-success fw-semibold"><i class="bi bi-check2-circle me-1"></i> ${message}</span>`;
+        }
+    }
+
+    // Dismiss toast button
+    const toastCloseBtn = document.getElementById('stockAlertToastClose');
+    if (toastCloseBtn) {
+        toastCloseBtn.addEventListener('click', () => {
+            const toastEl = document.getElementById('modernStockAlertToast');
+            if (toastEl) toastEl.classList.add('d-none');
+        });
+    }
 
     function updateProductionUnitDetails() {
         const option = unitSelect.selectedOptions[0];
@@ -207,12 +352,28 @@ $existingItems = array_map(static function (array $item): array {
             .filter(Boolean).join(' · ');
     }
 
+    // Dynamically toggle Bill To sections: Company vs Customer
     function updateBuyerFields() {
-        const selectedType = buyerType.value;
-        document.getElementById('companyFields').classList.toggle('d-none', selectedType !== 'COMPANY');
-        document.getElementById('customerFields').classList.toggle('d-none', selectedType !== 'CUSTOMER');
+        const selectedType = buyerType ? buyerType.value : 'COMPANY';
+        const companyFields = document.getElementById('companyFields');
+        const customerFields = document.getElementById('customerFields');
+        const showCompany = selectedType === 'COMPANY';
+        const showCustomer = selectedType === 'CUSTOMER';
+
+        if (companyFields) {
+            companyFields.classList.toggle('d-none', !showCompany);
+            companyFields.querySelectorAll('input, textarea, select').forEach(input => {
+                input.disabled = !showCompany;
+            });
+        }
+        if (customerFields) {
+            customerFields.classList.toggle('d-none', !showCustomer);
+            customerFields.querySelectorAll('input, textarea, select').forEach(input => {
+                input.disabled = !showCustomer;
+            });
+        }
         form.querySelectorAll('[data-required-for]').forEach(input => {
-            input.required = input.dataset.requiredFor === selectedType;
+            input.required = (input.dataset.requiredFor === selectedType);
         });
     }
 
@@ -227,7 +388,9 @@ $existingItems = array_map(static function (array $item): array {
         updateTotals();
     }
 
-    const getItemKey = (item) => item.variant_id ? ('var_' + item.variant_id) : ('qc_' + (item.qc_item_id || 0));
+    const getItemKey = (item) => item.qc_item_id
+        ? ('qc_' + item.qc_item_id)
+        : (item.variant_id ? ('var_' + item.variant_id) : 'qc_0');
 
     initialItems.forEach(item => {
         const key = getItemKey(item);
@@ -235,6 +398,7 @@ $existingItems = array_map(static function (array $item): array {
             ...item,
             variant_id: Number(item.variant_id || 0),
             qc_item_id: Number(item.qc_item_id || 0),
+            available_tags: Array.isArray(item.available_tags) ? item.available_tags : [...item.tags],
             is_complementary: Number(item.is_complementary || 0),
             tags: Array.isArray(item.tags) ? item.tags : [],
             unit_price: Number(item.unit_price),
@@ -248,14 +412,43 @@ $existingItems = array_map(static function (array $item): array {
         });
     });
 
-    const assignedTags = () => new Set([...cart.values()].flatMap(item => item.tags.map(tag => tag.toUpperCase())));
+    const assignedTags = () => new Set([...cart.values()].flatMap(item => (item.tags || []).map(tag => tag.toUpperCase())));
+
+    function selectableTags(item) {
+        const assignedElsewhere = new Set(
+            [...cart.values()]
+                .filter(cartItem => cartItem !== item)
+                .flatMap(cartItem => (cartItem.tags || []).map(tag => tag.toUpperCase()))
+        );
+        const tags = [...new Set([...(item.tags || []), ...(item.available_tags || [])])];
+        const currentTags = (item.tags || []).filter(tag => !assignedElsewhere.has(tag.toUpperCase()));
+        const currentSet = new Set(currentTags.map(tag => tag.toUpperCase()));
+        return [
+            ...currentTags,
+            ...tags.filter(tag => !assignedElsewhere.has(tag.toUpperCase()) && !currentSet.has(tag.toUpperCase()))
+        ];
+    }
+
+    // Match code to an existing item in the billing cart
+    function findCartItemForCode(code) {
+        const needle = (code || '').trim().toUpperCase();
+        if (!needle) return null;
+        for (const [key, item] of cart.entries()) {
+            if (item.tags && item.tags.some(t => t.toUpperCase() === needle)) return item;
+            if (item.available_tags && item.available_tags.some(t => t.toUpperCase() === needle)) return item;
+            if (item.sku && item.sku.toUpperCase() === needle) return item;
+            if (item.variant_code && item.variant_code.toUpperCase() === needle) return item;
+            if (item.product_name && item.product_name.toUpperCase() === needle) return item;
+        }
+        return null;
+    }
 
     function renderCart() {
         cartBody.replaceChildren();
         if (!cart.size) {
             const row = cartBody.insertRow();
             const cell = row.insertCell();
-            cell.colSpan = 8;
+            cell.colSpan = 9;
             cell.className = 'text-center text-muted py-5';
             cell.textContent = 'Scan or search for items to add to this bill.';
             updateTotals();
@@ -264,7 +457,14 @@ $existingItems = array_map(static function (array $item): array {
 
         let index = 0;
         [...cart.values()].forEach(item => {
+            const itemKey = getItemKey(item);
+            const allAvailable = selectableTags(item);
+            const maxStock = Math.max(item.tags.length, allAvailable.length);
+            const currentQty = item.tags.length;
+
             const row = cartBody.insertRow();
+
+            // 1. Product & QR codes cell
             const productCell = row.insertCell();
             const name = document.createElement('div');
             name.className = 'fw-semibold d-flex align-items-center flex-wrap gap-1';
@@ -278,10 +478,12 @@ $existingItems = array_map(static function (array $item): array {
                 name.append(compBadge);
             }
             productCell.append(name);
+
             const meta = document.createElement('div');
             meta.className = 'small text-muted';
-            meta.textContent = [item.sku, item.size_name, item.color_name, `${item.tags.length} piece(s)`].filter(Boolean).join(' · ');
+            meta.textContent = [item.sku, item.size_name, item.color_name, `${currentQty} piece(s)`].filter(Boolean).join(' · ');
             productCell.append(meta);
+
             const hsnInput = document.createElement('input');
             hsnInput.type = 'text';
             hsnInput.inputMode = 'numeric';
@@ -296,27 +498,121 @@ $existingItems = array_map(static function (array $item): array {
             hsnInput.addEventListener('input', () => { item.hsn_code = hsnInput.value.trim(); });
             productCell.append(hsnInput);
 
+            // Tags badges
             const tagsWrap = document.createElement('div');
             tagsWrap.className = 'd-flex flex-wrap gap-1 mt-1';
             item.tags.forEach(tag => {
                 const badge = document.createElement('button');
                 badge.type = 'button';
-                badge.className = 'badge border-0 bg-light text-dark font-monospace';
-                badge.title = 'Remove QR from bill';
+                badge.className = 'badge border-0 bg-light text-dark font-monospace shadow-xs';
+                badge.title = 'Remove QR piece from bill';
                 badge.textContent = `${tag} ×`;
                 badge.addEventListener('click', () => {
                     item.tags = item.tags.filter(existing => existing !== tag);
-                    if (!item.tags.length) cart.delete(getItemKey(item));
+                    if (!item.tags.length) {
+                        cart.delete(itemKey);
+                    }
                     renderCart();
                 });
                 tagsWrap.append(badge);
             });
             productCell.append(tagsWrap);
 
+            // 2. Quantity cell (Interactive Qty with -, +, input & stock validation)
+            const quantityCell = row.insertCell();
+            quantityCell.className = 'text-center';
+
+            const qtyGroup = document.createElement('div');
+            qtyGroup.className = 'input-group input-group-sm mx-auto shadow-xs';
+            qtyGroup.style.maxWidth = '115px';
+
+            const minusBtn = document.createElement('button');
+            minusBtn.type = 'button';
+            minusBtn.className = 'btn btn-outline-secondary px-2';
+            minusBtn.innerHTML = '<i class="bi bi-dash"></i>';
+            minusBtn.title = 'Decrease quantity';
+            minusBtn.addEventListener('click', () => {
+                if (item.tags.length > 1) {
+                    item.tags.pop();
+                    renderCart();
+                } else {
+                    showSuccessToast('Minimum quantity is 1. To remove this product, click the trash button.');
+                }
+            });
+
+            const quantityInput = document.createElement('input');
+            quantityInput.type = 'number';
+            quantityInput.min = '1';
+            quantityInput.step = '1';
+            quantityInput.max = String(maxStock);
+            quantityInput.value = String(currentQty);
+            quantityInput.className = 'form-control form-control-sm text-center fw-bold px-1';
+            quantityInput.dataset.quantityKey = itemKey;
+            quantityInput.setAttribute('aria-label', `Quantity for ${item.product_name}`);
+
+            const plusBtn = document.createElement('button');
+            plusBtn.type = 'button';
+            plusBtn.className = 'btn btn-outline-secondary px-2';
+            plusBtn.innerHTML = '<i class="bi bi-plus"></i>';
+            plusBtn.title = 'Increase quantity';
+            plusBtn.addEventListener('click', () => {
+                if (item.tags.length < maxStock) {
+                    const assignedUpper = item.tags.map(t => t.toUpperCase());
+                    const nextTag = allAvailable.find(t => !assignedUpper.includes(t.toUpperCase()));
+                    if (nextTag) {
+                        item.tags.push(nextTag);
+                        renderCart();
+                        showSuccessToast(`Quantity increased to ${item.tags.length} for ${item.product_name}.`);
+                    }
+                } else {
+                    showInventoryLimit(
+                        'Available stock limit reached',
+                        `All ${maxStock} available piece(s) in stock for ${item.product_name} are already added to this bill.`,
+                        quantityInput
+                    );
+                }
+            });
+
+            // Quantity input change validation
+            quantityInput.addEventListener('change', () => {
+                const requestedQuantity = parseInt(quantityInput.value, 10);
+                if (isNaN(requestedQuantity) || requestedQuantity < 1) {
+                    quantityInput.value = '1';
+                    item.tags = allAvailable.slice(0, 1);
+                    showInventoryLimit('Invalid quantity', 'Enter a whole-number quantity of at least 1.', quantityInput);
+                    renderCart();
+                    return;
+                }
+                if (requestedQuantity > maxStock) {
+                    quantityInput.value = String(maxStock);
+                    item.tags = allAvailable.slice(0, maxStock);
+                    showInventoryLimit(
+                        'Available stock limit reached',
+                        `Only ${maxStock} piece(s) are available in stock for ${item.product_name}. Cannot enter ${requestedQuantity}.`,
+                        quantityInput
+                    );
+                    renderCart();
+                    return;
+                }
+                item.tags = allAvailable.slice(0, requestedQuantity);
+                renderCart();
+            });
+
+            qtyGroup.append(minusBtn, quantityInput, plusBtn);
+            quantityCell.append(qtyGroup);
+
+            const stockInfo = document.createElement('div');
+            stockInfo.className = 'text-muted small mt-1';
+            stockInfo.style.fontSize = '0.72rem';
+            stockInfo.textContent = `Stock: ${maxStock}`;
+            quantityCell.append(stockInfo);
+
+            // 3. MRP cell
             const mrpCell = row.insertCell();
             mrpCell.className = 'text-end text-nowrap';
             mrpCell.textContent = money(item.mrp);
 
+            // 4. Discount cell
             const discountCell = row.insertCell();
             const discountInput = document.createElement('input');
             discountInput.type = 'number';
@@ -338,6 +634,7 @@ $existingItems = array_map(static function (array $item): array {
             }
             discountCell.append(discountInput);
 
+            // 5. Price / piece cell
             const priceCell = row.insertCell();
             const priceInput = document.createElement('input');
             priceInput.type = 'number';
@@ -359,6 +656,7 @@ $existingItems = array_map(static function (array $item): array {
             }
             priceCell.append(priceInput);
 
+            // 6. GST / Tax details controls
             const gstCell = row.insertCell();
             const gstControls = document.createElement('div');
             gstControls.className = 'd-flex flex-column gap-1';
@@ -444,15 +742,17 @@ $existingItems = array_map(static function (array $item): array {
             updateGstControls();
             gstCell.append(gstControls);
 
-            const itemKey = getItemKey(item);
+            // 7. Tax (Incl.) cell
             const taxCell = row.insertCell();
             taxCell.className = 'text-end text-nowrap';
             taxCell.dataset.taxFor = itemKey;
 
+            // 8. Total cell
             const lineTotalCell = row.insertCell();
             lineTotalCell.className = 'text-end text-nowrap fw-semibold';
             lineTotalCell.dataset.totalFor = itemKey;
 
+            // 9. Remove button cell
             const removeCell = row.insertCell();
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
@@ -465,6 +765,7 @@ $existingItems = array_map(static function (array $item): array {
             });
             removeCell.append(removeButton);
 
+            // Hidden inputs for form submit
             [['qc_item_id', item.qc_item_id || 0], ['variant_id', item.variant_id || 0], ['is_complementary', item.is_complementary || 0]].forEach(([key, value]) => {
                 const input = document.createElement('input');
                 input.type = 'hidden';
@@ -502,7 +803,7 @@ $existingItems = array_map(static function (array $item): array {
                 IGST: Number(item.igst_rate || 0)
             };
             const includedTypes = gstType === 'BOTH' ? ['SGST', 'CGST'] : (gstType === 'EXEMPTED' ? [] : [gstType]);
-            
+
             let totalRatePct = 0;
             includedTypes.forEach(type => {
                 totalRatePct += rates[type] || 0;
@@ -546,20 +847,55 @@ $existingItems = array_map(static function (array $item): array {
 
     function addResult(item, selectedTag) {
         const assigned = assignedTags();
-        const tag = selectedTag || item.available_tags.find(code => !assigned.has(code.toUpperCase()));
-        if (!tag || assigned.has(tag.toUpperCase())) {
-            document.getElementById('cartMessage').textContent = 'No unbilled QR piece is available for this item.';
-            return;
-        }
+        const availableTags = Array.isArray(item.available_tags) ? item.available_tags : [];
         const key = getItemKey(item);
-        if (!cart.has(key)) {
+
+        if (cart.has(key)) {
+            // Already in cart: increase quantity
+            const cartItem = cart.get(key);
+            cartItem.available_tags = [...new Set([...(cartItem.available_tags || []), ...availableTags])];
+            const allAvailable = selectableTags(cartItem);
+            const maxStock = allAvailable.length;
+            const currentUpper = cartItem.tags.map(t => t.toUpperCase());
+            const unassigned = allAvailable.filter(t => !currentUpper.includes(t.toUpperCase()));
+
+            if (!unassigned.length) {
+                const rowInput = cartBody.querySelector(`input[data-quantity-key="${key}"]`);
+                showInventoryLimit(
+                    'Available stock limit reached',
+                    `All ${maxStock} available piece(s) in stock for ${cartItem.product_name} are already added to this bill.`,
+                    rowInput
+                );
+                return;
+            }
+
+            const tagToAdd = (selectedTag && !currentUpper.includes(selectedTag.toUpperCase()))
+                ? selectedTag
+                : unassigned[0];
+
+            cartItem.tags.push(tagToAdd);
+            showSuccessToast(`Quantity increased to ${cartItem.tags.length} for ${cartItem.product_name}.`);
+        } else {
+            // New item to cart
+            const selectedTagIsAvailable = selectedTag && !assigned.has(selectedTag.toUpperCase());
+            const tag = selectedTagIsAvailable
+                ? selectedTag
+                : availableTags.find(code => !assigned.has(code.toUpperCase()));
+
+            if (!tag || assigned.has(tag.toUpperCase())) {
+                showInventoryLimit('Available stock limit reached', `No unbilled piece is available for ${item.product_name}.`);
+                return;
+            }
+
             const isComp = Number(item.is_complementary || 0) === 1;
             cart.set(key, {
                 qc_item_id: Number(item.qc_item_id || 0),
                 variant_id: Number(item.variant_id || 0),
+                available_tags: [...availableTags],
                 is_complementary: isComp ? 1 : 0,
                 product_name: item.product_name,
                 sku: item.sku || '',
+                variant_code: item.variant_code || '',
                 hsn_code: item.hsn_code || '6109',
                 size_name: item.size_name || '',
                 color_name: item.color_name || '',
@@ -571,29 +907,32 @@ $existingItems = array_map(static function (array $item): array {
                 sgst_rate: Number(item.gst_percentage || 0) / 2,
                 cgst_rate: Number(item.gst_percentage || 0) / 2,
                 igst_rate: 0,
-                tags: []
+                tags: [tag]
             });
+            showSuccessToast(`Added ${item.product_name} (Qty: 1)`);
         }
-        cart.get(key).tags.push(tag);
-        document.getElementById('cartMessage').textContent = `Added QR ${tag}.`;
+
         search.value = '';
         resultBox.replaceChildren();
         renderCart();
         search.focus();
     }
 
-    async function lookup() {
+    async function lookup(showStockLimitAlert = false) {
         const query = search.value.trim();
         resultBox.replaceChildren();
         if (!query) return;
         try {
-            const params = new URLSearchParams({q: query});
+            const params = new URLSearchParams({
+                q: query,
+                production_unit_id: unitSelect.value
+            });
             if (billId) params.set('bill_id', String(billId));
             const response = await fetch('<?= url('api/production/billing/search') ?>?' + params.toString(), {headers: {'Accept': 'application/json'}});
             const payload = await response.json();
             if (!response.ok || !payload.success) throw new Error(payload.message || 'Inventory search failed.');
 
-            // Check if item is flagged as damaged in Damage Management module
+            // Check damaged
             if (payload.data && payload.data.is_damaged) {
                 const alertEl = document.createElement('div');
                 alertEl.className = 'list-group-item list-group-item-danger border-danger fw-bold small p-3 d-flex align-items-center gap-2';
@@ -603,7 +942,7 @@ $existingItems = array_map(static function (array $item): array {
                 return;
             }
 
-            // Check if item has already been outwarded to warehouse
+            // Check outwarded
             if (payload.data && payload.data.is_outwarded) {
                 const alertEl = document.createElement('div');
                 alertEl.className = 'list-group-item list-group-item-warning border-warning fw-bold small p-3 d-flex align-items-center gap-2';
@@ -622,11 +961,24 @@ $existingItems = array_map(static function (array $item): array {
                 return;
             }
 
+            if (payload.data && payload.data.stock_limit_reached) {
+                document.getElementById('cartMessage').textContent = payload.data.message;
+                if (showStockLimitAlert) {
+                    showInventoryLimit('Available stock limit reached', payload.data.message);
+                }
+                return;
+            }
+
             const assigned = assignedTags();
             let resultCount = 0;
+            let stockAlreadyAssigned = false;
             payload.data.items.forEach(item => {
-                const available = item.available_tags.filter(tag => !assigned.has(tag.toUpperCase()));
-                if (!available.length) return;
+                const itemTags = Array.isArray(item.available_tags) ? item.available_tags : [];
+                const available = itemTags.filter(tag => !assigned.has(tag.toUpperCase()));
+                if (!available.length) {
+                    if (itemTags.length) stockAlreadyAssigned = true;
+                    return;
+                }
                 const exactTag = available.find(tag => tag.toUpperCase() === query.toUpperCase());
                 const button = document.createElement('button');
                 button.type = 'button';
@@ -649,8 +1001,13 @@ $existingItems = array_map(static function (array $item): array {
             if (!resultCount) {
                 const empty = document.createElement('div');
                 empty.className = 'list-group-item text-muted small';
-                empty.textContent = 'No available matching Production Inventory items.';
+                empty.textContent = stockAlreadyAssigned
+                    ? 'All available pieces for this item are already in the bill.'
+                    : 'No available matching Production Inventory items.';
                 resultBox.append(empty);
+                if (showStockLimitAlert && stockAlreadyAssigned) {
+                    showInventoryLimit('Available stock limit reached', 'All available pieces for this item are already in this bill.');
+                }
             }
         } catch (error) {
             const message = document.createElement('div');
@@ -660,15 +1017,62 @@ $existingItems = array_map(static function (array $item): array {
         }
     }
 
-    async function scanAndAdd() {
+    // Handles scanning or manual adding: increases Qty if same QR, alerts if stock limit reached
+    async function handleScanOrAdd(rawCode) {
         clearTimeout(searchTimer);
-        await lookup();
+        const code = (rawCode || '').trim();
+        if (!code) return;
+
+        // 1. Check if item already exists in cart: increment Qty
+        const existingItem = findCartItemForCode(code);
+        if (existingItem) {
+            const available = selectableTags(existingItem);
+            const maxStock = available.length;
+            const currentQty = existingItem.tags.length;
+            const rowInput = cartBody.querySelector(`input[data-quantity-key="${getItemKey(existingItem)}"]`);
+
+            if (currentQty >= maxStock) {
+                showInventoryLimit(
+                    'Available stock limit reached',
+                    `All ${maxStock} available piece(s) in stock for ${existingItem.product_name} are already added to this bill.`,
+                    rowInput
+                );
+                search.value = '';
+                search.focus();
+                return;
+            }
+
+            const assignedUpper = existingItem.tags.map(t => t.toUpperCase());
+            const unassigned = available.filter(t => !assignedUpper.includes(t.toUpperCase()));
+            if (!unassigned.length) {
+                showInventoryLimit(
+                    'Available stock limit reached',
+                    `All ${maxStock} available piece(s) in stock for ${existingItem.product_name} are already added to this bill.`,
+                    rowInput
+                );
+                search.value = '';
+                search.focus();
+                return;
+            }
+
+            const nextTag = unassigned[0];
+            existingItem.tags.push(nextTag);
+            showSuccessToast(`Quantity increased to ${existingItem.tags.length} for ${existingItem.product_name}.`);
+            search.value = '';
+            resultBox.replaceChildren();
+            renderCart();
+            search.focus();
+            return;
+        }
+
+        // 2. Item not yet in cart: lookup inventory and add
+        await lookup(true);
         const availableButtons = [...resultBox.querySelectorAll('button')];
         if (!availableButtons.length) return;
-        const scannedCode = search.value.trim().toUpperCase();
+        const scannedUpper = code.toUpperCase();
         const exactMatch = availableButtons.find(button => {
             const badge = button.querySelector('.badge');
-            return badge && badge.textContent.trim().toUpperCase() === scannedCode;
+            return badge && badge.textContent.trim().toUpperCase() === scannedUpper;
         });
         (exactMatch || availableButtons[0]).click();
     }
@@ -677,13 +1081,14 @@ $existingItems = array_map(static function (array $item): array {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(lookup, 250);
     });
-    document.getElementById('scanAddButton').addEventListener('click', scanAndAdd);
+    document.getElementById('scanAddButton').addEventListener('click', () => handleScanOrAdd(search.value));
     search.addEventListener('keydown', event => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            scanAndAdd();
+            handleScanOrAdd(search.value);
         }
     });
+
     const cameraModalElement = document.getElementById('cameraScanModal');
     const cameraModal = bootstrap.Modal.getOrCreateInstance(cameraModalElement);
     const cameraMessage = document.getElementById('cameraScanMessage');
@@ -713,17 +1118,14 @@ $existingItems = array_map(static function (array $item): array {
                 async decodedText => {
                     if (cameraScanBusy) return;
                     cameraScanBusy = true;
-                    search.value = decodedText.trim();
-                    cameraMessage.textContent = 'QR detected. Checking production inventory…';
-                    clearTimeout(searchTimer);
-                    await lookup();
-                    const exactResult = [...resultBox.querySelectorAll('button')].find(button => button.textContent.toUpperCase().includes(decodedText.trim().toUpperCase()));
-                    if (exactResult) {
-                        exactResult.click();
-                        cameraMessage.textContent = 'QR added to this bill.';
+                    cameraMessage.textContent = 'QR detected. Processing…';
+                    try {
+                        await handleScanOrAdd(decodedText.trim());
+                        cameraMessage.textContent = 'QR processed successfully.';
                         cameraModal.hide();
-                    } else {
-                        cameraMessage.textContent = resultBox.textContent.trim() || 'No available matching finished-goods QR item was found.';
+                    } catch (err) {
+                        cameraMessage.textContent = err.message || 'QR processing failed.';
+                    } finally {
                         cameraScanBusy = false;
                     }
                 },
@@ -736,9 +1138,11 @@ $existingItems = array_map(static function (array $item): array {
         }
     });
     cameraModalElement.addEventListener('hidden.bs.modal', stopCameraScanner);
+
     unitSelect.addEventListener('change', updateProductionUnitDetails);
     document.getElementById('paymentMethod').addEventListener('change', updatePaymentFields);
     buyerType.addEventListener('change', updateBuyerFields);
+
     form.elements.company_phone.pattern = '\\+?[0-9][0-9 ()-]{6,19}';
     form.elements.customer_phone.pattern = '\\+?[0-9][0-9 ()-]{6,19}';
     form.elements.company_gstin.pattern = '[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]';
@@ -747,8 +1151,10 @@ $existingItems = array_map(static function (array $item): array {
     form.elements.customer_gstin.maxLength = 15;
     form.elements.bill_date.required = true;
     document.getElementById('paymentMethod').required = true;
+
     updatePaymentFields();
     ['cash_amount', 'upi_amount'].forEach(name => form.elements[name]?.addEventListener('input', updateTotals));
+
     form.addEventListener('submit', event => {
         if (!cart.size || [...cart.values()].some(item => !item.tags.length)) {
             event.preventDefault();
@@ -770,8 +1176,9 @@ $existingItems = array_map(static function (array $item): array {
             document.getElementById('cartMessage').textContent = 'Check the item price and GST values.';
         }
     });
+
     updateBuyerFields();
     updateProductionUnitDetails();
     renderCart();
-})();
+});
 </script>

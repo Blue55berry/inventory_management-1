@@ -346,7 +346,33 @@ class ProductionBillingController
         }
 
         $billId = max(0, (int)($_GET['bill_id'] ?? 0));
+        $productionUnitId = max(0, (int)($_GET['production_unit_id'] ?? 0));
+        $scopedUnitId = function_exists('currentProductionUnitId') ? currentProductionUnitId() : null;
+        if ($scopedUnitId !== null) {
+            $productionUnitId = (int)$scopedUnitId;
+        }
         $needle = strtoupper($query);
+
+        $billedTagParams = [$needle];
+        $billExclusion = '';
+        if ($billId > 0) {
+            $billExclusion = ' AND bill_id <> ?';
+            $billedTagParams[] = $billId;
+        }
+        $billedTag = Database::fetchOne(
+            "SELECT id FROM production_bill_item_tags
+             WHERE UPPER(TRIM(tag_code)) = ?{$billExclusion}
+             LIMIT 1",
+            $billedTagParams
+        );
+        if ($billedTag) {
+            Response::jsonSuccess('QR item already billed.', [
+                'items' => [],
+                'stock_limit_reached' => true,
+                'message' => 'This QR item has already been billed and is no longer available.',
+            ]);
+            return;
+        }
 
         // Check if scanned tag / QR matches a quarantined fabric roll in Damage Management
         $damagedMatch = Database::fetchOne(
@@ -394,7 +420,7 @@ class ProductionBillingController
             return;
         }
 
-        $items = $this->getAvailableInventory($billId);
+        $items = $this->getAvailableInventory($billId, $productionUnitId);
         $exactAvailableItems = [];
         foreach ($items as $item) {
             $exactTag = array_values(array_filter(
@@ -402,7 +428,12 @@ class ProductionBillingController
                 static fn(string $tag): bool => strtoupper(trim($tag)) === $needle
             ));
             if ($exactTag) {
-                $item['available_tags'] = $exactTag;
+                $item['matched_tag'] = $exactTag[0];
+                $otherTags = array_values(array_filter(
+                    $item['available_tags'],
+                    static fn(string $tag): bool => strtoupper(trim($tag)) !== $needle
+                ));
+                $item['available_tags'] = array_merge([$exactTag[0]], $otherTags);
                 $exactAvailableItems[] = $item;
             }
         }
@@ -451,8 +482,11 @@ class ProductionBillingController
             } else {
                 // If not in a specific QC batch piece list, check available stock balance at this facility
                 $balance = Database::fetchOne(
-                    "SELECT quantity FROM stock_balances WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT' AND stock_state = 'AVAILABLE'",
-                    [(int)$variantMatch['id']]
+                    "SELECT COALESCE(SUM(quantity), 0) AS quantity
+                     FROM stock_balances
+                     WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT'
+                       AND location_id = ? AND stock_state = 'AVAILABLE'",
+                    [(int)$variantMatch['id'], $productionUnitId]
                 );
                 $availableQty = (float)($balance['quantity'] ?? 0);
 
@@ -491,6 +525,12 @@ class ProductionBillingController
                     Response::jsonSuccess('Variant stock found.', ['items' => $variantItems]);
                     return;
                 }
+                Response::jsonSuccess('No available variant stock.', [
+                    'items' => [],
+                    'stock_limit_reached' => true,
+                    'message' => 'No available stock remains for this product variant at the selected production unit.',
+                ]);
+                return;
             }
         }
 
@@ -580,7 +620,15 @@ class ProductionBillingController
                 || stripos((string)$item['program_number'], $query) !== false;
 
             if ($metadataMatch || $matchingTags) {
-                $item['available_tags'] = $matchingTags ?: $item['available_tags'];
+                if ($matchingTags) {
+                    $item['matched_tag'] = $matchingTags[0];
+                    $matchingUpper = array_map('strtoupper', $matchingTags);
+                    $otherTags = array_values(array_filter(
+                        $item['available_tags'],
+                        static fn(string $tag): bool => !in_array(strtoupper($tag), $matchingUpper, true)
+                    ));
+                    $item['available_tags'] = array_merge($matchingTags, $otherTags);
+                }
                 $matches[] = $item;
                 if (count($matches) >= 20) {
                     break;
@@ -890,8 +938,9 @@ class ProductionBillingController
         return $items;
     }
 
-    private function getAvailableInventory(int $excludeBillId = 0): array
+    private function getAvailableInventory(int $excludeBillId = 0, int $productionUnitId = 0): array
     {
+        $unitFilter = $productionUnitId > 0 ? ' AND pp.production_unit_id = ?' : '';
         $rows = Database::fetchAll(
             "SELECT qi.id AS qc_item_id, qi.qc_batch_id, qi.variant_id, qi.size_name, qi.color_name,
                     qi.base_price AS qc_base_price, qi.discount_price AS qc_discount_price,
@@ -909,8 +958,9 @@ class ProductionBillingController
              LEFT JOIN product_variants pv ON pv.id = qi.variant_id
              LEFT JOIN colors c ON c.id = pv.color_id
              LEFT JOIN sizes sz ON sz.id = pv.size_id
-             WHERE qi.passed_qty > 0
-             ORDER BY qb.created_at DESC, qi.id DESC"
+             WHERE qi.passed_qty > 0{$unitFilter}
+             ORDER BY qb.created_at DESC, qi.id DESC",
+            $productionUnitId > 0 ? [$productionUnitId] : []
         );
 
         $batchIds = array_values(array_unique(array_map(
@@ -1113,12 +1163,13 @@ class ProductionBillingController
         }
 
         $inventory = [];
-        foreach ($this->getAvailableInventory($billId ?? 0) as $entry) {
+        foreach ($this->getAvailableInventory($billId ?? 0, $productionUnitId) as $entry) {
             $inventory[(int)$entry['qc_item_id']] = $entry;
         }
 
         $itemPayload = [];
         $usedTags = [];
+        $variantRequestedQuantities = [];
         foreach (is_array($submittedItems) ? $submittedItems : [] as $submitted) {
             if (!is_array($submitted)) {
                 continue;
@@ -1146,14 +1197,19 @@ class ProductionBillingController
                     [$variantId]
                 );
                 $balRow = Database::fetchOne(
-                    "SELECT quantity FROM stock_balances WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT' AND stock_state = 'AVAILABLE'",
-                    [$variantId]
+                    "SELECT COALESCE(SUM(quantity), 0) AS quantity
+                     FROM stock_balances
+                     WHERE variant_id = ? AND location_type = 'PRODUCTION_UNIT'
+                       AND location_id = ? AND stock_state = 'AVAILABLE'",
+                    [$variantId, $productionUnitId]
                 );
                 $availableVariantQty = (float)($balRow['quantity'] ?? 0);
-                if (!$varRow || $availableVariantQty < count($tags)) {
+                $requestedVariantQty = ($variantRequestedQuantities[$variantId] ?? 0) + count($tags);
+                if (!$varRow || $availableVariantQty < $requestedVariantQty) {
                     Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', 'Insufficient available stock for variant ' . ($varRow['sku'] ?? "ID $variantId") . '. Available: ' . $availableVariantQty);
                     return;
                 }
+                $variantRequestedQuantities[$variantId] = $requestedVariantQty;
                 $isComp = (!empty($varRow['is_complementary']) || !empty($varRow['prod_is_comp']));
                 $stock = [
                     'qc_item_id' => 0,
@@ -1508,22 +1564,18 @@ class ProductionBillingController
                 // Inventory integration: Deduct stock from stock_balances using StockService
                 $vId = (int)($stock['variant_id'] ?? 0);
                 if ($vId > 0 && $productionUnitId > 0) {
-                    try {
-                        StockService::decrease(
-                            $vId,
-                            'PRODUCTION_UNIT',
-                            $productionUnitId,
-                            'AVAILABLE',
-                            (float)$item['quantity'],
-                            'PRODUCTION_SALE',
-                            'production_bills',
-                            $billId,
-                            (int)(Auth::id() ?? 0) ?: null,
-                            "Billed in Production Bill #{$billNumber}"
-                        );
-                    } catch (Throwable $stkEx) {
-                        error_log("StockService::decrease on bill: " . $stkEx->getMessage());
-                    }
+                    StockService::decrease(
+                        $vId,
+                        'PRODUCTION_UNIT',
+                        $productionUnitId,
+                        'AVAILABLE',
+                        (float)$item['quantity'],
+                        'PRODUCTION_SALE',
+                        'production_bills',
+                        $billId,
+                        (int)(Auth::id() ?? 0) ?: null,
+                        "Billed in Production Bill #{$billNumber}"
+                    );
                 }
             }
             Database::commit();
@@ -1531,9 +1583,13 @@ class ProductionBillingController
         } catch (Throwable $e) {
             Database::rollback();
             error_log('ProductionBillingController::persistBill failed: ' . $e->getMessage());
-            $message = str_contains($e->getMessage(), 'uniq_production_bill_tag')
-                ? 'A QR code was just billed in another transaction. Refresh inventory and try again.'
-                : 'Unable to save the production bill. Please verify the details and try again.';
+            if (str_contains($e->getMessage(), 'uniq_production_bill_tag')) {
+                $message = 'A QR code was just billed in another transaction. Refresh inventory and try again.';
+            } elseif (str_contains($e->getMessage(), 'Insufficient stock.')) {
+                $message = 'Available stock changed while this bill was being saved. Refresh inventory and reduce the quantity before trying again.';
+            } else {
+                $message = 'Unable to save the production bill. Please verify the details and try again.';
+            }
             Response::redirect($billId ? 'production/billing/edit/' . $billId : 'production/billing/create', 'error', $message);
         }
     }

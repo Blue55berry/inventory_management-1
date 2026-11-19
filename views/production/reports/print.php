@@ -1120,7 +1120,7 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
                         <th>Category Path</th>
                         <th class="right">MRP</th>
                         <th class="right">Selling Price</th>
-                        <th>Status</th>
+                        <th class="right">Available Qty</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1134,13 +1134,7 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
                             <td><?= htmlspecialchars(implode(' > ', array_filter([$v['category_name'] ?? '', $v['subcategory_name'] ?? '', $v['sub_subcategory_name'] ?? '']))) ?: '-' ?></td>
                             <td class="right">₹<?= number_format((float)($v['mrp'] ?? 0), 2) ?></td>
                             <td class="right">₹<?= number_format((float)($v['selling_price'] ?? 0), 2) ?></td>
-                            <td>
-                                <?php if (!empty($v['is_active'])): ?>
-                                    <span class="badge badge-success">Active</span>
-                                <?php else: ?>
-                                    <span class="badge badge-secondary">Inactive</span>
-                                <?php endif; ?>
-                            </td>
+                            <td class="right"><?= number_format((float)($v['available_quantity'] ?? 0), 0) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
