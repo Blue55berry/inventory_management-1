@@ -203,6 +203,20 @@ if (!tableExists($db, 'user_permission_overrides')) {
     ");
 }
 
+// 2e. Multi-concern architecture (2026_11_20_add_concern_architecture.sql)
+// This migration was never wired into the master runner, which left the
+// `concerns` table and the concern_id scoping columns missing.
+echo "  Ensuring multi-concern architecture tables and scoping columns...\n";
+$concernMigration = BASE_PATH . '/database/migrations/2026_11_20_add_concern_architecture.sql';
+if (file_exists($concernMigration)) {
+    $db->exec(file_get_contents($concernMigration));
+} else {
+    throw new RuntimeException("Concern architecture migration not found: {$concernMigration}");
+}
+require_once BASE_PATH . '/app/Models/Concern.php';
+Concern::ensureSchema();
+echo "  Concern architecture migration applied and verified.\n";
+
 // -------------------------------------------------------------
 // STEP 3: ADD NEW COLUMNS TO EXISTING TABLES
 // -------------------------------------------------------------

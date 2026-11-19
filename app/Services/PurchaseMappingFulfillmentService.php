@@ -5,17 +5,14 @@
  * Completes the post-purchase flow for every production purchase item type:
  *   1. Save category / subcategory / sub-subcategory / attributes mapping
  *   2. Sync the mapped taxonomy back to the product + variant catalog
- *   3. Auto-generate a QR generation batch (QR Generation module)
- *   4. Auto-create (or extend) the Goods Receipt Note (GRN) and credit warehouse stock
+ *   3. Auto-create (or extend) the Goods Receipt Note (GRN)
  *
- * All steps run inside one database transaction. Re-saving a mapping is idempotent:
- * an existing QR batch / GRN line is reused instead of being duplicated.
+ * Mapping and GRN creation run inside one database transaction. QR generation is
+ * a separate manual step after mapping. Re-saving a mapping is idempotent.
  */
 
 require_once BASE_PATH . '/app/Helpers/Database.php';
-require_once BASE_PATH . '/app/Services/QrGenerationService.php';
 require_once BASE_PATH . '/app/Services/VariantService.php';
-require_once BASE_PATH . '/app/Services/StockService.php';
 require_once BASE_PATH . '/app/Services/AuditService.php';
 require_once BASE_PATH . '/app/Models/ProductVariant.php';
 require_once BASE_PATH . '/app/Models/PurchaseInward.php';
@@ -166,8 +163,7 @@ class PurchaseMappingFulfillmentService {
             );
 
             $catalog = self::syncCatalog($itemId, $encodedAttributes, $isComplementary);
-            $qr = self::generateQr($itemId, $catalog, (int)($item['purchase_id'] ?? 0));
-            $grn = self::createOrAppendGrn($itemId, $catalog, $qr, $userId);
+            $grn = self::createOrAppendGrn($itemId, $catalog, $userId);
 
             AuditService::log('purchases', 'UPDATE', 'production_purchase_items', $itemId, null, [
                 'action'                => 'purchase_item_mapping_fulfillment',
@@ -178,8 +174,6 @@ class PurchaseMappingFulfillmentService {
                 'mrp'                   => $mrp,
                 'selling_price'         => $sellingPrice,
                 'is_complementary'      => $isComplementary,
-                'qr_generation_id'      => $qr['generation_id'],
-                'qr_batch_code'         => $qr['batch_code'],
                 'grn_id'                => $grn['grn_id'],
                 'grn_number'            => $grn['grn_number'],
             ]);
@@ -189,9 +183,7 @@ class PurchaseMappingFulfillmentService {
             return [
                 'item'           => self::getPurchaseItem($itemId),
                 'catalog'        => $catalog,
-                'qr'             => $qr,
                 'grn'            => $grn,
-                'qr_reused'      => !empty($qr['reused']),
                 'grn_line_reused'=> !empty($grn['line_reused']),
             ];
         } catch (Throwable $e) {
@@ -349,57 +341,10 @@ class PurchaseMappingFulfillmentService {
     }
 
     /**
-     * Generate one QR batch for this mapped purchase line (one label per piece).
-     */
-    private static function generateQr(int $itemId, array $catalog, int $purchaseId): array {
-        $item = self::getPurchaseItem($itemId);
-        if (!empty($item['qr_generation_id'])) {
-            $batch = Database::fetchOne(
-                "SELECT id, batch_code, qr_prefix, quantity FROM qr_generations WHERE id = ?",
-                [(int)$item['qr_generation_id']]
-            );
-            if ($batch) {
-                return [
-                    'generation_id' => (int)$batch['id'],
-                    'batch_code'    => $batch['batch_code'],
-                    'qr_prefix'     => $batch['qr_prefix'],
-                    'quantity'      => (int)$batch['quantity'],
-                    'reused'        => true,
-                ];
-            }
-        }
-
-        $quantity = max(1, min(1000, (int)round((float)$catalog['quantity'])));
-
-        $result = QrGenerationService::generateCatalogQrs([
-            'product_id'  => (int)$catalog['product_id'],
-            'variant_id'  => (int)$catalog['variant_id'],
-            'brand_name'  => $catalog['brand_name'],
-            'quantity'    => $quantity,
-            'notes'       => "Auto-generated from purchase {$catalog['purchase_number']} after taxonomy mapping ({$catalog['item_name']})",
-        ]);
-
-        Database::execute(
-            "UPDATE production_purchase_items
-             SET qr_generation_id = ?, qr_batch_code = ?
-             WHERE id = ?",
-            [(int)$result['generation_id'], $result['batch_code'], $itemId]
-        );
-
-        return [
-            'generation_id' => (int)$result['generation_id'],
-            'batch_code'    => $result['batch_code'],
-            'qr_prefix'     => $result['qr_prefix'] ?? null,
-            'quantity'      => (int)$result['quantity'],
-            'reused'        => false,
-        ];
-    }
-
-    /**
      * Create (once per purchase) a GRN with a matching PO, then append one line
-     * per mapped purchase item and credit warehouse stock for the new quantity.
+     * per mapped purchase item. Stock is posted separately from a generated QR batch.
      */
-    private static function createOrAppendGrn(int $itemId, array $catalog, array $qr, int $userId): array {
+    private static function createOrAppendGrn(int $itemId, array $catalog, int $userId): array {
         $item = self::getPurchaseItem($itemId);
         $purchaseId = (int)$catalog['purchase_id'];
 
@@ -450,6 +395,7 @@ class PurchaseMappingFulfillmentService {
         $lineReused = false;
         if (!$lineAlreadyExists) {
             $qty = max(1, (int)round((float)$catalog['quantity']));
+            $batchCode = trim((string)($item['qr_batch_code'] ?? $item['existing_batch_code'] ?? ''));
             Database::execute(
                 "INSERT INTO purchase_inward_items
                     (purchase_inward_id, production_purchase_item_id, variant_id,
@@ -467,8 +413,8 @@ class PurchaseMappingFulfillmentService {
                     $qty,
                     $qty,
                     (float)$catalog['mrp'],
-                    $qr['batch_code'] ?? null,
-                    "Mapped {$catalog['item_type']} item — QR batch " . ($qr['batch_code'] ?? '-'),
+                    $batchCode !== '' ? $batchCode : null,
+                    "Mapped {$catalog['item_type']} purchase item.",
                 ]
             );
 

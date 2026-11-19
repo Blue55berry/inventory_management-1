@@ -76,6 +76,16 @@ class CuttingBatch {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (cb.concern_id = ? OR cb.concern_id IS NULL)";
+            } else {
+                $sql .= " AND cb.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['status'])) {
             $sql .= " AND cb.status = ?";
             $params[] = $filters['status'];
@@ -172,11 +182,14 @@ class CuttingBatch {
                 $data['batch_number'] = 'CUT-' . date('Ymd') . '-' . sprintf('%04d', rand(1, 9999));
             }
         }
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         Database::execute(
             "INSERT INTO cutting_batches 
-             (name, program_id, batch_number, seller_roll_id, roll_weight, roll_price, wastage_weight, wastage_cost, used_weight, cost_per_piece, category_id, subcategory_id, sub_subcategory_id, operator_id, production_unit_id, material_issued, planned_qty, cut_qty, rejected_qty, wastage_qty, status, notes, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+             (concern_id, name, program_id, batch_number, seller_roll_id, roll_weight, roll_price, wastage_weight, wastage_cost, used_weight, cost_per_piece, category_id, subcategory_id, sub_subcategory_id, operator_id, production_unit_id, material_issued, planned_qty, cut_qty, rejected_qty, wastage_qty, status, notes, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
             [
+                $concernId,
                 $data['name'] ?? null,
                 $data['program_id'],
                 $data['batch_number'],

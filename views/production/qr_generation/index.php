@@ -10,7 +10,7 @@
     </div>
 </div>
 
-<!-- QR Generation areas: Fabric / Raw Material / Third-Party / Return -->
+<!-- QR Generation areas are filtered by the active concern. -->
 <ul class="nav nav-tabs nav-fill mb-4 border-bottom-0 gap-2" id="qrSourceTabs" role="tablist">
     <?php foreach ($tabs as $tab): ?>
         <?php $isActiveTab = $tab['key'] === $activeTab; ?>

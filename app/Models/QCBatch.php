@@ -62,6 +62,16 @@ class QCBatch {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (qb.concern_id = ? OR qb.concern_id IS NULL)";
+            } else {
+                $sql .= " AND qb.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['status'])) {
             $st = strtoupper(trim($filters['status']));
             if ($st === 'PENDING') {
@@ -119,11 +129,14 @@ class QCBatch {
                 $data['batch_number'] = 'QC-' . date('Ymd') . '-' . sprintf('%04d', rand(1, 9999));
             }
         }
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         Database::execute(
             "INSERT INTO qc_batches 
-             (batch_number, program_id, stitching_batch_id, inspector_id, total_qty, passed_qty, rejected_qty, rework_qty, status, notes)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             (concern_id, batch_number, program_id, stitching_batch_id, inspector_id, total_qty, passed_qty, rejected_qty, rework_qty, status, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
+                $concernId,
                 $data['batch_number'],
                 $data['program_id'],
                 $data['stitching_batch_id'] ?? null,

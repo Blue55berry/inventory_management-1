@@ -75,6 +75,16 @@ class StitchingBatch {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (sb.concern_id = ? OR sb.concern_id IS NULL)";
+            } else {
+                $sql .= " AND sb.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['status'])) {
             $sql .= " AND sb.status = ?";
             $params[] = $filters['status'];
@@ -150,11 +160,14 @@ class StitchingBatch {
                 $data['batch_number'] = 'STCH-' . date('Ymd') . '-' . sprintf('%04d', rand(1, 9999));
             }
         }
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         Database::execute(
             "INSERT INTO stitching_batches 
-             (name, batch_number, cutting_batch_id, program_id, category_id, subcategory_id, sub_subcategory_id, worker_id, received_qty, stitched_qty, total_weight, rejected_qty, rework_qty, start_date, end_date, status, notes, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
+             (concern_id, name, batch_number, cutting_batch_id, program_id, category_id, subcategory_id, sub_subcategory_id, worker_id, received_qty, stitched_qty, total_weight, rejected_qty, rework_qty, start_date, end_date, status, notes, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
             [
+                $concernId,
                 $data['name'] ?? null,
                 $data['batch_number'],
                 !empty($data['cutting_batch_id']) ? $data['cutting_batch_id'] : null,

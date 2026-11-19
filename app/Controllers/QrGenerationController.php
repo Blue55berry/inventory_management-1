@@ -30,17 +30,42 @@ class QrGenerationController {
 
         $batches = QrGenerationService::listBatches($filters);
         $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
-        $brands = Database::fetchAll("SELECT DISTINCT brand_name FROM qr_generations WHERE brand_name IS NOT NULL AND brand_name != '' ORDER BY brand_name ASC");
+
+        $cid = currentConcernId();
+        $brandSql = "SELECT DISTINCT brand_name
+                     FROM qr_generations
+                     WHERE brand_name IS NOT NULL
+                       AND brand_name != ''
+                       AND UPPER(COALESCE(qr_source, '')) <> 'OWN_PRODUCT'";
+        $brandParams = [];
+        if ($cid) {
+            $brandSql .= ($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?";
+            $brandParams[] = $cid;
+        }
+        $brandSql .= " ORDER BY brand_name ASC";
+        $brands = Database::fetchAll($brandSql, $brandParams);
 
         $tabCounts = [];
         foreach ($tabs as $key => $tab) {
-            $tabCounts[$key] = (int)(Database::fetchOne(
-                "SELECT COUNT(*) AS c FROM qr_generations WHERE qr_source = ?",
-                [$tab['source']]
-            )['c'] ?? 0);
+            $countSql = "SELECT COUNT(*) AS c FROM qr_generations WHERE qr_source = ?";
+            $countParams = [$tab['source']];
+            if ($cid) {
+                $countSql .= ($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?";
+                $countParams[] = $cid;
+            }
+            $tabCounts[$key] = (int)(Database::fetchOne($countSql, $countParams)['c'] ?? 0);
         }
 
-        $totalQrs = (int)Database::fetchOne("SELECT COUNT(*) as c FROM qr_generation_items")['c'];
+        $totalSql = "SELECT COUNT(*) as c
+                     FROM qr_generation_items qri
+                     JOIN qr_generations qrg ON qrg.id = qri.generation_id
+                     WHERE UPPER(COALESCE(qrg.qr_source, '')) <> 'OWN_PRODUCT'";
+        $totalParams = [];
+        if ($cid) {
+            $totalSql .= ($cid === 1) ? " AND (qrg.concern_id = ? OR qrg.concern_id IS NULL)" : " AND qrg.concern_id = ?";
+            $totalParams[] = $cid;
+        }
+        $totalQrs = (int)Database::fetchOne($totalSql, $totalParams)['c'];
 
         Response::view('production.qr_generation.index', [
             'pageTitle'    => 'QR Code Generation | GRM Inventory',
@@ -75,7 +100,13 @@ class QrGenerationController {
         $categories = Database::fetchAll("SELECT id, name, code FROM categories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
         $subcategories = Database::fetchAll("SELECT id, category_id, name, code FROM subcategories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
         $subSubcategories = Database::fetchAll("SELECT id, subcategory_id, name, code FROM sub_subcategories WHERE is_active = 1 ORDER BY sort_order ASC, name ASC");
-        $catalogs = Database::fetchAll("SELECT id, category_id, subcategory_id, name, code, brand_id FROM products WHERE is_active = 1 ORDER BY name ASC");
+        $catalogs = Database::fetchAll(
+            "SELECT id, category_id, subcategory_id, name, code, brand_id
+             FROM products
+             WHERE is_active = 1
+               AND (source_type IS NULL OR source_type NOT IN ('OWN_PRODUCT', 'OWN_PRODUCTION', 'MANUFACTURED', 'IN_HOUSE'))
+             ORDER BY name ASC"
+        );
         $brands = Database::fetchAll("SELECT id, name FROM brands WHERE is_active = 1 ORDER BY name ASC");
         $colors = Database::fetchAll("SELECT id, name, hex_code FROM colors WHERE is_active = 1 ORDER BY name ASC");
         $designs = Design::allActive();
@@ -108,16 +139,30 @@ class QrGenerationController {
      * Group purchasable lines by the QR tab they belong to.
      */
     private static function getPurchaseGroups(): array {
+        $cid = currentConcernId();
         $groups = [
             QrGenerationService::SOURCE_FABRIC      => [],
             QrGenerationService::SOURCE_RAW         => [],
             QrGenerationService::SOURCE_THIRD_PARTY => [],
         ];
+        $itemTypesSql = "'FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY'";
+
+        $concernWhere = "";
+        $params = [];
+        if ($cid) {
+            if ($cid === 1) {
+                $concernWhere = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND pp.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
 
         $rows = Database::fetchAll(
             "SELECT ppi.id AS item_id, ppi.item_type, ppi.item_name, ppi.quantity, ppi.unit,
                     ppi.vendor_sku, ppi.product_code, ppi.color, ppi.size, ppi.start_code,
-                    ppi.mrp, ppi.selling_price, ppi.is_mapped,
+                   ppi.mrp, ppi.selling_price, ppi.is_mapped, ppi.variant_id,
+                   pv.variant_code, pv.sku AS variant_sku,
                     ppi.qr_generation_id, ppi.qr_batch_code, ppi.grn_id, ppi.grn_number,
                     pp.id AS purchase_id, pp.purchase_number, pp.purchase_date, pp.invoice_number,
                     s.name AS seller_name, s.company AS seller_company,
@@ -126,7 +171,9 @@ class QrGenerationController {
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
              LEFT JOIN sellers s ON s.id = pp.seller_id
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
-             WHERE ppi.item_type IN ('FABRIC_ROLL', 'RAW_MATERIAL', 'THIRD_PARTY')
+             LEFT JOIN product_variants pv ON pv.id = ppi.variant_id
+             WHERE ppi.item_type IN ({$itemTypesSql})
+               AND ppi.is_mapped = 1
                AND ppi.qr_generation_id IS NULL
                AND (ppi.qr_batch_code IS NULL OR TRIM(ppi.qr_batch_code) = '')
                AND NOT EXISTS (
@@ -134,8 +181,10 @@ class QrGenerationController {
                    FROM qr_generations qrg
                    WHERE qrg.source_purchase_item_id = ppi.id
                )
+               {$concernWhere}
              ORDER BY pp.purchase_date DESC, pp.id DESC, ppi.id ASC
-             LIMIT 1000"
+             LIMIT 1000",
+            $params
         );
 
         foreach ($rows as $row) {
@@ -196,16 +245,15 @@ class QrGenerationController {
     }
 
     /**
-     * Handle QR generation from a real purchase line (Fabric / Raw / Third-Party).
+     * Handle QR generation from a mapped purchase line.
      */
     public function storePurchaseBatch(): void {
         $tab = QrGenerationService::normalizeTab($_POST['tab'] ?? null);
+        $tabs = QrGenerationService::sourceTabs();
         $source = strtoupper(trim((string)($_POST['qr_source'] ?? '')));
         $itemId = (int)($_POST['purchase_item_id'] ?? 0);
 
-        // Tab-based validation: a roll item can never be generated from the
-        // Third-Party tab (and vice versa).
-        if ($itemId <= 0 || $source === '') {
+        if ($itemId <= 0 || $source === '' || ($tabs[$tab]['source'] ?? null) !== $source) {
             Session::flash('error', 'Select a purchase item from the selected tab.');
             Response::redirect(url('production/qr-generations/create?tab=' . $tab));
             return;

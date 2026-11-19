@@ -1,5 +1,5 @@
 <?php
-$activeMeta = $tabs[$activeTab];
+$activeMeta = $tabs[$activeTab] ?? reset($tabs);
 ?>
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
     <div>
@@ -13,7 +13,7 @@ $activeMeta = $tabs[$activeTab];
     </div>
 </div>
 
-<!-- Four QR generation areas (mirrors the Purchases module) -->
+<!-- QR generation areas -->
 <ul class="nav nav-tabs nav-fill mb-4 border-bottom-0 gap-2" id="generatorSourceTabs" role="tablist">
     <?php foreach ($tabs as $tab): ?>
         <?php $isActiveTab = $tab['key'] === $activeTab; ?>
@@ -48,18 +48,24 @@ $activeMeta = $tabs[$activeTab];
         ?>
     </div>
 
+    <?php if (isset($tabs['third_party'])): ?>
     <!-- 3. THIRD-PARTY PRODUCTS -->
     <div class="tab-pane fade <?= $activeTab === 'third_party' ? 'show active' : '' ?>" id="thirdPartyMode" role="tabpanel">
         <?php
+            $sourceKey = 'third_party';
+            $sourceMeta = $tabs['third_party'];
             $purchases = $purchaseGroups[QrGenerationService::SOURCE_THIRD_PARTY] ?? [];
             require __DIR__ . '/_third_party_form.php';
         ?>
     </div>
+    <?php endif; ?>
 
-    <!-- 4. RETURN QR (UI ONLY) -->
+    <?php if (isset($tabs['return'])): ?>
+    <!-- RETURN QR (UI ONLY) -->
     <div class="tab-pane fade <?= $activeTab === 'return' ? 'show active' : '' ?>" id="returnMode" role="tabpanel">
         <?php require __DIR__ . '/_return_form.php'; ?>
     </div>
+    <?php endif; ?>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -160,6 +166,8 @@ function onCatalogModeSelected() {
 
 document.addEventListener('DOMContentLoaded', function () {
     updateManualPreview();
-    if (typeof updateTpPreview === 'function') updateTpPreview();
+    if (typeof updateTpPreview === 'function') {
+        updateTpPreview('third_party');
+    }
 });
 </script>

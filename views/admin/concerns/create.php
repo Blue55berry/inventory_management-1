@@ -1,7 +1,7 @@
 <div class="page-header d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-building-add text-primary me-2"></i>Add New Business Concern</h2>
-        <p class="text-muted small mb-0">Register a new company entity, independent manufacturing unit, or sister firm with separate tax credentials and scoped module access.</p>
+        <p class="text-muted small mb-0">Register a new company entity, independent manufacturing unit, or sister firm with separate tax credentials and document numbering.</p>
     </div>
     <div>
         <a href="<?= url('admin/concerns') ?>" class="btn btn-outline-secondary">
@@ -147,11 +147,11 @@
                 </div>
             </div>
 
-            <!-- 6. Authorized Staff Members & Operating Team -->
+            <!-- 4. Authorized Staff Members & Operating Team -->
             <div class="card border shadow-sm mb-4">
                 <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
-                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-people me-2 text-primary"></i>6. Authorized Staff Members &amp; Operating Team</h6>
+                        <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-people me-2 text-primary"></i>4. Authorized Staff Members &amp; Operating Team</h6>
                         <small class="text-muted">Assign team members permitted to operate under this business concern upon creation.</small>
                     </div>
                     <div class="d-flex align-items-center gap-2">
@@ -226,12 +226,12 @@
             </div>
         </div>
 
-        <!-- Right Column: Document Prefixes & Module Matrix -->
+        <!-- Right Column: Document Prefixes & Actions -->
         <div class="col-lg-4">
             <!-- Document Prefixes -->
             <div class="card border shadow-sm mb-4">
                 <div class="card-header bg-white py-3">
-                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-hash me-2 text-info"></i>4. Document Number Prefixes</h6>
+                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-hash me-2 text-info"></i>5. Document Number Prefixes</h6>
                 </div>
                 <div class="card-body">
                     <div class="mb-3">
@@ -248,33 +248,6 @@
                         <label class="form-label fw-semibold">Dispatch / Gate Pass Prefix</label>
                         <input type="text" name="dispatch_prefix" class="form-control text-uppercase font-monospace" value="DSP-" placeholder="e.g. DSP-U2-">
                         <div class="form-text">Prefix for outward gate passes.</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Initial Module Entitlement Matrix -->
-            <div class="card border shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-shield-check me-2 text-warning"></i>5. Module Entitlements</h6>
-                    <span class="badge bg-primary-subtle text-primary border">Matrix</span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="p-3 bg-light border-bottom small text-muted">
-                        Select operational capabilities assigned to this Concern. Disabled modules will be hidden in the sidebar for staff assigned to this concern.
-                    </div>
-                    <div class="list-group list-group-flush">
-                        <?php foreach ($standardModules as $mKey => $m): ?>
-                            <label class="list-group-item d-flex align-items-start gap-3 py-3 cursor-pointer">
-                                <input class="form-check-input mt-1" type="checkbox" name="modules[]" value="<?= e($mKey) ?>" checked>
-                                <div class="flex-grow-1">
-                                    <div class="d-flex align-items-center gap-1.5 fw-bold text-dark">
-                                        <i class="<?= e($m['icon']) ?> text-<?= e($m['badge_color']) ?> me-1"></i>
-                                        <?= e($m['name']) ?>
-                                    </div>
-                                    <div class="small text-muted mt-0.5" style="font-size: 11px;"><?= e($m['desc']) ?></div>
-                                </div>
-                            </label>
-                        <?php endforeach; ?>
                     </div>
                 </div>
             </div>
@@ -371,9 +344,6 @@ function applyConcernArchetype(type) {
     const invPrefix = document.querySelector('input[name="invoice_prefix"]');
     const poPrefix = document.querySelector('input[name="po_prefix"]');
     const dspPrefix = document.querySelector('input[name="dispatch_prefix"]');
-    const moduleCheckboxes = document.querySelectorAll('input[name="modules[]"]');
-
-    let modKeys = [];
 
     if (type === 'PRODUCTION') {
         if (!nameInput.value || nameInput.value.includes('Warehouse') || nameInput.value.includes('Store')) {
@@ -385,7 +355,6 @@ function applyConcernArchetype(type) {
         if (invPrefix) invPrefix.value = 'PRD-INV-';
         if (poPrefix) poPrefix.value = 'PO-';
         if (dspPrefix) dspPrefix.value = 'DSP-';
-        modKeys = ['production', 'purchases', 'expenses', 'assets'];
     } else if (type === 'WAREHOUSE') {
         if (!nameInput.value || nameInput.value.includes('Production') || nameInput.value.includes('Store')) {
             nameInput.value = 'GRM Central Logistics & Warehouse';
@@ -396,7 +365,6 @@ function applyConcernArchetype(type) {
         if (invPrefix) invPrefix.value = 'WH-INV-';
         if (poPrefix) poPrefix.value = 'WH-PO-';
         if (dspPrefix) dspPrefix.value = 'DSP-';
-        modKeys = ['warehouse', 'digital_sales', 'returns'];
     } else if (type === 'RETAIL') {
         if (!nameInput.value || nameInput.value.includes('Production') || nameInput.value.includes('Warehouse')) {
             nameInput.value = 'GRM Factory Showroom & Store';
@@ -407,17 +375,11 @@ function applyConcernArchetype(type) {
         if (invPrefix) invPrefix.value = 'POS-';
         if (poPrefix) poPrefix.value = 'RET-PO-';
         if (dspPrefix) dspPrefix.value = 'DSP-';
-        modKeys = ['retail_pos', 'returns'];
     } else if (type === 'ENTERPRISE') {
         if (invPrefix) invPrefix.value = 'INV-';
         if (poPrefix) poPrefix.value = 'PO-';
         if (dspPrefix) dspPrefix.value = 'DSP-';
-        modKeys = ['production', 'purchases', 'warehouse', 'retail_pos', 'digital_sales', 'returns', 'expenses', 'assets'];
     }
-
-    moduleCheckboxes.forEach(cb => {
-        cb.checked = modKeys.includes(cb.value);
-    });
 
     // Animate button feedback
     document.querySelectorAll('.archetype-btn').forEach(b => b.classList.remove('border-primary', 'bg-primary-subtle'));

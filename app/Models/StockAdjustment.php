@@ -45,6 +45,16 @@ class StockAdjustment {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (sa.concern_id = ? OR sa.concern_id IS NULL)";
+            } else {
+                $sql .= " AND sa.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['search'])) {
             $term = '%' . trim($filters['search']) . '%';
             $sql .= " AND (sa.adjustment_number LIKE ? OR pv.sku LIKE ? OR pv.variant_code LIKE ? OR p.name LIKE ? OR p.code LIKE ?)";
@@ -105,18 +115,21 @@ class StockAdjustment {
 
     public static function create(array $data): int {
         $db = Database::getInstance();
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         $sql = "INSERT INTO stock_adjustments (
-            adjustment_number, adj_number, warehouse_id, variant_id,
+            concern_id, adjustment_number, adj_number, warehouse_id, variant_id,
             adjustment_type, quantity, reason, requested_by, approved_by,
             status, notes, qr_codes, approved_at, created_at
         ) VALUES (
-            :adjustment_number, :adj_number, :warehouse_id, :variant_id,
+            :concern_id, :adjustment_number, :adj_number, :warehouse_id, :variant_id,
             :adjustment_type, :quantity, :reason, :requested_by, :approved_by,
             :status, :notes, :qr_codes, :approved_at, NOW()
         )";
 
         $stmt = $db->prepare($sql);
         $stmt->execute([
+            ':concern_id'        => $concernId,
             ':adjustment_number' => $data['adjustment_number'],
             ':adj_number'        => $data['adj_number'] ?? $data['adjustment_number'],
             ':warehouse_id'      => $data['warehouse_id'] ?? 1,

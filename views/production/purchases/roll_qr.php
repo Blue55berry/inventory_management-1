@@ -210,7 +210,9 @@
         || hasPermission('sellers', 'edit');
 
     $pType = $purchase['purchase_type'] ?? 'FABRIC_ROLL';
-    $pTypeLabel = $pType === 'RAW_MATERIAL' ? 'Raw Materials' : ($pType === 'THIRD_PARTY' ? 'Third-Party Products' : ($pType === 'OWN_PRODUCT' ? 'Own Production' : 'Fabric Roll'));
+    $pTypeLabel = $pType === 'RAW_MATERIAL'
+        ? 'Raw Materials'
+        : ($pType === 'THIRD_PARTY' ? 'Third-Party Products' : ($pType === 'FABRIC_ROLL' ? 'Fabric Roll' : 'Purchase Items'));
     ?>
 
     <!-- Top Action & Info Bar (Hidden in Print) -->

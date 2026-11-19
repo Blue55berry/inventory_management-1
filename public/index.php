@@ -61,6 +61,11 @@ spl_autoload_register(function (string $className) {
     }
 });
 
+// Ensure concern master tables exist on every request (including public pages).
+if (class_exists('Concern')) {
+    Concern::ensureSchema();
+}
+
 // Start session
 Session::start();
 

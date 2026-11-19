@@ -151,6 +151,16 @@ class ProductionOutward {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (po.concern_id = ? OR po.concern_id IS NULL)";
+            } else {
+                $sql .= " AND po.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['production_unit_id'])) {
             $sql .= " AND (pp.production_unit_id = ? OR po.production_unit_id = ?)";
             $params[] = (int)$filters['production_unit_id'];
@@ -207,11 +217,14 @@ class ProductionOutward {
             }
         }
 
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         Database::execute(
             "INSERT INTO production_outwards 
-             (production_batch_id, batch_ids, is_multi_batch, production_unit_id, warehouse_id, outward_number, quantity, total_boxes, total_quantity, dispatch_date, vehicle_number, driver_name, transporter_name, lr_number, notes, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             (concern_id, production_batch_id, batch_ids, is_multi_batch, production_unit_id, warehouse_id, outward_number, quantity, total_boxes, total_quantity, dispatch_date, vehicle_number, driver_name, transporter_name, lr_number, notes, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
+                $concernId,
                 $data['production_batch_id'],
                 $data['batch_ids'] ?? null,
                 !empty($data['is_multi_batch']) ? 1 : 0,

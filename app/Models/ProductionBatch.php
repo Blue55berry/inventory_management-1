@@ -118,6 +118,16 @@ class ProductionBatch {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (pb.concern_id = ? OR pb.concern_id IS NULL)";
+            } else {
+                $sql .= " AND pb.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['status'])) {
             $sql .= " AND pb.status = ?";
             $params[] = $filters['status'];
@@ -404,11 +414,14 @@ class ProductionBatch {
                 : (string)$data['additional_qc_batch_ids'];
         }
 
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         Database::execute(
             "INSERT INTO production_batches 
-                 (batch_number, production_bill_id, program_id, qc_batch_id, additional_qc_batch_ids, is_multi_qc, total_qty, box_count, destination_warehouse_id, status, prepared_by, notes)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (concern_id, batch_number, production_bill_id, program_id, qc_batch_id, additional_qc_batch_ids, is_multi_qc, total_qty, box_count, destination_warehouse_id, status, prepared_by, notes)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
+                $concernId,
                 $data['batch_number'],
                  $data['production_bill_id'] ?? null,
                 $data['program_id'],

@@ -270,14 +270,13 @@ class ConcernController {
             ]);
             $concernId = (int)$db->lastInsertId();
 
-            // Insert module entitlement matrix
+            // Provision all standard modules for the new concern (module access is governed by staff role/permissions)
             $modStmt = $db->prepare("
                 INSERT INTO concern_modules (concern_id, module_key, is_enabled)
-                VALUES (?, ?, ?)
+                VALUES (?, ?, 1)
             ");
             foreach (array_keys(self::$STANDARD_MODULES) as $mKey) {
-                $isEnabled = in_array($mKey, $selectedModules, true) ? 1 : 0;
-                $modStmt->execute([$concernId, $mKey, $isEnabled]);
+                $modStmt->execute([$concernId, $mKey]);
             }
 
             // Map selected staff members to new concern

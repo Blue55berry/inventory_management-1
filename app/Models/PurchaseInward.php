@@ -39,6 +39,16 @@ class PurchaseInward {
                 WHERE 1=1";
         $params = [];
 
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (pi.concern_id = ? OR pi.concern_id IS NULL)";
+            } else {
+                $sql .= " AND pi.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if (!empty($filters['search'])) {
             $term = '%' . trim($filters['search']) . '%';
             $sql .= " AND (pi.grn_number LIKE ? OR pi.invoice_number LIKE ? OR po.po_number LIKE ? OR pi.vehicle_number LIKE ?)";
@@ -106,14 +116,16 @@ class PurchaseInward {
     public static function create(array $inwardData, array $items): int {
         $db = Database::getInstance();
 
+        $concernId = !empty($inwardData['concern_id']) ? (int)$inwardData['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+
         $sql = "INSERT INTO purchase_inwards (
-            purchase_order_id, grn_number, warehouse_id, received_date,
+            concern_id, purchase_order_id, grn_number, warehouse_id, received_date,
             received_by, verified_by, notes, invoice_number, invoice_date,
             status, total_received_qty, total_accepted_qty, total_rejected_qty,
             vehicle_number, driver_name, driver_contact, gate_pass_number,
             created_at
         ) VALUES (
-            :purchase_order_id, :grn_number, :warehouse_id, :received_date,
+            :concern_id, :purchase_order_id, :grn_number, :warehouse_id, :received_date,
             :received_by, :verified_by, :notes, :invoice_number, :invoice_date,
             :status, :total_received_qty, :total_accepted_qty, :total_rejected_qty,
             :vehicle_number, :driver_name, :driver_contact, :gate_pass_number,
@@ -122,6 +134,7 @@ class PurchaseInward {
 
         $stmt = $db->prepare($sql);
         $stmt->execute([
+            ':concern_id'          => $concernId,
             ':purchase_order_id'   => $inwardData['purchase_order_id'],
             ':grn_number'          => $inwardData['grn_number'],
             ':warehouse_id'        => $inwardData['warehouse_id'] ?? 1,

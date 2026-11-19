@@ -923,6 +923,7 @@ class ProductionService {
             $finalNotes = trim(($outwardData['notes'] ?? '') . ($multiNote ? "\n" . $multiNote : ''));
 
             $insertData = [
+                'concern_id'          => currentConcernId(),
                 'production_batch_id' => $primaryBatchId,
                 'batch_ids'           => json_encode($batchIds),
                 'is_multi_batch'      => $isMulti,

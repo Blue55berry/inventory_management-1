@@ -1287,7 +1287,11 @@ class ProductionController {
 
         $activeCid = currentConcernId();
         if ($activeCid) {
-            $where[] = "(pp.concern_id = ? OR pp.concern_id IS NULL)";
+            if ($activeCid === 1) {
+                $where[] = "(pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $where[] = "pp.concern_id = ?";
+            }
             $params[] = $activeCid;
         }
 
@@ -2901,7 +2905,7 @@ class ProductionController {
                     $itemStartCode = $vCode;
                     $itemEndCode = $vCode;
                     $itemQrCode = $vCode;
-                    // Taxonomy mapping happens in the mapping area; QR + GRN are produced there.
+                    // Taxonomy mapping creates the GRN; QR generation happens afterward.
                 } elseif ($item['type'] === 'RAW_MATERIAL') {
                     $supplySeqIndex++;
                     $rmPrefix = 'RM' . date('my', strtotime($purchaseDate));
@@ -3292,7 +3296,7 @@ class ProductionController {
         }
 
         $item = Database::fetchOne(
-            "SELECT id, item_name, item_type, product_id, variant_id FROM production_purchase_items WHERE id = ?",
+            "SELECT id, purchase_id, item_name, item_type, product_id, variant_id FROM production_purchase_items WHERE id = ?",
             [$itemId]
         );
         if (!$item) {
@@ -3341,28 +3345,36 @@ class ProductionController {
             return;
         }
 
+        $itemQrTab = self::qrTabForItemType((string)($item['item_type'] ?? 'THIRD_PARTY'));
         $message = "Product '{$item['item_name']}' mapped to {$category['name']}. "
-            . "QR batch {$result['qr']['batch_code']} and GRN {$result['grn']['grn_number']} generated.";
+            . "GRN {$result['grn']['grn_number']} linked.";
+        if ($itemQrTab === '') {
+            $message .= " QR generation is not available for Own Product items.";
+        } else {
+            $message .= " The item is ready for QR generation.";
+        }
 
         if (Request::isAjax()) {
             Response::json([
                 'success'       => true,
                 'message'       => $message,
-                'qr_batch_code' => $result['qr']['batch_code'],
                 'grn_number'    => $result['grn']['grn_number'],
                 'grn_id'        => $result['grn']['grn_id'],
-                'qr_reused'     => !empty($result['qr_reused']),
                 'grn_reused'    => !empty($result['grn_line_reused']),
             ]);
             return;
         }
 
         Session::flash('success', $message);
-        Response::redirect(url('production/qr-generations?tab=' . self::qrTabForItemType((string)($item['item_type'] ?? 'THIRD_PARTY'))));
+        if ($itemQrTab === '') {
+            Response::redirect(url('purchases/mapping/bill/' . (int)$item['purchase_id']));
+            return;
+        }
+        Response::redirect(url('production/qr-generations?tab=' . $itemQrTab));
     }
 
     /**
-     * Map a purchase item type to its QR Generations tab.
+     * Return a QR tab for supported purchase item types, or an empty string when unavailable.
      */
     private static function qrTabForItemType(string $itemType): string {
         switch (strtoupper($itemType)) {
@@ -3370,6 +3382,8 @@ class ProductionController {
                 return 'fabric';
             case 'RAW_MATERIAL':
                 return 'raw_material';
+            case 'OWN_PRODUCT':
+                return '';
             default:
                 return 'third_party';
         }
@@ -3462,10 +3476,21 @@ class ProductionController {
 
         Session::flash(
             'success',
-            count($purchaseItems) . " product lines for purchase {$purchase['purchase_number']} were mapped; QR batches and GRNs were generated. Stock can be added from each QR batch."
+            count($purchaseItems) . " product lines for purchase {$purchase['purchase_number']} were mapped and GRNs linked."
         );
-        $firstType = (string)($purchaseItems[0]['item_type'] ?? 'THIRD_PARTY');
-        Response::redirect(url('production/qr-generations?tab=' . self::qrTabForItemType($firstType)));
+        $firstQrTab = '';
+        foreach ($purchaseItems as $purchaseItem) {
+            $candidateTab = self::qrTabForItemType((string)($purchaseItem['item_type'] ?? ''));
+            if ($candidateTab !== '') {
+                $firstQrTab = $candidateTab;
+                break;
+            }
+        }
+        if ($firstQrTab === '') {
+            Response::redirect(url('purchases/mapping'));
+            return;
+        }
+        Response::redirect(url('production/qr-generations?tab=' . $firstQrTab));
     }
 
     /**
@@ -5484,6 +5509,16 @@ class ProductionController {
         
         $params = [];
 
+        $cid = currentConcernId();
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (rd.concern_id = ? OR rd.concern_id IS NULL)";
+            } else {
+                $sql .= " AND rd.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if ($search !== '') {
             $sql .= " AND (
                 rd.damage_number LIKE ?
@@ -5720,13 +5755,16 @@ class ProductionController {
                 $tempPrefix = ($item['item_type'] === 'PRODUCT') ? 'TMP-PRD-' : 'TMP-ROL-';
                 $temporaryDamageNumber = $tempPrefix . bin2hex(random_bytes(16));
 
+                $activeConcernId = currentConcernId();
+
                 Database::execute(
                     "INSERT INTO roll_damages (
-                        damage_number, item_type, seller_id, seller_roll_id, product_id, variant_id,
+                        concern_id, damage_number, item_type, seller_id, seller_roll_id, product_id, variant_id,
                         product_name, variant_info, qr_code, damaged_quantity, damaged_weight, loss_amount,
                         damage_reason, defect_notes, photo_url, status, resolution_type, reported_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGGED', 'NONE', ?, ?, ?)",
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'LOGGED', 'NONE', ?, ?, ?)",
                     [
+                        $activeConcernId,
                         $temporaryDamageNumber,
                         $item['item_type'],
                         $item['seller_id'],
@@ -6446,10 +6484,11 @@ class ProductionController {
             $purchaseNumber = 'TMP-PP-' . bin2hex(random_bytes(6));
             $purchaseDate = date('Y-m-d');
             $purchaseNotes = 'Supplier Replacement Inward for Damage #' . $damage['damage_number'];
+            $cid = currentConcernId();
             Database::execute(
-                "INSERT INTO production_purchases (purchase_number, seller_id, purchase_date, notes, total_amount, created_by)
-                 VALUES (?, ?, ?, ?, 0, ?)",
-                [$purchaseNumber, $sellerId, $purchaseDate, $purchaseNotes, $userId ?: null]
+                "INSERT INTO production_purchases (concern_id, purchase_number, seller_id, purchase_date, notes, total_amount, created_by)
+                 VALUES (?, ?, ?, ?, ?, 0, ?)",
+                [$cid, $purchaseNumber, $sellerId, $purchaseDate, $purchaseNotes, $userId ?: null]
             );
             $purchaseId = (int)Database::lastInsertId();
             if ($purchaseId < 1) {
@@ -16353,6 +16392,16 @@ class ProductionController {
                 WHERE 1=1";
         $params = [];
 
+        $cid = currentConcernId();
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (pe.concern_id = ? OR pe.concern_id IS NULL)";
+            } else {
+                $sql .= " AND pe.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
+
         if ($search !== '') {
             $sql .= " AND (
                 pe.expense_number LIKE ?
@@ -16700,13 +16749,16 @@ class ProductionController {
                 $lineTotal = (float)$line['total_cost'];
                 $paidAmt = ($paymentStatus === 'PAID') ? $lineTotal : 0.00;
 
+                $activeConcernId = currentConcernId();
+
                 Database::execute(
                     "INSERT INTO production_expenses
-                        (expense_number, production_unit, category, item_name,
+                        (concern_id, expense_number, production_unit, category, item_name,
                          quantity, unit_type, unit_cost, total_cost, paid_amount, payment_status,
                          payment_method, vendor_name, vendor_phone, invoice_number, expense_date, photo_url, notes, created_by, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
                     [
+                        $activeConcernId,
                         $expenseNumber,
                         $productionUnit,
                         $category,
@@ -17689,6 +17741,19 @@ class ProductionController {
             [$purchaseId]
         );
 
+        $hasQrEligibleItems = false;
+        foreach ($items as $item) {
+            if (strtoupper((string)($item['item_type'] ?? '')) !== 'OWN_PRODUCT') {
+                $hasQrEligibleItems = true;
+                break;
+            }
+        }
+        if (!$hasQrEligibleItems && !empty($items)) {
+            Session::flash('error', 'QR labels are not available for Own Product purchase lines.');
+            Response::redirect(url('production/purchases/view/' . $purchaseId));
+            return;
+        }
+
         $seller = [
             'id'            => $purchase['seller_id'],
             'name'          => $purchase['supplier_name'],
@@ -17705,6 +17770,10 @@ class ProductionController {
 
         foreach ($items as $idx => $it) {
             $itemType = $it['item_type'] ?? 'FABRIC_ROLL';
+
+            if ($itemType === 'OWN_PRODUCT') {
+                continue;
+            }
 
             if ($itemType === 'FABRIC_ROLL') {
                 $rollNum = $it['sr_roll_number'] ?: ($it['roll_number'] ?: ('ROLL-' . ($idx + 1)));
@@ -17826,7 +17895,7 @@ class ProductionController {
 
                 $rolls[] = $it;
             } else {
-                // THIRD_PARTY or OWN_PRODUCT
+                // Third-party products
                 $itemName = mb_strtoupper(trim($it['item_name']));
                 $sku = trim((string)($it['vendor_sku'] ?: ($it['product_code'] ?: ('TP-' . sprintf('%04d', $it['id'])))));
                 $color = mb_strtoupper(trim((string)($it['color'] ?? '—')));

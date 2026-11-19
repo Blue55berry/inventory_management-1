@@ -79,16 +79,15 @@
                         <th>Concern / Firm Name</th>
                         <th>Legal Details &amp; Tax</th>
                         <th>Prefixes</th>
-                        <th>Enabled Modules</th>
                         <th class="text-center">Staff</th>
                         <th class="text-center">Units</th>
                         <th class="text-center">Status</th>
-                        <th class="text-end" style="min-width: 220px;">Actions</th>
+                        <th class="text-end" style="min-width: 200px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($concerns)): ?>
-                    <tr><td colspan="9" class="text-center text-muted py-5">No business concerns found matching your criteria.</td></tr>
+                    <tr><td colspan="8" class="text-center text-muted py-5">No business concerns found matching your criteria.</td></tr>
                 <?php else: foreach ($concerns as $idx => $c): 
                     $isActiveSession = ((int)$c['id'] === (int)$activeConcernId);
                     $cMods = $modulesByConcern[$c['id']] ?? [];
@@ -134,26 +133,6 @@
                                 <div><span class="text-secondary">DSP:</span> <strong><?= e($c['dispatch_prefix']) ?></strong></div>
                             </div>
                         </td>
-                        <td>
-                            <div class="d-flex flex-wrap gap-1" style="max-width: 260px;">
-                                <?php if (empty($cMods)): ?>
-                                    <span class="badge bg-light text-muted border">No modules</span>
-                                <?php else: foreach ($cMods as $mKey): 
-                                    $mMeta = ConcernController::$STANDARD_MODULES[$mKey] ?? null;
-                                    $mBadgeColor = $mMeta['badge_color'] ?? 'secondary';
-                                    $mName = $mMeta['name'] ?? ucfirst($mKey);
-                                ?>
-                                    <span class="badge bg-<?= $mBadgeColor ?>-subtle text-<?= $mBadgeColor ?> border" style="font-size: 11px;">
-                                        <?= e($mName) ?>
-                                    </span>
-                                <?php endforeach; endif; ?>
-                            </div>
-                            <div class="mt-1">
-                                <a href="<?= url('admin/concerns/modules/' . $c['id']) ?>" class="btn btn-xs btn-link p-0 text-decoration-none small">
-                                    <i class="bi bi-sliders me-1"></i>Configure Matrix (<?= (int)$c['enabled_modules_count'] ?>/<?= count(ConcernController::$STANDARD_MODULES) ?>)
-                                </a>
-                            </div>
-                        </td>
                         <td class="text-center">
                             <?php if ($cStaffCount > 0): ?>
                                 <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1.5 py-1 px-2.5 rounded-pill shadow-xs" data-bs-toggle="modal" data-bs-target="#staffModal_<?= $c['id'] ?>">
@@ -191,9 +170,6 @@
                                 <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#staffModal_<?= $c['id'] ?>" title="Manage Staff for this Concern">
                                     <i class="bi bi-people"></i>
                                 </button>
-                                <a href="<?= url('admin/concerns/modules/' . $c['id']) ?>" class="btn btn-sm btn-outline-info" title="Manage Module Entitlements">
-                                    <i class="bi bi-shield-check"></i>
-                                </a>
                                 <a href="<?= url('admin/concerns/edit/' . $c['id']) ?>" class="btn btn-sm btn-outline-secondary" title="Edit Concern &amp; Staff">
                                     <i class="bi bi-pencil"></i>
                                 </a>

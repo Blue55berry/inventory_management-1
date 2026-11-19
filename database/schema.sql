@@ -1083,6 +1083,7 @@ CREATE TABLE `production_stock_requests` (
 DROP TABLE IF EXISTS `production_units`;
 CREATE TABLE `production_units` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `concern_id` int(11) DEFAULT NULL,
   `name` varchar(200) NOT NULL,
   `code` varchar(20) NOT NULL,
   `address` text DEFAULT NULL,
@@ -2277,5 +2278,83 @@ CREATE TABLE `wh_category_attributes` (
   PRIMARY KEY (`id`),
   KEY `idx_cat_attrs` (`category_id`,`subcategory_id`,`sub_subcategory_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- ------------------------------------------------------------
+-- Multi-Concern Architecture (concern.pdf)
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `concerns`;
+CREATE TABLE `concerns` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(150) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `legal_name` varchar(255) DEFAULT NULL,
+  `gst_number` varchar(15) DEFAULT NULL,
+  `pan_number` varchar(10) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `city` varchar(100) DEFAULT NULL,
+  `state` varchar(100) DEFAULT NULL,
+  `pincode` varchar(10) DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `email` varchar(150) DEFAULT NULL,
+  `logo_url` varchar(255) DEFAULT NULL,
+  `invoice_prefix` varchar(20) DEFAULT 'INV',
+  `po_prefix` varchar(20) DEFAULT 'PO',
+  `dispatch_prefix` varchar(20) DEFAULT 'DSP',
+  `is_active` tinyint(1) DEFAULT 1,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_concerns_code` (`code`),
+  KEY `idx_concerns_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `concern_modules`;
+CREATE TABLE `concern_modules` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `concern_id` int(11) NOT NULL,
+  `module_key` varchar(50) NOT NULL,
+  `is_enabled` tinyint(1) DEFAULT 1,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_concern_module` (`concern_id`,`module_key`),
+  CONSTRAINT `fk_concern_module_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS `user_concerns`;
+CREATE TABLE `user_concerns` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(10) unsigned NOT NULL,
+  `concern_id` int(11) NOT NULL,
+  `is_default` tinyint(1) DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_user_concern` (`user_id`,`concern_id`),
+  KEY `idx_uc_user` (`user_id`),
+  KEY `idx_uc_concern` (`concern_id`),
+  CONSTRAINT `fk_user_concerns_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_user_concerns_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Concern scoping columns (nullable: legacy rows remain visible to all concerns)
+-- ------------------------------------------------------------
+ALTER TABLE `cutting_batches` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_cutting_batches_concern_id` (`concern_id`);
+ALTER TABLE `production_batches` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_batches_concern_id` (`concern_id`);
+ALTER TABLE `production_bills` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_bills_concern_id` (`concern_id`);
+ALTER TABLE `production_expenses` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_expenses_concern_id` (`concern_id`);
+ALTER TABLE `production_outwards` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_outwards_concern_id` (`concern_id`);
+ALTER TABLE `production_programs` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_programs_concern_id` (`concern_id`);
+ALTER TABLE `production_purchases` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_purchases_concern_id` (`concern_id`);
+ALTER TABLE `production_stock_requests` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_production_stock_requests_concern_id` (`concern_id`);
+ALTER TABLE `purchase_inwards` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_purchase_inwards_concern_id` (`concern_id`);
+ALTER TABLE `qc_batches` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_qc_batches_concern_id` (`concern_id`);
+ALTER TABLE `qr_generations` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_qr_generations_concern_id` (`concern_id`);
+ALTER TABLE `roll_damages` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_roll_damages_concern_id` (`concern_id`);
+ALTER TABLE `stitching_batches` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_stitching_batches_concern_id` (`concern_id`);
+ALTER TABLE `stock_adjustments` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_stock_adjustments_concern_id` (`concern_id`);
+ALTER TABLE `stock_balances` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_stock_balances_concern_id` (`concern_id`);
+ALTER TABLE `stock_transactions` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_stock_transactions_concern_id` (`concern_id`);
+ALTER TABLE `warehouses` ADD COLUMN `concern_id` int(11) DEFAULT NULL AFTER `id`, ADD KEY `idx_warehouses_concern_id` (`concern_id`);
 
 SET FOREIGN_KEY_CHECKS = 1;

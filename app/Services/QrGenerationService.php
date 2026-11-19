@@ -28,24 +28,37 @@ class QrGenerationService {
     public const SOURCE_RETURN      = 'RETURN';
 
     /**
-     * The four QR Generation areas. Keys are used in ?tab= URLs.
+     * The QR Generation areas. Keys are used in ?tab= URLs.
+     * Return QR remains unavailable for Production concerns until its workflow is enabled.
      */
-    public static function sourceTabs(): array {
-        return [
+    public static function sourceTabs(?int $concernId = null): array {
+        $tabs = [
             'fabric'       => ['key' => 'fabric',       'label' => 'Fabric Rolls',        'source' => self::SOURCE_FABRIC,      'icon' => 'bi-layers-half',    'color' => 'primary'],
             'raw_material' => ['key' => 'raw_material', 'label' => 'Raw Materials',       'source' => self::SOURCE_RAW,         'icon' => 'bi-boxes',          'color' => 'warning'],
             'third_party'  => ['key' => 'third_party',  'label' => 'Third-Party Products','source' => self::SOURCE_THIRD_PARTY, 'icon' => 'bi-box-seam',       'color' => 'info'],
             'return'       => ['key' => 'return',       'label' => 'Return QR',           'source' => self::SOURCE_RETURN,      'icon' => 'bi-arrow-return-left', 'color' => 'danger'],
         ];
+
+        $cid = $concernId ?: (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid && function_exists('isProductionConcern') && isProductionConcern($cid)) {
+            return [
+                'fabric'       => $tabs['fabric'],
+                'raw_material' => $tabs['raw_material'],
+                'third_party'  => $tabs['third_party'],
+            ];
+        }
+
+        return $tabs;
     }
 
-    public static function normalizeTab(?string $tab): string {
+    public static function normalizeTab(?string $tab, ?int $concernId = null): string {
         $tab = strtolower(trim((string)$tab));
-        return array_key_exists($tab, self::sourceTabs()) ? $tab : 'fabric';
+        $validTabs = self::sourceTabs($concernId);
+        return array_key_exists($tab, $validTabs) ? $tab : array_key_first($validTabs);
     }
 
     /**
-     * Add source-tracking columns used by the four QR tabs.
+     * Add source-tracking columns used by QR generation areas.
      */
     public static function ensureSourceSchema(): void {
         static $done = false;
@@ -247,18 +260,20 @@ class QrGenerationService {
             [$qrPrefix]
         );
         $startSeq = (int)($lastSeqRow['max_seq'] ?? 0) + 1;
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
 
         Database::beginTransaction();
         try {
             Database::execute(
                 "INSERT INTO qr_generations 
-                 (batch_code, generation_type, qr_source, brand_name, category_id, subcategory_id, sub_subcategory_id,
+                 (batch_code, generation_type, qr_source, concern_id, brand_name, category_id, subcategory_id, sub_subcategory_id,
                   category_name, subcategory_name, sub_subcategory_name, color_id, design_id, size_id,
                   color_name, design_name, size_name, mrp, selling_price, quantity, qr_prefix, notes, created_by)
-                 VALUES (?, 'MANUAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 VALUES (?, 'MANUAL', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     $batchCode,
                     self::SOURCE_THIRD_PARTY,
+                    $concernId,
                     $brandName,
                     $categoryId,
                     $subcategoryId,
@@ -344,6 +359,9 @@ class QrGenerationService {
         if (!$product) {
             throw new InvalidArgumentException("Catalog / Product not found.");
         }
+        if (in_array(strtoupper((string)($product['source_type'] ?? '')), ['OWN_PRODUCT', 'OWN_PRODUCTION', 'MANUFACTURED', 'IN_HOUSE'], true)) {
+            throw new InvalidArgumentException('Catalog QR generation is not available for Own Product items.');
+        }
 
         // Preserve exactly what the admin typed so the label shows the same text.
         $brandName = !empty($data['brand_name']) ? trim((string)$data['brand_name']) : ($product['brand_name'] ?: 'GRM');
@@ -391,18 +409,20 @@ class QrGenerationService {
             [$qrPrefix]
         );
         $startSeq = (int)($lastSeqRow['max_seq'] ?? 0) + 1;
+        $concernId = !empty($data['concern_id']) ? (int)$data['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
 
         Database::beginTransaction();
         try {
             Database::execute(
                 "INSERT INTO qr_generations 
-                 (batch_code, generation_type, qr_source, brand_name, category_id, subcategory_id, sub_subcategory_id,
+                 (batch_code, generation_type, qr_source, concern_id, brand_name, category_id, subcategory_id, sub_subcategory_id,
                   category_name, subcategory_name, sub_subcategory_name, product_id, variant_id,
                   color_id, design_id, size_id, color_name, design_name, size_name, mrp, selling_price, quantity, qr_prefix, notes, created_by)
-                 VALUES (?, 'CATALOG_VARIANT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 VALUES (?, 'CATALOG_VARIANT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     $batchCode,
                     self::SOURCE_THIRD_PARTY,
+                    $concernId,
                     $brandName,
                     $product['category_id'],
                     $product['subcategory_id'],
@@ -468,19 +488,19 @@ class QrGenerationService {
      * Generate a QR batch from an actual purchase line.
      *
      * Fabric / Raw Material areas reuse the exact prefix and sequence rules of
-     * the existing roll QR printer. Third-Party uses the mapped catalog identity
-     * and prints the brand name exactly as entered by the admin.
+     * the existing roll QR printer. Catalog-linked items use the mapped variant
+     * identity and print the brand name exactly as entered by the admin.
      */
     public static function generatePurchaseBatch(array $data): array {
-        self::ensureSourceSchema();
-        if (class_exists('PurchaseMappingFulfillmentService')) {
-            PurchaseMappingFulfillmentService::ensureSchema();
-        }
-
         $source = strtoupper(trim((string)($data['qr_source'] ?? '')));
         if (!in_array($source, [self::SOURCE_FABRIC, self::SOURCE_RAW, self::SOURCE_THIRD_PARTY], true)) {
             throw new InvalidArgumentException('Invalid QR generation area.');
         }
+
+         self::ensureSourceSchema();
+         if (class_exists('PurchaseMappingFulfillmentService')) {
+             PurchaseMappingFulfillmentService::ensureSchema();
+         }
 
         $itemId = (int)($data['purchase_item_id'] ?? 0);
         if ($itemId <= 0) {
@@ -488,7 +508,7 @@ class QrGenerationService {
         }
 
         $item = Database::fetchOne(
-            "SELECT ppi.*, pp.purchase_number, pp.purchase_date, pp.invoice_number,
+            "SELECT ppi.*, pp.purchase_number, pp.purchase_date, pp.invoice_number, pp.concern_id,
                     s.name AS seller_name, s.company AS seller_company,
                     sr.roll_number AS sr_roll_number, sr.start_code, sr.end_code, sr.start_seq, sr.end_seq,
                     sr.weight AS sr_weight, sr.color AS sr_color, sr.design_name AS sr_design_name,
@@ -510,8 +530,21 @@ class QrGenerationService {
         if (!$item) {
             throw new InvalidArgumentException('Purchase item not found.');
         }
+
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        if ($activeCid && function_exists('isProductionConcern') && isProductionConcern($activeCid)) {
+            if (!in_array($source, [self::SOURCE_FABRIC, self::SOURCE_RAW, self::SOURCE_THIRD_PARTY], true)) {
+                throw new InvalidArgumentException('This QR area is not available for Production concerns.');
+            }
+        }
         if (strtoupper((string)($item['item_type'] ?? '')) !== $source) {
             throw new InvalidArgumentException('This item does not belong to the selected QR area.');
+        }
+        if (empty($item['is_mapped'])) {
+            throw new InvalidArgumentException('Map this purchase item before generating QR codes.');
+        }
+        if ((int)($item['variant_id'] ?? 0) <= 0) {
+            throw new InvalidArgumentException('This mapped purchase item has no catalog variant. Complete its mapping first.');
         }
         if (!empty($item['qr_generation_id']) || trim((string)($item['qr_batch_code'] ?? '')) !== '') {
             throw new RuntimeException('A QR batch has already been generated for this purchase item.');
@@ -544,7 +577,7 @@ class QrGenerationService {
 
         if ($source === self::SOURCE_THIRD_PARTY) {
             if ($productId <= 0 || $variantId <= 0) {
-                throw new InvalidArgumentException('Map this third-party product before generating QR codes.');
+                throw new InvalidArgumentException('Map this product before generating QR codes.');
             }
             $qrPrefix = self::catalogPrefix($productId, $variantId, $brandName);
             $qty = max(1, min(1000, (int)round((float)($item['quantity'] ?? 1))));
@@ -629,7 +662,9 @@ class QrGenerationService {
         }
 
         $batchCode = self::generateBatchCode();
-        $generationType = $source === self::SOURCE_THIRD_PARTY ? 'CATALOG_VARIANT' : 'MANUAL';
+        $generationType = $source === self::SOURCE_THIRD_PARTY
+            ? 'CATALOG_VARIANT'
+            : 'MANUAL';
         $notes = trim((string)($data['notes'] ?? ''));
         if ($notes === '') {
             $notes = "Generated from purchase {$item['purchase_number']} — " . str_replace('_', ' ', $source);
@@ -659,15 +694,17 @@ class QrGenerationService {
                 throw new RuntimeException('A QR batch has already been generated for this purchase item.');
             }
 
+            $generationConcernId = !empty($item['concern_id']) ? (int)$item['concern_id'] : $activeCid;
+
             Database::execute(
                 "INSERT INTO qr_generations
-                    (batch_code, generation_type, qr_source, source_purchase_id, source_purchase_item_id,
+                    (batch_code, generation_type, qr_source, concern_id, source_purchase_id, source_purchase_item_id,
                      brand_name, category_id, subcategory_id, sub_subcategory_id,
                      category_name, subcategory_name, sub_subcategory_name,
                      product_id, variant_id, mrp, selling_price, quantity, qr_prefix, notes, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 [
-                    $batchCode, $generationType, $source,
+                    $batchCode, $generationType, $source, $generationConcernId,
                     (int)$item['purchase_id'], $itemId,
                     $brandName, $categoryId, $subcategoryId, $subSubcategoryId,
                     $item['category_name'] ?? null, $item['subcategory_name'] ?? null, $item['sub_subcategory_name'] ?? null,
@@ -698,6 +735,10 @@ class QrGenerationService {
             Database::execute(
                 "UPDATE production_purchase_items SET qr_generation_id = ?, qr_batch_code = ? WHERE id = ?",
                 [$generationId, $batchCode, $itemId]
+            );
+            Database::execute(
+                "UPDATE purchase_inward_items SET batch_lot_no = ? WHERE production_purchase_item_id = ?",
+                [$batchCode, $itemId]
             );
 
             Database::commit();
@@ -928,7 +969,8 @@ class QrGenerationService {
              FROM qr_generations qrg
              LEFT JOIN product_variants pv ON pv.id = qrg.variant_id
              LEFT JOIN products p ON p.id = qrg.product_id
-             WHERE qrg.id = ?",
+             WHERE qrg.id = ?
+               AND UPPER(COALESCE(qrg.qr_source, '')) <> 'OWN_PRODUCT'",
             [$id]
         );
         if (!$gen) return null;
@@ -949,8 +991,18 @@ class QrGenerationService {
                 FROM qr_generations qrg
                 LEFT JOIN users u ON u.id = qrg.created_by
                 LEFT JOIN qr_generation_items qri ON qri.generation_id = qrg.id
-                WHERE 1 = 1";
+                WHERE UPPER(COALESCE(qrg.qr_source, '')) <> 'OWN_PRODUCT'";
         $params = [];
+
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : (function_exists('currentConcernId') ? currentConcernId() : null);
+        if ($cid) {
+            if ($cid === 1) {
+                $sql .= " AND (qrg.concern_id = ? OR qrg.concern_id IS NULL)";
+            } else {
+                $sql .= " AND qrg.concern_id = ?";
+            }
+            $params[] = $cid;
+        }
 
         if (!empty($filters['search'])) {
             $s = '%' . trim($filters['search']) . '%';

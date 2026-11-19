@@ -16,23 +16,34 @@ $qrTabForType = static function (string $itemType): string {
             return 'fabric';
         case 'RAW_MATERIAL':
             return 'raw_material';
+        case 'OWN_PRODUCT':
+            return '';
         default:
             return 'third_party';
     }
 };
 
-$firstQrTab = !empty($items) ? $qrTabForType((string)($items[0]['item_type'] ?? 'THIRD_PARTY')) : 'fabric';
+$firstQrTab = '';
+foreach ($items as $billItem) {
+    $candidateTab = $qrTabForType((string)($billItem['item_type'] ?? ''));
+    if ($candidateTab !== '') {
+        $firstQrTab = $candidateTab;
+        break;
+    }
+}
 ?>
 
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Map Purchase Bill</h2>
-        <p class="text-muted small mb-0">Full bill view — map every product, set MRP and selling price, then generate QR batches and GRNs.</p>
+        <p class="text-muted small mb-0">Full bill view — map every product and set prices. Mapping creates GRNs; eligible mapped lines can be generated afterward from QR Generations.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <a href="<?= url('production/qr-generations?tab=' . e($firstQrTab)) ?>" class="btn btn-outline-info">
-            <i class="bi bi-qr-code me-1"></i> QR Generations
-        </a>
+        <?php if ($firstQrTab !== ''): ?>
+            <a href="<?= url('production/qr-generations?tab=' . e($firstQrTab)) ?>" class="btn btn-outline-info">
+                <i class="bi bi-qr-code me-1"></i> QR Generations
+            </a>
+        <?php endif; ?>
         <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back to Mapping List
         </a>
@@ -131,7 +142,7 @@ $firstQrTab = !empty($items) ? $qrTabForType((string)($items[0]['item_type'] ?? 
         <div class="card border shadow-sm mb-4">
             <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <h5 class="mb-0 fw-bold"><i class="bi bi-list-check me-2 text-success"></i>Product Lines &amp; Catalog Mapping</h5>
-                <span class="small text-muted">Category is required. MRP and selling price are printed on the QR labels.</span>
+                <span class="small text-muted">Category is required. MRP and selling price are saved with the mapped catalog variant.</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -225,13 +236,15 @@ $firstQrTab = !empty($items) ? $qrTabForType((string)($items[0]['item_type'] ?? 
                                         </button>
                                     </td>
                                     <td>
+                                        <?php if (strtoupper((string)($item['item_type'] ?? '')) !== 'OWN_PRODUCT'): ?>
                                         <?php if (!empty($item['qr_generation_id'])): ?>
-                                            <a href="<?= url('production/qr-generations/view/' . (int)$item['qr_generation_id'] . '?tab=' . e($itemTab)) ?>"
+                                            <a href="<?= url('production/qr-generations/view/' . (int)$item['qr_generation_id'] . ($itemTab !== '' ? '?tab=' . e($itemTab) : '')) ?>"
                                                class="badge bg-dark-subtle text-dark border text-decoration-none d-block mb-1">
                                                 <i class="bi bi-qr-code me-1"></i><?= e($item['qr_batch_code'] ?: 'QR #' . (int)$item['qr_generation_id']) ?>
                                             </a>
                                         <?php else: ?>
                                             <span class="badge bg-secondary-subtle text-secondary border d-block mb-1">No QR batch</span>
+                                        <?php endif; ?>
                                         <?php endif; ?>
                                         <?php if (!empty($item['grn_id'])): ?>
                                             <a href="<?= url('production/inwards/view/' . (int)$item['grn_id']) ?>"
@@ -301,12 +314,12 @@ $firstQrTab = !empty($items) ? $qrTabForType((string)($items[0]['item_type'] ?? 
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-5">
             <div class="small text-muted">
                 <i class="bi bi-shield-check me-1 text-success"></i>
-                Saving creates/reuses QR batches and GRNs. Inventory is posted later from the QR batch’s <strong>Add to Stock</strong> button.
+                Saving creates/reuses GRNs. Mapped items are available for manual QR generation; inventory is posted later from the QR batch’s <strong>Add to Stock</strong> button.
             </div>
             <div class="d-flex gap-2">
                 <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">Cancel</a>
                 <button type="submit" class="btn btn-primary fw-semibold btn-lg">
-                    <i class="bi bi-check-circle me-1"></i>Save All Products &amp; Generate QR
+                    <i class="bi bi-check-circle me-1"></i>Save All Mappings
                 </button>
             </div>
         </div>

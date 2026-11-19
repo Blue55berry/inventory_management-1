@@ -86,9 +86,13 @@ class ProductionProgram {
                 WHERE 1=1";
         $params = [];
 
-        $cid = currentConcernId();
+        $cid = !empty($filters['concern_id']) ? (int)$filters['concern_id'] : currentConcernId();
         if ($cid) {
-            $sql .= " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            if ($cid === 1) {
+                $sql .= " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $sql .= " AND pp.concern_id = ?";
+            }
             $params[] = $cid;
         }
 

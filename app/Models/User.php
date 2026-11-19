@@ -14,6 +14,15 @@ class User {
     public static function ensureSchema(): void {
         if (self::$schemaChecked) return;
         self::$schemaChecked = true;
+
+        // The concern master tables must exist before any query joins them.
+        if (!class_exists('Concern') && file_exists(__DIR__ . '/Concern.php')) {
+            require_once __DIR__ . '/Concern.php';
+        }
+        if (class_exists('Concern')) {
+            Concern::ensureSchema();
+        }
+
         try {
             $col = Database::fetchOne("SHOW COLUMNS FROM users LIKE 'department'");
             if (!$col) {

@@ -8,7 +8,10 @@ class ProductionBillingController
     public function billList(): void
     {
         $cid = currentConcernId();
-        $whereSql = $cid ? "WHERE (pb.concern_id = {$cid} OR pb.concern_id IS NULL)" : "";
+        $whereSql = "";
+        if ($cid) {
+            $whereSql = ($cid === 1) ? "WHERE (pb.concern_id = 1 OR pb.concern_id IS NULL)" : "WHERE pb.concern_id = " . (int)$cid;
+        }
 
         $bills = Database::fetchAll(
             "SELECT pb.*,

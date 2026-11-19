@@ -39,7 +39,13 @@ flowchart LR
     J --> M["Create outward dispatch"]
 ```
 
-## 3. Warehouse receiving and stock
+## 3. Purchase mapping and QR generation
+
+After a purchase is recorded, map each purchase line to its catalog category and variant, and set its prices. Saving the mapping creates or updates the catalog variant and creates the GRN; it does not generate QR labels. Generate QR batches manually afterward from the matching Fabric Rolls, Raw Materials, or Third-Party Products area. The variant ID is shown in the generator as a reference, while the existing QR label code logic remains unchanged. Stock is posted separately from the generated batch; fabric still requires QC first.
+
+The Return QR area is currently a disabled preview and does not generate labels.
+
+## 4. Warehouse receiving and stock
 
 The warehouse receives finished production, supplier goods, and returned goods, then verifies and stores them.
 
@@ -54,7 +60,7 @@ flowchart LR
     G --> H["Warehouse stock available"]
 ```
 
-## 4. Warehouse allocation and dispatch
+## 5. Warehouse allocation and dispatch
 
 Stock is reserved and sent to a shop or sales channel after a request is processed.
 
@@ -70,7 +76,7 @@ flowchart LR
     H --> I["Destination stock updated"]
 ```
 
-## 5. Retail shop and POS
+## 6. Retail shop and POS
 
 The shop receives stock, sells it at POS, and records the sale and payment.
 
@@ -85,7 +91,7 @@ flowchart LR
     F --> H["Print invoice"]
 ```
 
-## 6. WhatsApp sales channel
+## 7. WhatsApp sales channel
 
 Staff record WhatsApp orders and process them using the channel's available stock.
 
@@ -101,7 +107,7 @@ flowchart LR
     G --> H["Update order history"]
 ```
 
-## 7. Website sales channel
+## 8. Website sales channel
 
 Website orders follow a similar stock and fulfillment workflow, using website-channel inventory.
 
@@ -117,7 +123,7 @@ flowchart LR
     G --> H["Update order history"]
 ```
 
-## 8. Returns and exchanges
+## 9. Returns and exchanges
 
 Returns are looked up against the original sale or order. The returned item is inspected before stock and refund actions are recorded.
 
@@ -137,7 +143,7 @@ flowchart LR
     J --> K
 ```
 
-## 9. Cash and expenses
+## 10. Cash and expenses
 
 The shop cash module tracks drawer shifts and transactions. Expenses are also recorded for operational areas and channels.
 
@@ -151,7 +157,7 @@ flowchart LR
     G["Record operational or channel expense"] --> H["Save expense and voucher"]
 ```
 
-## 10. Assets and maintenance
+## 11. Assets and maintenance
 
 Equipment is registered and tracked through maintenance and transfers.
 
@@ -163,7 +169,7 @@ flowchart LR
     D --> E["Review asset records and reports"]
 ```
 
-## 11. Reports, settings, audit, and backup
+## 12. Reports, settings, audit, and backup
 
 Managers review operational results; administrators manage system configuration and data protection.
 

@@ -18,7 +18,9 @@
     </div>
     <div class="d-flex gap-2 flex-wrap">
         <a href="<?= url('purchases') ?>" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to Purchases</a>
-        <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark"><i class="bi bi-qr-code me-1 text-warning"></i>Print Thermal QR Labels</a>
+        <?php if ($pType !== 'OWN_PRODUCT'): ?>
+            <a href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-dark"><i class="bi bi-qr-code me-1 text-warning"></i>Print Thermal QR Labels</a>
+        <?php endif; ?>
         <a href="<?= url('production/purchases/print/' . $purchase['id']) ?>" target="_blank" rel="noopener" class="btn btn-outline-primary"><i class="bi bi-printer me-1"></i>Print Invoice</a>
     </div>
 </div>
@@ -274,7 +276,7 @@
                             <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
                                 <i class="bi bi-qr-code text-primary"></i>
                             </a>
-                        <?php else: ?>
+                        <?php elseif ($item['item_type'] !== 'OWN_PRODUCT'): ?>
                             <a class="btn btn-outline-dark btn-action-icon" href="<?= url('production/purchases/roll-qr/' . $purchase['id']) ?>" target="_blank" rel="noopener" title="Print Thermal QR Label">
                                 <i class="bi bi-qr-code text-primary"></i>
                             </a>

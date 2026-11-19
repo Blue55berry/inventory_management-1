@@ -57,6 +57,16 @@ class ProductionStockRequestController
             $params = array_merge($params, [$wild, $wild, $wild, $wild, $wild]);
         }
 
+        $cid = currentConcernId();
+        if ($cid) {
+            if ($cid === 1) {
+                $where[] = '(psr.concern_id = ? OR psr.concern_id IS NULL)';
+            } else {
+                $where[] = 'psr.concern_id = ?';
+            }
+            $params[] = $cid;
+        }
+
         $requests = Database::fetchAll(
             "SELECT psr.*,
                     (SELECT COUNT(*) FROM production_stock_request_items WHERE request_id = psr.id) AS item_count
@@ -75,15 +85,22 @@ class ProductionStockRequestController
             $params
         );
 
+        $statWhere = "";
+        $statParams = [];
+        if ($cid) {
+            $statWhere = ($cid === 1) ? " WHERE (concern_id = ? OR concern_id IS NULL)" : " WHERE concern_id = ?";
+            $statParams = [$cid];
+        }
+
         $stats = [
-            'total_requests'          => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests")['c'] ?? 0),
-            'pending_receipt_count'   => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'PENDING'")['c'] ?? 0),
-            'received_send_area_count'=> (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'RECEIVED_BY_SEND_AREA'")['c'] ?? 0),
-            'dispatched_count'        => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'DISPATCHED'")['c'] ?? 0),
-            'fulfilled_count'         => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'FULFILLED'")['c'] ?? 0),
-            'total_requested_pieces'  => (int)(Database::fetchOne("SELECT COALESCE(SUM(total_requested_pieces), 0) AS s FROM production_stock_requests")['s'] ?? 0),
-            'total_dispatched_pieces' => (int)(Database::fetchOne("SELECT COALESCE(SUM(dispatched_pieces), 0) AS s FROM production_stock_requests")['s'] ?? 0),
-            'total_fulfilled_pieces'  => (int)(Database::fetchOne("SELECT COALESCE(SUM(fulfilled_pieces), 0) AS s FROM production_stock_requests")['s'] ?? 0),
+            'total_requests'          => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests" . $statWhere, $statParams)['c'] ?? 0),
+            'pending_receipt_count'   => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'PENDING'" . ($cid ? (($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?") : ""), $cid ? [$cid] : [])['c'] ?? 0),
+            'received_send_area_count'=> (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'RECEIVED_BY_SEND_AREA'" . ($cid ? (($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?") : ""), $cid ? [$cid] : [])['c'] ?? 0),
+            'dispatched_count'        => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'DISPATCHED'" . ($cid ? (($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?") : ""), $cid ? [$cid] : [])['c'] ?? 0),
+            'fulfilled_count'         => (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests WHERE status = 'FULFILLED'" . ($cid ? (($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?") : ""), $cid ? [$cid] : [])['c'] ?? 0),
+            'total_requested_pieces'  => (int)(Database::fetchOne("SELECT COALESCE(SUM(total_requested_pieces), 0) AS s FROM production_stock_requests" . $statWhere, $statParams)['s'] ?? 0),
+            'total_dispatched_pieces' => (int)(Database::fetchOne("SELECT COALESCE(SUM(dispatched_pieces), 0) AS s FROM production_stock_requests" . $statWhere, $statParams)['s'] ?? 0),
+            'total_fulfilled_pieces'  => (int)(Database::fetchOne("SELECT COALESCE(SUM(fulfilled_pieces), 0) AS s FROM production_stock_requests" . $statWhere, $statParams)['s'] ?? 0),
         ];
 
         Response::view('production.stock_requests.index', [
@@ -219,12 +236,15 @@ class ProductionStockRequestController
             $count = (int)(Database::fetchOne("SELECT COUNT(*) AS c FROM production_stock_requests")['c'] ?? 0);
             $reqNumber = 'STK-REQ-' . date('Y') . '-' . str_pad((string)($count + 1), 4, '0', STR_PAD_LEFT);
 
+            $cid = currentConcernId();
+
             Database::execute(
                 "INSERT INTO production_stock_requests
-                 (request_number, from_module, to_module, warehouse_name, requested_by_name, priority, required_by_date,
+                 (concern_id, request_number, from_module, to_module, warehouse_name, requested_by_name, priority, required_by_date,
                   total_requested_pieces, fulfilled_pieces, dispatched_pieces, status, notes, created_by, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'PENDING', ?, ?, NOW())",
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'PENDING', ?, ?, NOW())",
                 [
+                    $cid,
                     $reqNumber,
                     $fromModule,
                     $toModule,

@@ -13,7 +13,8 @@
     <div class="d-flex gap-2 flex-wrap">
         <?php
             $batchSource = strtoupper((string)($batch['qr_source'] ?? QrGenerationService::SOURCE_THIRD_PARTY));
-            $canAddToStock = in_array($batchSource, [QrGenerationService::SOURCE_RAW, QrGenerationService::SOURCE_THIRD_PARTY, 'MANUAL', 'CATALOG_VARIANT'], true);
+            $canAddToStock = $batchSource !== 'OWN_PRODUCT'
+                && in_array($batchSource, [QrGenerationService::SOURCE_RAW, QrGenerationService::SOURCE_THIRD_PARTY, 'MANUAL', 'CATALOG_VARIANT'], true);
             $alreadyAdded = !empty($batch['stock_added']);
         ?>
         <?php if ($canAddToStock): ?>
@@ -84,7 +85,8 @@
             </div>
             <?php if (!empty($batch['variant_id']) || !empty($batch['variant_code']) || !empty($batch['variant_sku'])): ?>
             <div class="col-12 pt-3 border-top d-flex gap-3 flex-wrap align-items-center">
-                <span class="badge bg-primary fs-6 font-monospace">Variant ID: <?= e($batch['variant_code'] ?? ('V' . $batch['variant_id'])) ?></span>
+                <span class="badge bg-primary fs-6 font-monospace">Variant ID: <?= (int)$batch['variant_id'] ?></span>
+                <span class="badge bg-secondary-subtle text-dark border font-monospace">Variant: <?= e($batch['variant_code'] ?? '—') ?></span>
                 <span class="badge bg-dark-subtle text-dark border font-monospace">SKU: <?= e($batch['variant_sku'] ?? '—') ?></span>
                 <?php if (!empty($batch['color_name'])): ?><span class="badge bg-light text-dark border">Color: <?= e($batch['color_name']) ?></span><?php endif; ?>
                 <?php if (!empty($batch['design_name'])): ?><span class="badge bg-light text-dark border">Design: <?= e($batch['design_name']) ?></span><?php endif; ?>

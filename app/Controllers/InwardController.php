@@ -135,6 +135,7 @@ class InwardController {
         Database::beginTransaction();
         try {
             $inwardId = PurchaseInward::create([
+                'concern_id'         => currentConcernId(),
                 'purchase_order_id'  => $poId,
                 'grn_number'         => $grnNumber,
                 'warehouse_id'       => $warehouseId,

@@ -763,28 +763,54 @@ function currentConcern(): ?array {
 
 /**
  * Check if a module is enabled for the current active concern.
+ * All concerns support standard modules; module assignment and permissions are managed by the Staff module.
  */
 function hasConcernModule(string $moduleKey): bool {
-    if (isSuperAdmin()) {
-        return true; // Super admin sees all, or can toggle mode
-    }
-    $cid = currentConcernId();
-    if (!$cid) return false;
+    return true;
+}
 
-    static $moduleCache = [];
-    $cacheKey = "{$cid}_{$moduleKey}";
-    if (!isset($moduleCache[$cacheKey])) {
-        if (class_exists('Database')) {
-            $res = Database::fetchOne(
-                "SELECT is_enabled FROM concern_modules WHERE concern_id = ? AND module_key = ?",
-                [$cid, $moduleKey]
-            );
-            $moduleCache[$cacheKey] = $res ? (bool)$res['is_enabled'] : false;
-        } else {
-            return false;
+/**
+ * Check if a concern is designated as a Production entity.
+ * Evaluates concern name keywords (e.g. "production", "processing", "factory", "plant", "unit", "manufacturing"),
+ * linked production unit records, or enabled production module archetype.
+ */
+function isProductionConcern(?int $concernId = null): bool {
+    $cid = $concernId ?: currentConcernId();
+    if (!$cid) return false;
+    
+    static $prodConcernCache = [];
+    if (isset($prodConcernCache[$cid])) {
+        return $prodConcernCache[$cid];
+    }
+
+    if (!class_exists('Database')) {
+        return false;
+    }
+
+    $c = Database::fetchOne("SELECT id, name, code FROM concerns WHERE id = ?", [$cid]);
+    if (!$c) {
+        $prodConcernCache[$cid] = false;
+        return false;
+    }
+
+    $name = strtolower($c['name'] ?? '');
+    // If name contains production keywords
+    if (strpos($name, 'production') !== false || strpos($name, 'processing') !== false || strpos($name, 'factory') !== false || strpos($name, 'plant') !== false || strpos($name, 'mill') !== false || strpos($name, 'manufacturing') !== false) {
+        $prodConcernCache[$cid] = true;
+        return true;
+    }
+
+    // Check linked production unit without head office / retail keywords
+    if (strpos($name, 'head office') === false && strpos($name, 'retail') === false && strpos($name, 'store') === false) {
+        $hasUnit = Database::fetchOne("SELECT id FROM production_units WHERE concern_id = ? AND is_active = 1 LIMIT 1", [$cid]);
+        if ($hasUnit) {
+            $prodConcernCache[$cid] = true;
+            return true;
         }
     }
-    return $moduleCache[$cacheKey];
+
+    $prodConcernCache[$cid] = false;
+    return false;
 }
 
 /**

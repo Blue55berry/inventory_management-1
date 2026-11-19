@@ -1,6 +1,6 @@
 <?php
 /**
- * Shared QR generation form for Fabric Rolls and Raw Materials.
+ * Shared QR generation form for mapped purchase items using roll-based codes.
  * Variables: $sourceKey, $sourceMeta, $purchases, $activeTab
  */
 $purchaseData = json_encode(array_values($purchases), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -86,7 +86,8 @@ function onQrPurchaseChanged(key) {
     (purchase.items || []).forEach(item => {
         const opt = document.createElement('option');
         opt.value = item.item_id;
-        const label = [item.item_name, item.roll_number ? ('Roll ' + item.roll_number) : '', item.start_code ? ('Code ' + item.start_code) : ''].filter(Boolean).join(' · ');
+        const variantLabel = Number(item.variant_id || 0) > 0 ? 'Variant ID ' + Number(item.variant_id) : 'Variant not assigned';
+        const label = [item.item_name, variantLabel, item.roll_number ? ('Roll ' + item.roll_number) : '', item.start_code ? ('Code ' + item.start_code) : ''].filter(Boolean).join(' · ');
         opt.textContent = label + ' — ' + Number(item.quantity).toLocaleString() + ' ' + (item.unit || 'pcs');
         opt.dataset.item = JSON.stringify(item);
         itemSelect.appendChild(opt);
@@ -103,6 +104,7 @@ function onQrItemChanged(key) {
         return;
     }
     const item = JSON.parse(raw);
+    const variantId = Number(item.variant_id || 0);
     const existing = item.qr_batch_code
         ? '<a href="<?= url('production/qr-generations/view/') ?>' + Number(item.qr_generation_id) + '" class="badge bg-dark-subtle text-dark border text-decoration-none ms-2"><i class="bi bi-qr-code me-1"></i>' + (item.qr_batch_code || '') + '</a>'
         : '<span class="badge bg-secondary-subtle text-secondary border ms-2">No batch yet</span>';
@@ -110,8 +112,8 @@ function onQrItemChanged(key) {
     summary.innerHTML =
         '<div class="row g-2 small">' +
             '<div class="col-md-3"><span class="text-muted">Item</span><div class="fw-bold">' + (item.item_name || '') + '</div></div>' +
-            '<div class="col-md-2"><span class="text-muted">Roll</span><div class="fw-bold">' + (item.roll_number || '—') + '</div></div>' +
-            '<div class="col-md-2"><span class="text-muted">Start code</span><div class="fw-bold font-monospace">' + (item.start_code || 'Auto') + '</div></div>' +
+            '<div class="col-md-2"><span class="text-muted">Variant ID</span><div class="fw-bold font-monospace">' + (variantId > 0 ? variantId : 'Not assigned') + '</div></div>' +
+            '<div class="col-md-2"><span class="text-muted">Roll / Start code</span><div class="fw-bold font-monospace">' + (item.roll_number || item.start_code || '—') + '</div></div>' +
             '<div class="col-md-2"><span class="text-muted">Qty</span><div class="fw-bold text-primary">' + Number(item.quantity).toLocaleString() + ' ' + (item.unit || 'pcs') + '</div></div>' +
             '<div class="col-md-3"><span class="text-muted">Existing batch</span><div>' + existing + '</div></div>' +
         '</div>';
