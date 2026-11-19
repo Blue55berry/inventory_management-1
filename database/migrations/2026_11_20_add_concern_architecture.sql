@@ -51,3 +51,39 @@ CREATE TABLE IF NOT EXISTS `user_concerns` (
   CONSTRAINT `fk_user_concerns_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_user_concerns_concern` FOREIGN KEY (`concern_id`) REFERENCES `concerns`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. Entity Partitioning across Masters & Core Transaction Tables
+ALTER TABLE `production_units` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_units_concern` (`concern_id`);
+ALTER TABLE `warehouses` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_warehouses_concern` (`concern_id`);
+ALTER TABLE `shops` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_shops_concern` (`concern_id`);
+ALTER TABLE `production_purchases` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_purchases_concern` (`concern_id`);
+ALTER TABLE `production_programs` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_programs_concern` (`concern_id`);
+ALTER TABLE `cutting_batches` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_cutting_batches_concern` (`concern_id`);
+ALTER TABLE `stitching_batches` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_stitching_batches_concern` (`concern_id`);
+ALTER TABLE `qc_batches` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_qc_batches_concern` (`concern_id`);
+ALTER TABLE `production_batches` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_batches_concern` (`concern_id`);
+ALTER TABLE `production_outwards` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_outwards_concern` (`concern_id`);
+ALTER TABLE `production_bills` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_bills_concern` (`concern_id`);
+ALTER TABLE `production_returns` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_returns_concern` (`concern_id`);
+ALTER TABLE `production_expenses` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_production_expenses_concern` (`concern_id`);
+ALTER TABLE `wastage_sales` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_wastage_sales_concern` (`concern_id`);
+ALTER TABLE `stitching_wastage_sales` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_stitching_wastage_sales_concern` (`concern_id`);
+ALTER TABLE `stock_balances` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_stock_balances_concern` (`concern_id`);
+ALTER TABLE `stock_transactions` ADD COLUMN IF NOT EXISTS `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX IF NOT EXISTS `idx_stock_transactions_concern` (`concern_id`);
+
+-- 5. Default Concern Seed
+INSERT IGNORE INTO `concerns` (`id`, `name`, `code`, `legal_name`, `invoice_prefix`, `po_prefix`, `dispatch_prefix`, `is_active`)
+VALUES (1, 'GRM Apparels Unit 1', 'CN-01', 'GRM Apparels Private Limited', 'INV-', 'PO-', 'DSP-', 1);
+
+INSERT IGNORE INTO `concern_modules` (`concern_id`, `module_key`, `is_enabled`) VALUES
+(1, 'production', 1),
+(1, 'purchases', 1),
+(1, 'warehouse', 1),
+(1, 'retail_pos', 1),
+(1, 'digital_sales', 1),
+(1, 'returns', 1),
+(1, 'expenses', 1),
+(1, 'assets', 1);
+
+UPDATE `users` SET `default_concern_id` = 1 WHERE `default_concern_id` IS NULL;
+INSERT IGNORE INTO `user_concerns` (`user_id`, `concern_id`, `is_default`) SELECT `id`, 1, 1 FROM `users`;

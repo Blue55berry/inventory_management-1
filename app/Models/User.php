@@ -40,6 +40,39 @@ class User {
             if (!$defConcernCol) {
                 Database::execute("ALTER TABLE users ADD COLUMN default_concern_id INT NULL AFTER channel_id");
             }
+            Database::execute("CREATE TABLE IF NOT EXISTS concerns (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(150) NOT NULL,
+                code VARCHAR(50) NOT NULL UNIQUE,
+                legal_name VARCHAR(255) NULL,
+                gst_number VARCHAR(15) NULL,
+                pan_number VARCHAR(10) NULL,
+                address TEXT NULL,
+                city VARCHAR(100) NULL,
+                state VARCHAR(100) NULL,
+                pincode VARCHAR(10) NULL,
+                phone VARCHAR(20) NULL,
+                email VARCHAR(150) NULL,
+                logo_url VARCHAR(255) NULL,
+                invoice_prefix VARCHAR(20) DEFAULT 'INV',
+                po_prefix VARCHAR(20) DEFAULT 'PO',
+                dispatch_prefix VARCHAR(20) DEFAULT 'DSP',
+                is_active TINYINT(1) DEFAULT 1,
+                created_by INT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_concerns_code (code),
+                INDEX idx_concerns_active (is_active)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            Database::execute("CREATE TABLE IF NOT EXISTS concern_modules (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                concern_id INT NOT NULL,
+                module_key VARCHAR(50) NOT NULL,
+                is_enabled TINYINT(1) DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_concern_module (concern_id, module_key),
+                INDEX idx_cm_concern (concern_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
             Database::execute("CREATE TABLE IF NOT EXISTS user_concerns (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT UNSIGNED NOT NULL,
@@ -50,6 +83,15 @@ class User {
                 INDEX idx_uc_user (user_id),
                 INDEX idx_uc_concern (concern_id)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            $concernCount = Database::fetchOne("SELECT COUNT(*) as c FROM concerns");
+            if (empty($concernCount['c'])) {
+                Database::execute("INSERT IGNORE INTO concerns (id, name, code, legal_name, invoice_prefix, po_prefix, dispatch_prefix, is_active)
+                    VALUES (1, 'GRM Apparels Unit 1', 'CN-01', 'GRM Apparels Private Limited', 'INV-', 'PO-', 'DSP-', 1)");
+                $stdModules = ['production', 'purchases', 'warehouse', 'retail_pos', 'digital_sales', 'returns', 'expenses', 'assets'];
+                foreach ($stdModules as $m) {
+                    Database::execute("INSERT IGNORE INTO concern_modules (concern_id, module_key, is_enabled) VALUES (1, ?, 1)", [$m]);
+                }
+            }
             Database::execute("CREATE TABLE IF NOT EXISTS user_permissions (
                 user_id INT UNSIGNED NOT NULL,
                 permission_id INT UNSIGNED NOT NULL,
@@ -59,6 +101,46 @@ class User {
             Database::execute("CREATE TABLE IF NOT EXISTS user_permission_overrides (
                 user_id INT UNSIGNED NOT NULL PRIMARY KEY
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            // Ensure core transactional tables have concern_id for Multi-Concern scoping
+            $partitionTables = [
+                'production_units', 'warehouses', 'shops',
+                'production_purchases', 'production_programs', 'cutting_batches',
+                'stitching_batches', 'qc_batches', 'production_batches', 'production_outwards',
+                'production_bills', 'production_returns', 'production_expenses',
+                'wastage_sales', 'stitching_wastage_sales', 'stock_balances', 'stock_transactions'
+            ];
+            foreach ($partitionTables as $pTbl) {
+                try {
+                    $hasCol = Database::fetchOne("SHOW COLUMNS FROM `{$pTbl}` LIKE 'concern_id'");
+                    if (!$hasCol) {
+                        Database::execute("ALTER TABLE `{$pTbl}` ADD COLUMN `concern_id` INT NULL DEFAULT 1 AFTER `id`, ADD INDEX `idx_{$pTbl}_concern` (`concern_id`)");
+                        Database::execute("UPDATE `{$pTbl}` SET `concern_id` = 1 WHERE `concern_id` IS NULL");
+                    }
+                } catch (Throwable $pe) {}
+            }
+
+            // Ensure baseline master categories and subcategories exist
+            try {
+                $hasCat = Database::fetchOne("SELECT id FROM categories LIMIT 1");
+                if (!$hasCat) {
+                    Database::execute("INSERT IGNORE INTO categories (id, name, code, slug, description, hsn_code, gst_rate, is_active, sort_order) VALUES
+                        (1, 'Kids Wear', 'KW', 'kids-wear', 'Children apparel and garments', '6109', 5.00, 1, 1),
+                        (2, 'Men\'s Wear', 'MW', 'mens-wear', 'Men apparel, t-shirts, shirts, casuals', '6109', 5.00, 1, 2),
+                        (3, 'Women\'s Wear', 'WW', 'womens-wear', 'Women apparel, tops, dresses, kurtis', '6109', 5.00, 1, 3),
+                        (4, 'Baby Wear', 'BW', 'baby-wear', 'Infant clothing, rompers, baby sets', '6109', 5.00, 1, 4),
+                        (5, 'Accessories & Other', 'ACC', 'accessories-other', 'Caps, masks, bibs, socks', '6109', 5.00, 1, 5)");
+                    Database::execute("INSERT IGNORE INTO subcategories (id, category_id, name, code, slug, is_active, sort_order) VALUES
+                        (1, 1, 'Kids T-Shirt', 'KT', 'kids-t-shirt', 1, 1),
+                        (2, 1, 'Kids Shorts & Pants', 'KP', 'kids-shorts-pants', 1, 2),
+                        (3, 1, 'Kids Nightwear', 'KN', 'kids-nightwear', 1, 3),
+                        (4, 2, 'Men Polo T-Shirt', 'MPT', 'men-polo-t-shirt', 1, 1),
+                        (5, 2, 'Men Round Neck T-Shirt', 'MRT', 'men-round-neck-t-shirt', 1, 2),
+                        (6, 3, 'Women Casual Tops', 'WCT', 'women-casual-tops', 1, 1),
+                        (7, 3, 'Women Frocks & Dresses', 'WFD', 'women-frocks-dresses', 1, 2),
+                        (8, 4, 'Baby Rompers', 'BR', 'baby-rompers', 1, 1)");
+                }
+            } catch (Throwable $ce) {}
         } catch (Throwable $e) {}
     }
 

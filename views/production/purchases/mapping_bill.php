@@ -27,12 +27,8 @@ $firstQrTab = !empty($items) ? $qrTabForType((string)($items[0]['item_type'] ?? 
 <div class="page-header mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2">
     <div>
         <h2 class="mb-1"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Map Purchase Bill</h2>
-        <p class="text-muted small mb-0">Full bill view — map every product, set MRP and selling price, then generate QR batches and GRNs.</p>
     </div>
     <div class="d-flex gap-2 flex-wrap">
-        <a href="<?= url('production/qr-generations?tab=' . e($firstQrTab)) ?>" class="btn btn-outline-info">
-            <i class="bi bi-qr-code me-1"></i> QR Generations
-        </a>
         <a href="<?= url('purchases/mapping') ?>" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left me-1"></i>Back to Mapping List
         </a>

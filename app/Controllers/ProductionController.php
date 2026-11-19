@@ -2875,11 +2875,23 @@ class ProductionController {
                     if ($prod) {
                         $item['product_id'] = (int)$prod['id'];
                     } else {
-                        $pCode = 'TP-' . substr(strtoupper(preg_replace('/[^A-Z0-9]/', '', $catalogName)), 0, 8);
+                        $cleanSlug = strtoupper(preg_replace('/[^A-Z0-9]/', '', $catalogName) ?: 'ITEM');
+                        $basePCode = 'TP-' . substr($cleanSlug, 0, 8);
+                        $pCode = $basePCode;
+                        $pSuffix = 1;
+                        while (Database::fetchOne("SELECT id FROM products WHERE code = ?", [$pCode])) {
+                            $pCode = $basePCode . '-' . $pSuffix++;
+                        }
+
+                        $defaultCat = Database::fetchOne("SELECT id FROM categories WHERE is_active = 1 ORDER BY id ASC LIMIT 1");
+                        $catId = $defaultCat ? (int)$defaultCat['id'] : null;
+                        $defaultSubCat = $catId ? Database::fetchOne("SELECT id FROM subcategories WHERE category_id = ? AND is_active = 1 ORDER BY id ASC LIMIT 1", [$catId]) : null;
+                        $subCatId = $defaultSubCat ? (int)$defaultSubCat['id'] : null;
+
                         Database::execute(
                             "INSERT INTO products (name, code, category_id, subcategory_id, source_type, hsn_code, is_active)
-                             VALUES (?, ?, 1, 1, 'EXTERNAL_PURCHASE', ?, 1)",
-                            [$catalogName, $pCode, $item['hsn_code']]
+                             VALUES (?, ?, ?, ?, 'EXTERNAL_PURCHASE', ?, 1)",
+                            [$catalogName, $pCode, $catId, $subCatId, $item['hsn_code']]
                         );
                         $item['product_id'] = (int)Database::lastInsertId();
                     }
