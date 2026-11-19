@@ -3573,6 +3573,17 @@ class ProductionController {
             $firstSp = (float)$_POST['default_selling_price'];
         }
 
+        if ($firstMrp > 0 && $firstSp > 0 && $firstMrp < $firstSp) {
+            $msg = "Validation Error: Master MRP (₹" . number_format($firstMrp, 2) . ") cannot be lower than Selling Price (₹" . number_format($firstSp, 2) . ").";
+            if (Request::isAjax()) {
+                Response::json(['success' => false, 'message' => $msg], 422);
+                return;
+            }
+            Session::flash('error', $msg);
+            Response::back();
+            return;
+        }
+
         if (empty($selectedSizes) && !empty($_POST['sizes']) && is_array($_POST['sizes'])) {
             $selectedSizes = array_values(array_filter(array_map('trim', $_POST['sizes'])));
         }
@@ -3631,6 +3642,25 @@ class ProductionController {
 
         // 2. Persist third_party_product_variants
         if (!empty($submittedVariants) && is_array($submittedVariants)) {
+            // Server-side validation: MRP cannot be lower than Selling Price
+            foreach ($submittedVariants as $var) {
+                $vSize = trim($var['size'] ?? 'Free Size');
+                $vColor = trim($var['color'] ?? '') ?: $color;
+                $vMrp = (float)($var['mrp'] ?? $firstMrp);
+                $vSp = (float)($var['selling_price'] ?? $firstSp);
+
+                if ($vMrp > 0 && $vSp > 0 && $vMrp < $vSp) {
+                    $msg = "Validation Error: MRP (₹" . number_format($vMrp, 2) . ") cannot be lower than Selling Price (₹" . number_format($vSp, 2) . ") for variant '{$vSize}' ('{$vColor}').";
+                    if (Request::isAjax()) {
+                        Response::json(['success' => false, 'message' => $msg], 422);
+                        return;
+                    }
+                    Session::flash('error', $msg);
+                    Response::back();
+                    return;
+                }
+            }
+
             Database::execute("DELETE FROM third_party_product_variants WHERE purchase_item_id = ?", [$itemId]);
 
             foreach ($submittedVariants as $var) {

@@ -113,6 +113,16 @@ if ($defaultSp <= 0) {
 ?>
 
 <div class="container-fluid px-3 px-md-4 py-3">
+<style>
+.matrix-mrp.is-invalid, .matrix-sp.is-invalid, #batchInputMrp.is-invalid, #batchInputSp.is-invalid {
+    border-color: #dc3545 !important;
+    background-color: #fff8f8 !important;
+    box-shadow: 0 0 0 0.15rem rgba(220, 53, 69, 0.25) !important;
+}
+tr.table-danger, tr.table-danger > td {
+    background-color: #fff1f2 !important;
+}
+</style>
 
     <!-- Top Breadcrumbs & Action Bar (Image 4: Scan/Labels button removed) -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
@@ -620,15 +630,18 @@ if ($defaultSp <= 0) {
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <div class="input-group input-group-sm" style="width: 170px;">
                         <span class="input-group-text bg-light text-muted">MRP ₹</span>
-                        <input type="number" class="form-control text-end" id="batchInputMrp" step="0.01" min="0" value="<?= number_format($defaultMrp, 2, '.', '') ?>">
+                        <input type="text" inputmode="decimal" class="form-control text-end numeric-text-input" id="batchInputMrp" value="<?= number_format($defaultMrp, 2, '.', '') ?>" placeholder="0.00">
                     </div>
                     <div class="input-group input-group-sm" style="width: 180px;">
                         <span class="input-group-text bg-light text-muted">SP ₹</span>
-                        <input type="number" class="form-control text-end" id="batchInputSp" step="0.01" min="0" value="<?= number_format($defaultSp, 2, '.', '') ?>">
+                        <input type="text" inputmode="decimal" class="form-control text-end numeric-text-input" id="batchInputSp" value="<?= number_format($defaultSp, 2, '.', '') ?>" placeholder="0.00">
                     </div>
                     <button type="button" class="btn btn-sm btn-outline-primary" id="btnReplicatePricing" title="Copy MRP & Selling Price to all variant rows">
                         <i class="bi bi-arrow-repeat me-1"></i>Replicate to All
                     </button>
+                    <div id="batchPriceError" class="d-none w-100 text-end text-danger small fw-semibold" style="font-size: 11px;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>MRP cannot be lower than Selling Price!
+                    </div>
                 </div>
             </div>
             <div class="card-body p-0">
@@ -642,9 +655,9 @@ if ($defaultSp <= 0) {
                                 <th style="min-width: 190px;">Variant SKU</th>
                                 <th style="width: 120px;">Allocated Qty</th>
                                 <th style="width: 130px;">Purchase Rate (₹)</th>
-                                <th style="width: 130px;">MRP (₹) <span class="text-danger">*</span></th>
-                                <th style="width: 130px;">Selling Price (₹) <span class="text-danger">*</span></th>
-                                <th style="width: 110px;">Margin (%)</th>
+                                <th style="width: 140px;">MRP (₹) <span class="text-danger">*</span></th>
+                                <th style="width: 140px;">Selling Price (₹) <span class="text-danger">*</span></th>
+                                <th style="width: 115px;">Margin (%)</th>
                                 <th style="min-width: 140px;">Barcode / QR Status</th>
                                 <th style="width: 60px;">Action</th>
                             </tr>
@@ -657,10 +670,13 @@ if ($defaultSp <= 0) {
 
                 <!-- Live Quantity & Margin Allocation Verification Bar -->
                 <div class="p-3 bg-light-subtle border-top d-flex flex-wrap align-items-center justify-content-between gap-3">
-                    <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
                         <div class="small fw-bold text-uppercase text-muted">Allocation Summary:</div>
                         <div class="fs-6" id="labelAllocationStatus">
                             <!-- JS updates this -->
+                        </div>
+                        <div id="labelPricingStatus" class="fs-6 d-none">
+                            <!-- JS updates this with pricing error badge -->
                         </div>
                     </div>
                     <div class="small text-muted">
@@ -1158,20 +1174,26 @@ document.addEventListener('DOMContentLoaded', function () {
                                name="variants[${rowIndex}][sku]" value="${vSku}" required>
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end fw-bold text-primary matrix-qty"
-                               name="variants[${rowIndex}][allocated_qty]" min="0" step="1" value="${vQty}" required>
+                        <input type="text" inputmode="numeric" class="form-control form-control-sm text-end fw-bold text-primary matrix-qty numeric-text-input"
+                               name="variants[${rowIndex}][allocated_qty]" value="${vQty}" required>
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end matrix-rate"
-                               name="variants[${rowIndex}][purchase_rate]" min="0" step="0.01" value="${parseFloat(vRate).toFixed(2)}" required>
+                        <input type="text" inputmode="decimal" class="form-control form-control-sm text-end matrix-rate numeric-text-input"
+                               name="variants[${rowIndex}][purchase_rate]" value="${parseFloat(vRate).toFixed(2)}" required>
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end fw-semibold matrix-mrp"
-                               name="variants[${rowIndex}][mrp]" min="0.01" step="0.01" value="${parseFloat(vMrp).toFixed(2)}" required>
+                        <input type="text" inputmode="decimal" class="form-control form-control-sm text-end fw-semibold matrix-mrp numeric-text-input"
+                               name="variants[${rowIndex}][mrp]" value="${parseFloat(vMrp).toFixed(2)}" required>
+                        <div class="matrix-mrp-error text-danger fw-semibold small d-none" style="font-size:10px; line-height:1.1; margin-top:3px;">
+                            <i class="bi bi-exclamation-triangle-fill me-0.5"></i>MRP &lt; SP
+                        </div>
                     </td>
                     <td>
-                        <input type="number" class="form-control form-control-sm text-end fw-bold text-dark matrix-sp"
-                               name="variants[${rowIndex}][selling_price]" min="0.01" step="0.01" value="${parseFloat(vSp).toFixed(2)}" required>
+                        <input type="text" inputmode="decimal" class="form-control form-control-sm text-end fw-bold text-dark matrix-sp numeric-text-input"
+                               name="variants[${rowIndex}][selling_price]" value="${parseFloat(vSp).toFixed(2)}" required>
+                        <div class="matrix-sp-error text-danger fw-semibold small d-none" style="font-size:10px; line-height:1.1; margin-top:3px;">
+                            <i class="bi bi-exclamation-triangle-fill me-0.5"></i>SP &gt; MRP
+                        </div>
                     </td>
                     <td>
                         <span class="badge ${marginClass} matrix-margin fw-bold px-2 py-1">${margin.toFixed(2)}%</span>
@@ -1195,25 +1217,109 @@ document.addEventListener('DOMContentLoaded', function () {
 
         attachMatrixEventListeners();
         updateAllocationStatus();
+        validateAllRowsPricing();
+    }
+
+    // Row-level MRP vs SP validation
+    function validateRowPricing(tr) {
+        if (!tr) return true;
+        const mrpInput = tr.querySelector('.matrix-mrp');
+        const spInput = tr.querySelector('.matrix-sp');
+        const mrpErr = tr.querySelector('.matrix-mrp-error');
+        const spErr = tr.querySelector('.matrix-sp-error');
+        const marginBadge = tr.querySelector('.matrix-margin');
+
+        if (!mrpInput || !spInput) return true;
+
+        const mrp = parseFloat(String(mrpInput.value || '').trim()) || 0;
+        const sp = parseFloat(String(spInput.value || '').trim()) || 0;
+        const rate = parseFloat(String(tr.querySelector('.matrix-rate')?.value || '').trim()) || supplierUnitCost;
+
+        // ONLY invalid when both are positive numbers AND MRP is strictly lower than SP
+        const isInvalid = (mrp > 0 && sp > 0 && mrp < sp);
+
+        // Always calculate and display normal margin percentage (never replace with error text)
+        const margin = computeMargin(rate, sp);
+        if (marginBadge) {
+            marginBadge.textContent = `${margin.toFixed(2)}%`;
+            marginBadge.className = 'badge matrix-margin fw-bold px-2 py-1 ' +
+                (margin <= 0 ? 'bg-danger-subtle text-danger border border-danger-subtle' :
+                (margin < 20 ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-success-subtle text-success border border-success-subtle'));
+        }
+
+        if (isInvalid) {
+            mrpInput.classList.add('is-invalid', 'border-danger');
+            spInput.classList.add('is-invalid', 'border-danger');
+            tr.classList.add('table-danger');
+            if (mrpErr) mrpErr.classList.remove('d-none');
+            if (spErr) spErr.classList.remove('d-none');
+        } else {
+            mrpInput.classList.remove('is-invalid', 'border-danger');
+            spInput.classList.remove('is-invalid', 'border-danger');
+            tr.classList.remove('table-danger');
+            if (mrpErr) mrpErr.classList.add('d-none');
+            if (spErr) spErr.classList.add('d-none');
+        }
+
+        return !isInvalid;
+    }
+
+    // Overall Matrix Pricing Validation
+    function validateAllRowsPricing() {
+        let allValid = true;
+        let invalidCount = 0;
+        const rows = tbodyVariantMatrix.querySelectorAll('tr[data-key]');
+        rows.forEach(tr => {
+            const valid = validateRowPricing(tr);
+            if (!valid) {
+                allValid = false;
+                invalidCount++;
+            }
+        });
+
+        const labelPricingStatus = document.getElementById('labelPricingStatus');
+        if (labelPricingStatus) {
+            if (!allValid) {
+                labelPricingStatus.classList.remove('d-none');
+                labelPricingStatus.innerHTML = `
+                    <span class="badge bg-danger text-white py-1.5 px-3">
+                        <i class="bi bi-exclamation-octagon-fill me-1.5"></i>Pricing Validation Error: MRP is lower than Selling Price in ${invalidCount} variant(s)
+                    </span>
+                `;
+            } else {
+                labelPricingStatus.classList.add('d-none');
+                labelPricingStatus.innerHTML = '';
+            }
+        }
+
+        return allValid;
     }
 
     function attachMatrixEventListeners() {
+        tbodyVariantMatrix.querySelectorAll('.numeric-text-input').forEach(input => {
+            input.addEventListener('input', function () {
+                if (this.classList.contains('matrix-qty')) {
+                    this.value = this.value.replace(/[^0-9]/g, '');
+                } else {
+                    this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
+                }
+            });
+        });
+
         tbodyVariantMatrix.querySelectorAll('.matrix-qty').forEach(input => {
             input.addEventListener('input', updateAllocationStatus);
         });
 
-        tbodyVariantMatrix.querySelectorAll('.matrix-rate, .matrix-sp').forEach(input => {
+        tbodyVariantMatrix.querySelectorAll('.matrix-rate, .matrix-sp, .matrix-mrp').forEach(input => {
             input.addEventListener('input', function () {
                 const tr = this.closest('tr');
-                const rate = parseFloat(tr.querySelector('.matrix-rate').value) || 0;
-                const sp = parseFloat(tr.querySelector('.matrix-sp').value) || 0;
-                const margin = computeMargin(rate, sp);
-
-                const marginBadge = tr.querySelector('.matrix-margin');
-                marginBadge.textContent = `${margin.toFixed(2)}%`;
-                marginBadge.className = 'badge matrix-margin fw-bold px-2 py-1 ' +
-                    (margin <= 0 ? 'bg-danger-subtle text-danger border border-danger-subtle' :
-                    (margin < 20 ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-success-subtle text-success border border-success-subtle'));
+                validateRowPricing(tr);
+                validateAllRowsPricing();
+            });
+            input.addEventListener('change', function () {
+                const tr = this.closest('tr');
+                validateRowPricing(tr);
+                validateAllRowsPricing();
             });
         });
 
@@ -1222,6 +1328,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const tr = this.closest('tr');
                 tr.remove();
                 updateAllocationStatus();
+                validateAllRowsPricing();
             });
         });
     }
@@ -1249,10 +1356,47 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    // Batch Replicate Pricing
+    // Batch Replicate Pricing & Validation
+    [batchInputMrp, batchInputSp].forEach(input => {
+        if (!input) return;
+        input.addEventListener('input', function () {
+            this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
+        });
+    });
+
+    function validateBatchReplicator() {
+        const mrp = parseFloat(String(batchInputMrp.value || '').trim()) || 0;
+        const sp = parseFloat(String(batchInputSp.value || '').trim()) || 0;
+        const errDiv = document.getElementById('batchPriceError');
+
+        if (mrp > 0 && sp > 0 && mrp < sp) {
+            batchInputMrp.classList.add('is-invalid', 'border-danger');
+            batchInputSp.classList.add('is-invalid', 'border-danger');
+            if (errDiv) errDiv.classList.remove('d-none');
+            return false;
+        } else {
+            batchInputMrp.classList.remove('is-invalid', 'border-danger');
+            batchInputSp.classList.remove('is-invalid', 'border-danger');
+            if (errDiv) errDiv.classList.add('d-none');
+            return true;
+        }
+    }
+
+    batchInputMrp.addEventListener('input', validateBatchReplicator);
+    batchInputSp.addEventListener('input', validateBatchReplicator);
+    batchInputMrp.addEventListener('change', validateBatchReplicator);
+    batchInputSp.addEventListener('change', validateBatchReplicator);
+
     btnReplicatePricing.addEventListener('click', function () {
         const mrp = parseFloat(batchInputMrp.value) || 0;
         const sp = parseFloat(batchInputSp.value) || 0;
+
+        if (mrp > 0 && sp > 0 && mrp < sp) {
+            validateBatchReplicator();
+            alert(`Validation Error: MRP (₹${mrp.toFixed(2)}) cannot be lower than Selling Price (₹${sp.toFixed(2)}). Please adjust the batch pricing before replicating.`);
+            batchInputMrp.focus();
+            return;
+        }
 
         tbodyVariantMatrix.querySelectorAll('tr').forEach(tr => {
             const mrpInput = tr.querySelector('.matrix-mrp');
@@ -1260,16 +1404,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (mrpInput && mrp > 0) mrpInput.value = mrp.toFixed(2);
             if (spInput && sp > 0) spInput.value = sp.toFixed(2);
 
-            const rate = parseFloat(tr.querySelector('.matrix-rate')?.value) || supplierUnitCost;
-            const margin = computeMargin(rate, sp);
-            const marginBadge = tr.querySelector('.matrix-margin');
-            if (marginBadge) {
-                marginBadge.textContent = `${margin.toFixed(2)}%`;
-                marginBadge.className = 'badge matrix-margin fw-bold px-2 py-1 ' +
-                    (margin <= 0 ? 'bg-danger-subtle text-danger border border-danger-subtle' :
-                    (margin < 20 ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-success-subtle text-success border border-success-subtle'));
-            }
+            validateRowPricing(tr);
         });
+
+        validateAllRowsPricing();
     });
 
     // 5. Quick Add Modals (AJAX Integration)
@@ -1432,23 +1570,46 @@ document.addEventListener('DOMContentLoaded', function () {
             return false;
         }
 
+        const pricingValid = validateAllRowsPricing();
+        if (!pricingValid) {
+            e.preventDefault();
+            const firstInvalidTr = tbodyVariantMatrix.querySelector('tr.table-danger');
+            if (firstInvalidTr) {
+                const sz = firstInvalidTr.getAttribute('data-size') || '';
+                const col = firstInvalidTr.getAttribute('data-color') || '';
+                const mrp = parseFloat(firstInvalidTr.querySelector('.matrix-mrp')?.value) || 0;
+                const sp = parseFloat(firstInvalidTr.querySelector('.matrix-sp')?.value) || 0;
+                const invalidInput = (mrp < sp) ? (firstInvalidTr.querySelector('.matrix-mrp') || firstInvalidTr.querySelector('.matrix-sp')) : firstInvalidTr.querySelector('.matrix-sp');
+                invalidInput?.focus();
+                alert(`Pricing Validation Error: MRP (₹${mrp.toFixed(2)}) cannot be lower than Selling Price (₹${sp.toFixed(2)}) for variant ${sz} - ${col}. Please correct the pricing.`);
+            } else {
+                alert('Pricing Validation Error: MRP cannot be lower than Selling Price for one or more variants.');
+            }
+            return false;
+        }
+
         let totalAllocated = 0;
-        let pricingValid = true;
+        let zeroPricingFound = false;
+        let zeroPricingTr = null;
+
         variants.forEach(tr => {
             const q = parseFloat(tr.querySelector('.matrix-qty')?.value) || 0;
             const mrp = parseFloat(tr.querySelector('.matrix-mrp')?.value) || 0;
             const sp = parseFloat(tr.querySelector('.matrix-sp')?.value) || 0;
             totalAllocated += q;
 
-            if (mrp <= 0 || sp <= 0) pricingValid = false;
-            if (sp > mrp) {
-                pricingValid = false;
-                alert(`Selling price (₹${sp}) cannot exceed MRP (₹${mrp}) for variant ${tr.getAttribute('data-size')} - ${tr.getAttribute('data-color')}`);
+            if (mrp <= 0 || sp <= 0) {
+                zeroPricingFound = true;
+                if (!zeroPricingTr) zeroPricingTr = tr;
             }
         });
 
-        if (!pricingValid) {
+        if (zeroPricingFound && zeroPricingTr) {
             e.preventDefault();
+            const sz = zeroPricingTr.getAttribute('data-size') || '';
+            const col = zeroPricingTr.getAttribute('data-color') || '';
+            alert(`Pricing Validation Error: Please enter valid MRP and Selling Price (greater than 0) for variant ${sz} - ${col}.`);
+            zeroPricingTr.querySelector('.matrix-mrp')?.focus();
             return false;
         }
 

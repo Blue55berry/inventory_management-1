@@ -79,16 +79,6 @@
                     </a>
                 </div>
             </div>
-            <div class="col-md-3">
-                <select name="category_id" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="">-- All Mapped Categories --</option>
-                    <?php foreach ($categories as $cat): ?>
-                        <option value="<?= (int)$cat['id'] ?>" <?= ((int)$categoryId === (int)$cat['id']) ? 'selected' : '' ?>>
-                            <?= e($cat['name']) ?> (<?= e($cat['code']) ?>)
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
             <div class="col-md-4 ms-auto">
                 <div class="input-group input-group-sm">
                     <input type="hidden" name="status" value="<?= e($status) ?>">
