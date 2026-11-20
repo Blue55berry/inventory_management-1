@@ -91,7 +91,7 @@ $purchaseData = json_encode(array_values($purchases), JSON_UNESCAPED_UNICODE | J
                     </div>
                     <div class="font-monospace fw-bold text-dark" style="font-size: 11px;" id="tpStickerCode_<?= e($sourceKey) ?>">BRAND-SKU-0001</div>
                     <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top border-dark small fw-bold">
-                        <div>MRP: ₹<span id="tpStickerMrp_<?= e($sourceKey) ?>">0.00</span></div>
+                        <div>MRP: <del>₹<span id="tpStickerMrp_<?= e($sourceKey) ?>">0.00</span></del></div>
                         <div class="text-primary">SALE: ₹<span id="tpStickerPrice_<?= e($sourceKey) ?>">0.00</span></div>
                     </div>
                 </div>

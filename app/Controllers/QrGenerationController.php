@@ -348,8 +348,13 @@ class QrGenerationController {
         $allItems = Database::fetchAll("
             SELECT si.id, si.stitching_batch_id, si.size_name, si.color_name,
                    COALESCE(NULLIF(si.stitched_qty, 0), NULLIF(si.stitched_quantity, 0), si.received_qty, 0) as qty,
-                   si.catalog_hierarchy, si.base_price, si.discount_price
+                   si.variant_id, si.catalog_hierarchy, si.base_price, si.discount_price,
+                   pv.variant_code, pv.sku, pv.mrp AS variant_mrp, pv.selling_price AS variant_selling_price,
+                   col.name AS variant_color_name, sz.name AS variant_size_name
             FROM stitching_items si
+            LEFT JOIN product_variants pv ON pv.id = si.variant_id
+            LEFT JOIN colors col ON col.id = pv.color_id
+            LEFT JOIN sizes sz ON sz.id = pv.size_id
             WHERE si.stitching_batch_id IN ({$placeholders})
         ", $batchIds);
 

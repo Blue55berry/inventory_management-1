@@ -517,6 +517,29 @@ body {
     transition: var(--transition);
 }
 
+/* QR generation screens: keep controls and label areas square. */
+.qr-generation-ui .btn,
+.qr-generation-ui .card,
+.qr-generation-ui .nav-link,
+.qr-generation-ui .form-control,
+.qr-generation-ui .form-select,
+.qr-generation-ui .input-group-text,
+.qr-generation-ui .badge,
+.qr-generation-ui .alert,
+.qr-generation-ui .modal-content,
+.qr-generation-ui .thermal-preview-card,
+.qr-generation-ui .batch-qr-canvas,
+.qr-generation-ui .rounded,
+.qr-generation-ui .rounded-3,
+.qr-generation-ui .rounded-pill,
+.qr-generation-ui .rounded-circle {
+    border-radius: 0 !important;
+}
+
+.qr-generation-ui .rounded-circle {
+    border-radius: 0 !important;
+}
+
 .btn-primary {
     background: var(--primary);
     border-color: var(--primary);

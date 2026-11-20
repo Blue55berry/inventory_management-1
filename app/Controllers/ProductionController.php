@@ -67,6 +67,22 @@ class ProductionController {
             if (!$colInwPurchases) {
                 Database::execute("ALTER TABLE production_purchases ADD COLUMN is_inwarded TINYINT(1) DEFAULT 0, ADD COLUMN inwarded_at DATETIME DEFAULT NULL");
             }
+            $colDocUrls = Database::fetchOne("SHOW COLUMNS FROM production_purchases LIKE 'document_urls'");
+            if (!$colDocUrls) {
+                Database::execute("ALTER TABLE production_purchases ADD COLUMN document_urls TEXT DEFAULT NULL AFTER document_url");
+            }
+            Database::execute("
+                CREATE TABLE IF NOT EXISTS `production_purchase_documents` (
+                  `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                  `purchase_id` INT UNSIGNED NOT NULL,
+                  `document_url` VARCHAR(500) NOT NULL,
+                  `file_name` VARCHAR(255) NULL,
+                  `file_type` VARCHAR(50) NULL,
+                  `file_size` INT UNSIGNED NULL,
+                  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+                  INDEX `idx_pp_docs_purchase` (`purchase_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
         } catch (\Throwable $e) {}
         try {
             $colInwQty = Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'inwarded_qty'");
@@ -742,6 +758,18 @@ class ProductionController {
             return;
         }
 
+        $activeCid = currentConcernId();
+        $concernClausePp = '';
+        $purchParams = [$sellerId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernClausePp = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernClausePp = " AND pp.concern_id = ?";
+            }
+            $purchParams[] = $activeCid;
+        }
+
         // 1. All Purchases from this Supplier
         $purchases = Database::fetchAll(
             "SELECT pp.*, u.full_name AS created_by_name,
@@ -750,12 +778,16 @@ class ProductionController {
                     (SELECT COALESCE(SUM(weight_kg), 0) FROM production_purchase_items ppi WHERE ppi.purchase_id = pp.id) AS total_weight
              FROM production_purchases pp
              LEFT JOIN users u ON pp.created_by = u.id
-             WHERE pp.seller_id = ?
+             WHERE pp.seller_id = ? $concernClausePp
              ORDER BY pp.created_at DESC, pp.id DESC",
-            [$sellerId]
+            $purchParams
         );
 
         // 2. All Purchased Rolls (Buying Log)
+        $rollParams = [$sellerId, $sellerId];
+        if ($activeCid && !isSuperAdmin()) {
+            $rollParams[] = $activeCid;
+        }
         $purchasedRolls = Database::fetchAll(
             "SELECT ppi.*, pp.purchase_number, pp.purchase_date, pp.created_at AS purchase_created_at,
                     pp.notes AS purchase_notes, u.full_name AS purchase_by_name,
@@ -770,9 +802,9 @@ class ProductionController {
              JOIN production_purchases pp ON pp.id = ppi.purchase_id
              LEFT JOIN seller_rolls sr ON sr.id = ppi.seller_roll_id
              LEFT JOIN users u ON pp.created_by = u.id
-             WHERE pp.seller_id = ? OR sr.seller_id = ?
+             WHERE (pp.seller_id = ? OR sr.seller_id = ?) $concernClausePp
              ORDER BY COALESCE(pp.created_at, ppi.created_at) DESC, ppi.id DESC",
-            [$sellerId, $sellerId]
+            $rollParams
         );
 
         foreach ($purchasedRolls as &$pr) {
@@ -1312,7 +1344,7 @@ class ProductionController {
         // Explicit column projection (avoiding SELECT *)
         $purchases = Database::fetchAll(
             "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.seller_id, pp.purchase_date,
-                    pp.invoice_number, pp.document_url, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
+                    pp.invoice_number, pp.document_url, pp.document_urls, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
                     s.name AS seller_name, s.company, s.seller_type
              FROM production_purchases pp
              INNER JOIN sellers s ON s.id = pp.seller_id
@@ -1347,7 +1379,11 @@ class ProductionController {
         $metricWhere = [];
         $metricParams = [];
         if ($activeCid) {
-            $metricWhere[] = "(concern_id = ? OR concern_id IS NULL)";
+            if ($activeCid === 1) {
+                $metricWhere[] = "(concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $metricWhere[] = "concern_id = ?";
+            }
             $metricParams[] = $activeCid;
         }
         $metricWhereSql = $metricWhere ? ('WHERE ' . implode(' AND ', $metricWhere)) : '';
@@ -1397,14 +1433,27 @@ class ProductionController {
     }
 
     public function printProductionPurchase(string $id): void {
+        $purchaseId = (int)$id;
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$purchaseId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND pp.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         $purchase = Database::fetchOne(
             "SELECT pp.*, s.name AS seller_name, s.company AS seller_company, s.phone AS seller_phone,
                     s.email AS seller_email, s.gst_number AS seller_gst_number, s.city AS seller_city,
                     s.state AS seller_state, s.address AS seller_address, s.payment_terms AS seller_payment_terms
              FROM production_purchases pp
              JOIN sellers s ON s.id = pp.seller_id
-             WHERE pp.id = ?",
-            [(int)$id]
+             WHERE pp.id = ? $concernWhere",
+            $params
         );
         if (!$purchase) {
             Response::error(404, 'Purchase record not found.');
@@ -1489,18 +1538,142 @@ class ProductionController {
     }
 
     private function getProductionPurchase(int $purchaseId): ?array {
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$purchaseId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND pp.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         return Database::fetchOne(
-            "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.seller_id, pp.purchase_date,
-                    pp.invoice_number, pp.document_url, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
+            "SELECT pp.id, pp.concern_id, pp.purchase_number, pp.purchase_type, pp.seller_id, pp.purchase_date,
+                    pp.invoice_number, pp.document_url, pp.document_urls, pp.notes, pp.total_amount, pp.created_by, pp.created_at,
                     s.name AS seller_name, s.company AS seller_company, s.phone AS seller_phone,
                     s.email AS seller_email, s.gst_number AS seller_gst_number, s.city AS seller_city,
                     s.state AS seller_state, s.address AS seller_address, s.payment_terms AS seller_payment_terms,
                     s.seller_type
              FROM production_purchases pp
              INNER JOIN sellers s ON s.id = pp.seller_id
-             WHERE pp.id = ?",
+             WHERE pp.id = ? $concernWhere",
+            $params
+        );
+    }
+
+    /**
+     * Get all attached documents for a purchase.
+     * Backwards compatible with legacy document_url and document_urls JSON.
+     */
+    public static function getPurchaseDocuments(int $purchaseId, ?string $fallbackDocUrl = null, ?string $fallbackDocUrls = null): array {
+        self::ensureDatabaseSchema();
+        $docs = Database::fetchAll(
+            "SELECT id, purchase_id, document_url, file_name, file_type, file_size, created_at
+             FROM production_purchase_documents
+             WHERE purchase_id = ?
+             ORDER BY id ASC",
             [$purchaseId]
         );
+
+        if (!empty($docs)) {
+            return $docs;
+        }
+
+        // Fallback to document_urls JSON or document_url if table has no rows
+        $urls = [];
+        if (!empty($fallbackDocUrls)) {
+            $decoded = json_decode($fallbackDocUrls, true);
+            if (is_array($decoded)) {
+                $urls = $decoded;
+            }
+        }
+        if (empty($urls) && !empty($fallbackDocUrl)) {
+            $urls = [$fallbackDocUrl];
+        }
+
+        $synthesized = [];
+        foreach ($urls as $idx => $url) {
+            $cleanUrl = trim((string)$url);
+            if ($cleanUrl === '') continue;
+            $name = basename(parse_url($cleanUrl, PHP_URL_PATH) ?? $cleanUrl);
+            $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+            if ($ext === '' || $ext === 'upload') {
+                $ext = str_contains($cleanUrl, '.avif') ? 'avif' : (str_contains($cleanUrl, '.pdf') ? 'pdf' : 'avif');
+            }
+            $synthesized[] = [
+                'id' => 0,
+                'purchase_id' => $purchaseId,
+                'document_url' => $cleanUrl,
+                'file_name' => $name ?: ('Invoice #' . ($idx + 1)),
+                'file_type' => $ext,
+                'file_size' => 0,
+                'created_at' => null,
+            ];
+        }
+        return $synthesized;
+    }
+
+    /**
+     * Normalize uploaded documents from $_FILES['documents'] (multiple) or $_FILES['document'] (single)
+     * Validates files (up to 10 MB each, allowed types: JPG, PNG, WEBP, AVIF, PDF).
+     * Supports 5+ invoice files seamlessly.
+     */
+    private function normalizeUploadedDocuments(): array {
+        $uploaded = [];
+        $allowedExtensions = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'pdf'];
+
+        // 1. Multiple files from documents[]
+        if (!empty($_FILES['documents']['name'])) {
+            $names = $_FILES['documents']['name'];
+            if (is_array($names)) {
+                $count = count($names);
+                for ($i = 0; $i < $count; $i++) {
+                    if (empty($names[$i]) || ($_FILES['documents']['error'][$i] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+                        continue;
+                    }
+                    $err = $_FILES['documents']['error'][$i];
+                    $name = (string)$names[$i];
+                    $tmp = (string)($_FILES['documents']['tmp_name'][$i] ?? '');
+                    $size = (int)($_FILES['documents']['size'][$i] ?? 0);
+                    $type = (string)($_FILES['documents']['type'][$i] ?? '');
+                    $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+                    if ($err !== UPLOAD_ERR_OK || !in_array($ext, $allowedExtensions, true) || $size > 10 * 1024 * 1024) {
+                        throw new \InvalidArgumentException("Invoice file '{$name}' is invalid. Allowed formats: JPG, PNG, WEBP, AVIF, PDF (up to 10 MB each).");
+                    }
+                    $uploaded[] = [
+                        'name' => $name,
+                        'type' => $type,
+                        'tmp_name' => $tmp,
+                        'error' => $err,
+                        'size' => $size,
+                    ];
+                }
+            } elseif (!empty($_FILES['documents']['tmp_name']) && ($_FILES['documents']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $ext = strtolower(pathinfo((string)$names, PATHINFO_EXTENSION));
+                if (!in_array($ext, $allowedExtensions, true) || (int)($_FILES['documents']['size'] ?? 0) > 10 * 1024 * 1024) {
+                    throw new \InvalidArgumentException("Invoice file is invalid. Allowed formats: JPG, PNG, WEBP, AVIF, PDF (up to 10 MB each).");
+                }
+                $uploaded[] = $_FILES['documents'];
+            }
+        }
+
+        // 2. Single file fallback from document (legacy form submissions)
+        if (!empty($_FILES['document']['name']) && !is_array($_FILES['document']['name'])) {
+            $file = $_FILES['document'];
+            if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+                $ext = strtolower(pathinfo((string)$file['name'], PATHINFO_EXTENSION));
+                if ($file['error'] !== UPLOAD_ERR_OK || !in_array($ext, $allowedExtensions, true) || (int)($file['size'] ?? 0) > 10 * 1024 * 1024) {
+                    throw new \InvalidArgumentException("Invoice file '{$file['name']}' is invalid. Allowed formats: JPG, PNG, WEBP, AVIF, PDF (up to 10 MB each).");
+                }
+                $uploaded[] = $file;
+            }
+        }
+
+        return $uploaded;
     }
 
     public function viewProductionPurchase(string $id): void {
@@ -1527,12 +1700,14 @@ class ProductionController {
              ORDER BY ppi.id ASC",
             [(int)$purchase['id']]
         );
+        $documents = self::getPurchaseDocuments((int)$purchase['id'], $purchase['document_url'] ?? null, $purchase['document_urls'] ?? null);
         Response::view('production.purchases.view', [
             'pageTitle' => 'Purchase ' . $purchase['purchase_number'],
             'activeModule' => 'purchases',
             'activeMenu' => 'purchases-all',
             'purchase' => $purchase,
             'items' => $items,
+            'documents' => $documents,
             'breadcrumb' => [
                 ['label' => 'Purchases', 'url' => url('purchases')],
                 ['label' => $purchase['purchase_number']],
@@ -1555,12 +1730,14 @@ class ProductionController {
             [(int)$purchase['id']]
         );
         $hsnCodes = Database::fetchAll("SELECT id, hsn_code, description, gst_rate FROM hsn_codes ORDER BY hsn_code ASC");
+        $documents = self::getPurchaseDocuments((int)$purchase['id'], $purchase['document_url'] ?? null, $purchase['document_urls'] ?? null);
         Response::view('production.purchases.edit', [
             'pageTitle' => 'Edit Purchase ' . $purchase['purchase_number'],
             'activeModule' => 'production',
             'activeMenu' => 'prod-purchases',
             'purchase' => $purchase,
             'items' => $items,
+            'documents' => $documents,
             'hsnCodes' => $hsnCodes,
             'breadcrumb' => [
                 ['label' => 'Production', 'url' => url('purchases')],
@@ -1578,10 +1755,22 @@ class ProductionController {
         }
 
         $purchaseId = (int)$id;
-        $purchase = Database::fetchOne("SELECT * FROM production_purchases WHERE id = ?", [$purchaseId]);
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$purchaseId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
+        $purchase = Database::fetchOne("SELECT * FROM production_purchases WHERE id = ? $concernWhere", $params);
         if (!$purchase) {
-            Session::flash('error', 'Purchase record not found.');
-            Response::redirect(url('production/purchases'));
+            Session::flash('error', 'Purchase record not found or does not belong to active concern.');
+            Response::redirect(url('purchases'));
             return;
         }
 
@@ -1937,23 +2126,13 @@ class ProductionController {
                 $totalAmount += $item['total'];
             }
         }
-        $documentUrl = null;
-        if (!empty($_FILES['document']['name'])) {
-            $file = $_FILES['document'];
-            $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            if ($file['error'] !== UPLOAD_ERR_OK
-                || !in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'pdf'], true)
-                || $file['size'] > 5 * 1024 * 1024) {
-                Session::flash('error', 'Invoice must be a JPG, PNG, WEBP, or PDF file up to 5 MB.');
-                Response::back();
-                return;
-            }
-            $documentUrl = CloudinaryService::upload($file, 'grm_inventory/production/purchases', 'auto');
-            if (!$documentUrl) {
-                Session::flash('error', 'Invoice upload failed. Please try again.');
-                Response::back();
-                return;
-            }
+        $documentFiles = [];
+        try {
+            $documentFiles = $this->normalizeUploadedDocuments();
+        } catch (\InvalidArgumentException $e) {
+            Session::flash('error', $e->getMessage());
+            Response::back();
+            return;
         }
 
         try {
@@ -2065,12 +2244,56 @@ class ProductionController {
                 }
             }
             $this->refreshSupplierRollTotals((int)$purchase['seller_id']);
+
+            // 1. Delete marked existing documents
+            if (!empty($_POST['delete_document_ids']) && is_array($_POST['delete_document_ids'])) {
+                foreach ($_POST['delete_document_ids'] as $delId) {
+                    $delDoc = Database::fetchOne(
+                        "SELECT id, document_url FROM production_purchase_documents WHERE id = ? AND purchase_id = ?",
+                        [(int)$delId, $purchaseId]
+                    );
+                    if ($delDoc) {
+                        Database::execute("DELETE FROM production_purchase_documents WHERE id = ?", [(int)$delDoc['id']]);
+                        try {
+                            CloudinaryService::delete($delDoc['document_url']);
+                        } catch (\Throwable $e) {}
+                    }
+                }
+            }
+
+            // 2. Upload and record any newly attached documents (auto-converted to AVIF)
+            foreach ($documentFiles as $docFile) {
+                try {
+                    $url = CloudinaryService::upload($docFile, 'grm_inventory/purchases', 'auto');
+                    if ($url) {
+                        $origName = $docFile['name'] ?? basename($url);
+                        $ext = strtolower(pathinfo($url, PATHINFO_EXTENSION));
+                        if ($ext === '' || $ext === 'upload') {
+                            $ext = str_contains($url, '.avif') ? 'avif' : (str_contains($url, '.pdf') ? 'pdf' : strtolower(pathinfo($origName, PATHINFO_EXTENSION)));
+                        }
+                        Database::execute(
+                            "INSERT INTO production_purchase_documents (purchase_id, document_url, file_name, file_type, file_size)
+                             VALUES (?, ?, ?, ?, ?)",
+                            [$purchaseId, $url, $origName, $ext ?: 'avif', (int)($docFile['size'] ?? 0)]
+                        );
+                    }
+                } catch (\Throwable $e) {
+                    error_log('Invoice upload failed: ' . $e->getMessage());
+                }
+            }
+
+            // 3. Resync document_url and document_urls
+            $allDocs = Database::fetchAll("SELECT document_url FROM production_purchase_documents WHERE purchase_id = ? ORDER BY id ASC", [$purchaseId]);
+            $allUrls = array_column($allDocs, 'document_url');
+            $newPrimary = $allUrls[0] ?? null;
+            $newJson = !empty($allUrls) ? json_encode($allUrls, JSON_UNESCAPED_SLASHES) : null;
+
             Database::execute(
                 "UPDATE production_purchases
-                 SET purchase_date = ?, invoice_number = ?, document_url = COALESCE(?, document_url),
+                 SET purchase_date = ?, invoice_number = ?, document_url = ?, document_urls = ?,
                      notes = ?, total_amount = ?, updated_at = NOW()
                  WHERE id = ?",
-                [$purchaseDate, trim((string)($_POST['invoice_number'] ?? '')) ?: null, $documentUrl,
+                [$purchaseDate, trim((string)($_POST['invoice_number'] ?? '')) ?: null, $newPrimary, $newJson,
                     trim((string)($_POST['notes'] ?? '')) ?: null, round($totalAmount, 2), $purchaseId]
             );
             Database::commit();
@@ -2096,10 +2319,22 @@ class ProductionController {
             return;
         }
         $purchaseId = (int)$id;
-        $purchase = Database::fetchOne("SELECT * FROM production_purchases WHERE id = ?", [$purchaseId]);
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$purchaseId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
+        $purchase = Database::fetchOne("SELECT * FROM production_purchases WHERE id = ? $concernWhere", $params);
         if (!$purchase) {
-            Session::flash('error', 'Purchase record not found.');
-            Response::redirect(url('production/purchases'));
+            Session::flash('error', 'Purchase record not found or does not belong to active concern.');
+            Response::redirect(url('purchases'));
             return;
         }
 
@@ -2146,6 +2381,15 @@ class ProductionController {
                 [$purchaseId]
             );
             $this->refreshSupplierRollTotals((int)$purchase['seller_id']);
+            // Delete associated invoice documents
+            $docsToDelete = Database::fetchAll("SELECT document_url FROM production_purchase_documents WHERE purchase_id = ?", [$purchaseId]);
+            foreach ($docsToDelete as $d) {
+                try {
+                    CloudinaryService::delete($d['document_url']);
+                } catch (\Throwable $e) {}
+            }
+            Database::execute("DELETE FROM production_purchase_documents WHERE purchase_id = ?", [$purchaseId]);
+
             Database::execute("DELETE FROM production_purchases WHERE id = ?", [$purchaseId]);
             Database::commit();
             AuditService::log('production', 'DELETE', 'production_purchases', $purchaseId, $purchase, null);
@@ -2781,17 +3025,13 @@ class ProductionController {
         }
         unset($item);
 
-        $documentUrl = null;
-        $documentFile = null;
-        if (!empty($_FILES['document']['name'])) {
-            $file = $_FILES['document'];
-            $extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            if ($file['error'] !== UPLOAD_ERR_OK || !in_array($extension, ['jpg', 'jpeg', 'png', 'webp', 'pdf'], true) || $file['size'] > 5 * 1024 * 1024) {
-                Session::flash('error', 'Invoice must be a JPG, PNG, WEBP, or PDF file up to 5 MB.');
-                Response::back();
-                return;
-            }
-            $documentFile = $file;
+        $documentFiles = [];
+        try {
+            $documentFiles = $this->normalizeUploadedDocuments();
+        } catch (\InvalidArgumentException $e) {
+            Session::flash('error', $e->getMessage());
+            Response::back();
+            return;
         }
 
         $totalAmount = array_sum(array_column($items, 'line_total'));
@@ -2828,7 +3068,7 @@ class ProductionController {
 
         try {
             Database::beginTransaction();
-            $activeConcernId = currentConcernId();
+            $activeConcernId = currentConcernId() ?: 1;
             $activeConcern = currentConcern();
             $poPrefix = !empty($activeConcern['po_prefix']) ? rtrim($activeConcern['po_prefix'], '-') . '-' : 'PP-';
 
@@ -3088,21 +3328,38 @@ class ProductionController {
                     $failedAttachmentCount = count($rollPhotoFiles);
                 }
             }
-            if ($documentFile) {
+            $uploadedDocUrls = [];
+            foreach ($documentFiles as $docFile) {
                 try {
-                    $documentUrl = CloudinaryService::upload($documentFile, 'grm_inventory/purchases', 'auto');
-                    if (!$documentUrl) {
-                        $failedAttachmentCount++;
-                    } else {
+                    $url = CloudinaryService::upload($docFile, 'grm_inventory/purchases', 'auto');
+                    if ($url) {
+                        $uploadedDocUrls[] = $url;
+                        $origName = $docFile['name'] ?? basename($url);
+                        $ext = strtolower(pathinfo($url, PATHINFO_EXTENSION));
+                        if ($ext === '' || $ext === 'upload') {
+                            $ext = str_contains($url, '.avif') ? 'avif' : (str_contains($url, '.pdf') ? 'pdf' : strtolower(pathinfo($origName, PATHINFO_EXTENSION)));
+                        }
                         Database::execute(
-                            "UPDATE production_purchases SET document_url = ? WHERE id = ?",
-                            [$documentUrl, $purchaseId]
+                            "INSERT INTO production_purchase_documents (purchase_id, document_url, file_name, file_type, file_size)
+                             VALUES (?, ?, ?, ?, ?)",
+                            [$purchaseId, $url, $origName, $ext ?: 'avif', (int)($docFile['size'] ?? 0)]
                         );
+                    } else {
+                        $failedAttachmentCount++;
                     }
                 } catch (\Throwable $e) {
                     error_log('Purchase invoice upload failed: ' . $e->getMessage());
                     $failedAttachmentCount++;
                 }
+            }
+
+            if (!empty($uploadedDocUrls)) {
+                $primaryUrl = $uploadedDocUrls[0];
+                $jsonUrls = json_encode($uploadedDocUrls, JSON_UNESCAPED_SLASHES);
+                Database::execute(
+                    "UPDATE production_purchases SET document_url = ?, document_urls = ? WHERE id = ?",
+                    [$primaryUrl, $jsonUrls, $purchaseId]
+                );
             }
 
             if ($purchaseType === 'THIRD_PARTY') {
@@ -3262,6 +3519,18 @@ class ProductionController {
         PurchaseMappingFulfillmentService::ensureSchema();
 
         $purchaseId = (int)$id;
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$purchaseId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND pp.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         $purchase = Database::fetchOne(
             "SELECT pp.id, pp.purchase_number, pp.purchase_type, pp.purchase_date, pp.invoice_number, pp.seller_id,
                     pp.total_amount, pp.notes, pp.document_url, pp.is_inwarded, pp.created_at,
@@ -3271,8 +3540,8 @@ class ProductionController {
                     s.seller_type
              FROM production_purchases pp
              LEFT JOIN sellers s ON s.id = pp.seller_id
-             WHERE pp.id = ?",
-            [$purchaseId]
+             WHERE pp.id = ? $concernWhere",
+            $params
         );
 
         if (!$purchase) {
@@ -3447,12 +3716,24 @@ class ProductionController {
             return;
         }
 
+        $activeCid = currentConcernId();
+        $concernWhere = '';
+        $params = [$itemId];
+        if ($activeCid && !isSuperAdmin()) {
+            if ($activeCid === 1) {
+                $concernWhere = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
+            } else {
+                $concernWhere = " AND pp.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         $item = Database::fetchOne(
-            "SELECT ppi.*, pp.purchase_number, pp.seller_id AS purchase_seller_id
+            "SELECT ppi.*, pp.purchase_number, pp.seller_id AS purchase_seller_id, pp.concern_id
              FROM production_purchase_items ppi
              INNER JOIN production_purchases pp ON pp.id = ppi.purchase_id
-             WHERE ppi.id = ?",
-            [$itemId]
+             WHERE ppi.id = ? $concernWhere",
+            $params
         );
         if (!$item) {
             $msg = 'Purchase item not found.';
@@ -6355,7 +6636,7 @@ class ProductionController {
                 $tempPrefix = ($item['item_type'] === 'PRODUCT') ? 'TMP-PRD-' : 'TMP-ROL-';
                 $temporaryDamageNumber = $tempPrefix . bin2hex(random_bytes(16));
 
-                $activeConcernId = currentConcernId();
+                $activeConcernId = currentConcernId() ?: 1;
 
                 Database::execute(
                     "INSERT INTO roll_damages (
@@ -17606,7 +17887,7 @@ class ProductionController {
                 $lineTotal = (float)$line['total_cost'];
                 $paidAmt = ($paymentStatus === 'PAID') ? $lineTotal : 0.00;
 
-                $activeConcernId = currentConcernId();
+                $activeConcernId = currentConcernId() ?: 1;
 
                 Database::execute(
                     "INSERT INTO production_expenses

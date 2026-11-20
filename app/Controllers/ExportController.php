@@ -218,9 +218,31 @@ class ExportController {
             ],
         ];
 
-        // Active production facilities
-        $facilities = Database::fetchAll("SELECT id, name, code, is_active FROM production_units WHERE is_active = 1 ORDER BY name ASC");
-        $warehouses = Database::fetchAll("SELECT id, name, code FROM warehouses WHERE is_active = 1 ORDER BY name ASC");
+        // Active business concerns & scoping
+        $concerns = Database::fetchAll("
+            SELECT c.*,
+                   (SELECT GROUP_CONCAT(cm.module_key) FROM concern_modules cm WHERE cm.concern_id = c.id AND cm.is_enabled = 1) AS enabled_modules
+            FROM concerns c
+            WHERE c.is_active = 1
+            ORDER BY c.code ASC, c.id ASC
+        ") ?: [];
+        $activeConcern = function_exists('currentConcern') ? currentConcern() : null;
+
+        // Active production facilities and warehouses with concern association
+        $facilities = Database::fetchAll("
+            SELECT pu.id, pu.name, pu.code, pu.is_active, pu.concern_id, c.code AS concern_code, c.name AS concern_name 
+            FROM production_units pu 
+            LEFT JOIN concerns c ON c.id = pu.concern_id 
+            WHERE pu.is_active = 1 
+            ORDER BY pu.name ASC
+        ");
+        $warehouses = Database::fetchAll("
+            SELECT w.id, w.name, w.code, w.concern_id, c.code AS concern_code, c.name AS concern_name 
+            FROM warehouses w 
+            LEFT JOIN concerns c ON c.id = w.concern_id 
+            WHERE w.is_active = 1 
+            ORDER BY w.name ASC
+        ");
 
         Response::view('export.index', [
             'pageTitle'        => 'Data Export Center',
@@ -230,6 +252,8 @@ class ExportController {
                 ['label' => 'Data Export Center']
             ],
             'modules'          => $modules,
+            'concerns'         => $concerns,
+            'activeConcern'    => $activeConcern,
             'facilities'       => $facilities,
             'warehouses'       => $warehouses,
             'activeFacility'   => $activeFacility,
@@ -275,6 +299,21 @@ class ExportController {
             $selectedModules = $allModules;
         }
 
+        // Business Concerns Filtering
+        $requestedConcernIds = $_REQUEST['concern_ids'] ?? $_REQUEST['concern_id'] ?? [];
+        if (!is_array($requestedConcernIds)) {
+            $requestedConcernIds = ($requestedConcernIds !== '' && $requestedConcernIds !== null && $requestedConcernIds != '0') ? [(int)$requestedConcernIds] : [];
+        }
+        $selectedConcernIds = array_values(array_unique(array_filter(array_map('intval', $requestedConcernIds), static function (int $id): bool {
+            return $id > 0;
+        })));
+
+        $selectedConcerns = [];
+        if (!empty($selectedConcernIds)) {
+            $cIn = implode(',', array_fill(0, count($selectedConcernIds), '?'));
+            $selectedConcerns = Database::fetchAll("SELECT * FROM concerns WHERE id IN ($cIn) ORDER BY code ASC", $selectedConcernIds) ?: [];
+        }
+
         $activeFacility = class_exists('ProductionUnit') ? ProductionUnit::getActiveFacility() : null;
         $requestedWarehouseIds = $_REQUEST['warehouse_ids'] ?? [];
         $selectedWarehouseIds = is_array($requestedWarehouseIds)
@@ -282,36 +321,27 @@ class ExportController {
                 return $id > 0;
             })))
             : [];
-        $data = ExportService::getReportData($startDate, $endDate, $selectedModules, null, $selectedWarehouseIds);
+
+        $data = ExportService::getReportData($startDate, $endDate, $selectedModules, null, $selectedWarehouseIds, $selectedConcernIds);
 
         if ($format === 'PRINT') {
-            if (file_exists(BASE_PATH . '/views/export/print.php')) {
-                Response::viewOnly('export.print', [
-                    'periodLabel'     => $periodLabel,
-                    'startDate'       => $startDate,
-                    'endDate'         => $endDate,
-                    'selectedModules' => $selectedModules,
-                    'selectedWarehouseIds' => $selectedWarehouseIds,
-                    'data'            => $data,
-                    'prodUnit'        => $activeFacility,
-                    'sellerCompany'   => SettingsService::getGroup('company'),
-                ]);
-            } else {
-                Response::viewOnly('production.reports.print', [
-                    'periodLabel'     => $periodLabel,
-                    'startDate'       => $startDate,
-                    'endDate'         => $endDate,
-                    'selectedModules' => $selectedModules,
-                    'selectedWarehouseIds' => $selectedWarehouseIds,
-                    'data'            => $data,
-                    'prodUnit'        => $activeFacility,
-                    'sellerCompany'   => SettingsService::getGroup('company'),
-                ]);
-            }
+            $printView = file_exists(BASE_PATH . '/views/export/print.php') ? 'export.print' : 'production.reports.print';
+            Response::viewOnly($printView, [
+                'periodLabel'          => $periodLabel,
+                'startDate'            => $startDate,
+                'endDate'              => $endDate,
+                'selectedModules'      => $selectedModules,
+                'selectedWarehouseIds' => $selectedWarehouseIds,
+                'selectedConcernIds'   => $selectedConcernIds,
+                'selectedConcerns'     => $selectedConcerns,
+                'data'                 => $data,
+                'prodUnit'             => $activeFacility,
+                'sellerCompany'        => SettingsService::getGroup('company'),
+            ]);
             return;
         }
 
-        ExportService::streamCsv($periodLabel, $startDate, $endDate, $data, $activeFacility);
+        ExportService::streamCsv($periodLabel, $startDate, $endDate, $data, $activeFacility, $selectedConcerns);
     }
 
     /**
@@ -322,6 +352,12 @@ class ExportController {
         $_REQUEST['selected_month'] = date('n');
         $_REQUEST['selected_year'] = date('Y');
         $_REQUEST['format'] = 'CSV';
+        if (function_exists('currentConcernId')) {
+            $curCid = currentConcernId();
+            if ($curCid > 0 && !isset($_REQUEST['concern_ids'])) {
+                $_REQUEST['concern_ids'] = [$curCid];
+            }
+        }
         $this->download();
     }
 }

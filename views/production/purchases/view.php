@@ -32,7 +32,19 @@
                     <div class="col-sm-6"><small class="text-muted d-block">Purchase Date</small><strong><?= e(formatDate($purchase['purchase_date'])) ?></strong></div>
                     <div class="col-sm-6"><small class="text-muted d-block">Invoice / Bill Number</small><strong><?= e($purchase['invoice_number'] ?: '—') ?></strong></div>
                     <div class="col-sm-12"><small class="text-muted d-block">Notes</small><strong><?= e($purchase['notes'] ?: '—') ?></strong></div>
-                    <?php if (!empty($purchase['document_url'])): ?><div class="col-12"><a href="<?= uploadUrl($purchase['document_url']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-earmark-text me-1"></i>View Invoice Attachment</a></div><?php endif; ?>
+                    <?php if (!empty($documents)): ?>
+                        <div class="col-12">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle py-1 px-2">
+                                <i class="bi bi-paperclip me-1"></i><?= count($documents) ?> Invoice Attachment<?= count($documents) > 1 ? 's' : '' ?> (AVIF/PDF)
+                            </span>
+                        </div>
+                    <?php elseif (!empty($purchase['document_url'])): ?>
+                        <div class="col-12">
+                            <a href="<?= uploadUrl($purchase['document_url']) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-file-earmark-text me-1"></i>View Invoice Attachment
+                            </a>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -51,6 +63,61 @@
         </div>
     </div>
 </div>
+
+<?php if (!empty($documents)): ?>
+<div class="card border shadow-sm mb-4">
+    <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <h6 class="mb-0 fw-bold"><i class="bi bi-receipt-cutoff me-2 text-primary"></i>Attached Invoices &amp; Bills</h6>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><?= count($documents) ?> Invoice<?= count($documents) > 1 ? 's' : '' ?></span>
+        </div>
+        <span class="badge bg-success-subtle text-success border border-success-subtle small">
+            <i class="bi bi-filetype-avif me-1"></i>Optimized in AVIF Format
+        </span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <?php foreach ($documents as $idx => $doc): 
+                $docUrl = $doc['document_url'] ?? '';
+                $isAvif = str_ends_with(strtolower($docUrl), '.avif') || strtolower($doc['file_type'] ?? '') === 'avif';
+                $isPdf = str_ends_with(strtolower($docUrl), '.pdf') || strtolower($doc['file_type'] ?? '') === 'pdf';
+                $isImg = $isAvif || preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $docUrl);
+            ?>
+            <div class="col-sm-6 col-md-4 col-lg-3">
+                <div class="card h-100 border shadow-xs bg-white">
+                    <div class="card-body p-2 d-flex flex-column justify-content-between">
+                        <div class="text-center mb-2 rounded bg-light border d-flex align-items-center justify-content-center" style="height:110px;overflow:hidden;">
+                            <?php if ($isImg): ?>
+                                <a href="<?= uploadUrl($docUrl) ?>" target="_blank" rel="noopener">
+                                    <img src="<?= uploadUrl($docUrl) ?>" alt="Invoice #<?= $idx + 1 ?>" style="max-height:110px;max-width:100%;object-fit:contain;">
+                                </a>
+                            <?php else: ?>
+                                <a href="<?= uploadUrl($docUrl) ?>" target="_blank" rel="noopener" class="text-decoration-none">
+                                    <i class="bi bi-file-earmark-pdf text-danger display-4"></i>
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                        <div>
+                            <div class="small fw-semibold text-truncate" title="<?= e($doc['file_name'] ?: ('Invoice #' . ($idx + 1))) ?>">
+                                <?= e($doc['file_name'] ?: ('Invoice #' . ($idx + 1))) ?>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-2 pt-1 border-top">
+                                <span class="badge <?= $isAvif ? 'bg-success-subtle text-success border border-success-subtle' : ($isPdf ? 'bg-danger-subtle text-danger border border-danger-subtle' : 'bg-secondary-subtle text-secondary border') ?>" style="font-size:10px;">
+                                    <?= $isAvif ? 'AVIF Image' : ($isPdf ? 'PDF Bill' : strtoupper($doc['file_type'] ?? 'FILE')) ?>
+                                </span>
+                                <a href="<?= uploadUrl($docUrl) ?>" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:11px;">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>View Full
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <div class="card border shadow-sm mb-4">
     <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">

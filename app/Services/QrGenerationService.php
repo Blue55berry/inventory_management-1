@@ -85,7 +85,12 @@ class QrGenerationService {
 
         Database::ensureColumn('stitching_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER status');
         Database::ensureColumn('stitching_batches', 'qr_batch_code', 'VARCHAR(50) DEFAULT NULL AFTER qr_generation_id');
-        Database::ensureColumn('qc_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER stitching_batch_id');
+        Database::ensureColumn('qc_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER label_batch_id');
+        Database::ensureColumn('qr_generation_items', 'variant_id', 'INT UNSIGNED DEFAULT NULL AFTER generation_id');
+        Database::ensureColumn('qr_generation_items', 'size_name', 'VARCHAR(100) DEFAULT NULL AFTER variant_id');
+        Database::ensureColumn('qr_generation_items', 'color_name', 'VARCHAR(100) DEFAULT NULL AFTER size_name');
+        Database::ensureColumn('qr_generation_items', 'mrp', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER color_name');
+        Database::ensureColumn('qr_generation_items', 'selling_price', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER mrp');
 
         foreach ([
             'ALTER TABLE qr_generations ADD KEY idx_qrg_source (qr_source)',
@@ -801,7 +806,7 @@ class QrGenerationService {
 
         $stitchingBatch = Database::fetchOne("
             SELECT sb.*, pp.program_number, pp.name AS program_name, pp.product_id AS prog_product_id,
-                   p.name AS product_name, p.code AS product_code, p.mrp, p.gst_percentage,
+                   p.name AS product_name, p.code AS product_code, p.gst_percentage,
                    c.name AS category_name, sc.name AS subcategory_name, ssc.name AS sub_subcategory_name
             FROM stitching_batches sb
             INNER JOIN production_programs pp ON pp.id = sb.program_id
@@ -821,9 +826,13 @@ class QrGenerationService {
         }
 
         $items = Database::fetchAll("
-            SELECT si.*, v.sku, v.mrp AS variant_mrp, v.selling_price AS variant_selling_price
+            SELECT si.*, v.variant_code, v.sku, v.mrp AS variant_mrp, v.selling_price AS variant_selling_price,
+                   col.name AS variant_color_name, sz.name AS variant_size_name,
+                   v.product_id AS variant_product_id
             FROM stitching_items si
             LEFT JOIN product_variants v ON v.id = si.variant_id
+            LEFT JOIN colors col ON col.id = v.color_id
+            LEFT JOIN sizes sz ON sz.id = v.size_id
             WHERE si.stitching_batch_id = ?
         ", [$stitchingBatchId]);
 
@@ -842,33 +851,74 @@ class QrGenerationService {
         $cid = function_exists('currentConcernId') ? currentConcernId() : ($stitchingBatch['concern_id'] ?? null);
         $userId = (session_status() === PHP_SESSION_ACTIVE && class_exists('Auth') && Auth::check()) ? Auth::id() : 1;
 
-        // Generate sequential QR codes for each piece
-        $startSeq = self::nextSequence($prefix);
+        // Generate variant-wise sequential codes, matching catalog/variant QR behavior.
         $codes = [];
-        for ($i = 0; $i < $totalQty; $i++) {
-            $seq = $startSeq + $i;
-            $code = $prefix . '-' . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
-            while (Database::fetchOne("SELECT id FROM qr_generation_items WHERE qr_code = ?", [$code])) {
-                $seq++;
-                $code = $prefix . '-' . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+        $sequence = self::nextSequence($prefix);
+        $uniqueVariants = [];
+        $firstProductId = 0;
+        foreach ($items as $it) {
+            $variantId = (int)($it['variant_id'] ?? 0);
+            $itemQty = max(0, (int)($it['stitched_quantity'] ?: ($it['stitched_qty'] ?: $it['received_qty'])));
+            if ($itemQty <= 0) continue;
+
+            $variantSku = trim((string)($it['sku'] ?? ''));
+            $variantCode = trim((string)($it['variant_code'] ?? ''));
+            $variantPrefix = $variantSku ?: $variantCode;
+            $itemPrefix = $variantPrefix !== ''
+                ? strtoupper($brandName) . '-' . strtoupper(preg_replace('/[^A-Za-z0-9]+/', '-', $variantPrefix))
+                : strtoupper($prefix);
+            $itemPrefix = rtrim($itemPrefix, '-');
+
+            $sizeName = trim((string)($it['variant_size_name'] ?: ($it['size_name'] ?? '')));
+            $colorName = trim((string)($it['variant_color_name'] ?: ($it['color_name'] ?? '')));
+            $mrp = (float)(($it['variant_mrp'] ?? 0) > 0 ? ($it['variant_mrp'] ?? 0) : ($it['base_price'] ?? 0));
+            $sellingPrice = (float)(($it['variant_selling_price'] ?? 0) > 0 ? ($it['variant_selling_price'] ?? 0) : ($it['discount_price'] ?? 0));
+
+            if ($variantId > 0) {
+                $uniqueVariants[$variantId] = true;
+                if (!$firstProductId) $firstProductId = (int)($it['variant_product_id'] ?? 0);
             }
-            $codes[] = ['code' => $code, 'sequence' => $seq, 'status' => 'ACTIVE'];
+
+            for ($i = 0; $i < $itemQty; $i++) {
+                $code = $itemPrefix . '-' . str_pad((string)$sequence, 4, '0', STR_PAD_LEFT);
+                while (Database::fetchOne("SELECT id FROM qr_generation_items WHERE qr_code = ?", [$code])) {
+                    $sequence++;
+                    $code = $itemPrefix . '-' . str_pad((string)$sequence, 4, '0', STR_PAD_LEFT);
+                }
+                $codes[] = [
+                    'code' => $code,
+                    'sequence' => $sequence,
+                    'status' => 'ACTIVE',
+                    'variant_id' => $variantId ?: null,
+                    'size_name' => $sizeName ?: null,
+                    'color_name' => $colorName ?: null,
+                    'mrp' => $mrp,
+                    'selling_price' => $sellingPrice,
+                ];
+                $sequence++;
+            }
         }
+        if (empty($codes)) {
+            throw new RuntimeException('No stitched pieces are available for QR generation.');
+        }
+        $totalQty = count($codes);
+        $batchVariantId = count($uniqueVariants) === 1 ? (int)array_key_first($uniqueVariants) : null;
 
         Database::beginTransaction();
         try {
             Database::execute("
                 INSERT INTO qr_generations (
                     batch_code, generation_type, qr_source, stitching_batch_id, program_id,
-                    product_id, category_name, subcategory_name, sub_subcategory_name,
+                    product_id, variant_id, category_name, subcategory_name, sub_subcategory_name,
                     brand_name, quantity, qr_prefix, notes, stock_added, created_by, concern_id
-                ) VALUES (?, 'CATALOG_VARIANT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                ) VALUES (?, 'CATALOG_VARIANT', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
             ", [
                 $batchCode,
                 self::SOURCE_PRODUCTION,
                 $stitchingBatchId,
                 (int)$stitchingBatch['program_id'],
-                (int)($stitchingBatch['prog_product_id'] ?? 0) ?: null,
+                $firstProductId ?: ((int)($stitchingBatch['prog_product_id'] ?? 0) ?: null),
+                $batchVariantId,
                 $stitchingBatch['category_name'] ?? null,
                 $stitchingBatch['subcategory_name'] ?? null,
                 $stitchingBatch['sub_subcategory_name'] ?? null,
@@ -882,11 +932,24 @@ class QrGenerationService {
             $generationId = (int)Database::lastInsertId();
 
             $itemStmt = Database::getInstance()->prepare("
-                INSERT INTO qr_generation_items (generation_id, qr_code, sequence_num, status)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO qr_generation_items (
+                    generation_id, variant_id, size_name, color_name, mrp, selling_price,
+                    qr_code, sequence_num, status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             foreach ($codes as $c) {
-                $itemStmt->execute([$generationId, $c['code'], $c['sequence'], $c['status']]);
+                $itemStmt->execute([
+                    $generationId,
+                    $c['variant_id'],
+                    $c['size_name'],
+                    $c['color_name'],
+                    $c['mrp'],
+                    $c['selling_price'],
+                    $c['code'],
+                    $c['sequence'],
+                    $c['status']
+                ]);
             }
 
             Database::execute("
