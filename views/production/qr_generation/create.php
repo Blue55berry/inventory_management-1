@@ -1,6 +1,7 @@
 <?php
 $activeMeta = $tabs[$activeTab] ?? reset($tabs);
 ?>
+<div class="qr-generation-ui">
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
     <div>
         <h2 class="mb-1"><i class="bi bi-qr-code me-2 text-primary"></i>Generate QR Code Batch</h2>
@@ -182,3 +183,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
+</div>

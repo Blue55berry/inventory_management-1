@@ -112,6 +112,16 @@ $isProfit = ($fin['net_profit_loss'] ?? 0) >= 0;
                     <?php if (!empty($prodUnit['gst_number'])): ?><span><strong>GSTIN:</strong> <?= htmlspecialchars($prodUnit['gst_number']) ?></span><?php endif; ?>
                 </div>
                 <div style="color: #64748b; font-size: 11px; margin-top: 2px;">Comprehensive Production &amp; Financial Intelligence Report</div>
+                <div style="margin-top: 5px;">
+                    <?php if (!empty($selectedConcerns)): ?>
+                        <span style="font-size: 11px; font-weight: 700; color: #0f172a; margin-right: 4px;">Concern Scope:</span>
+                        <?php foreach ($selectedConcerns as $sc): ?>
+                            <span class="badge badge-info" style="font-size: 10px; margin-right: 3px;">[<?= htmlspecialchars($sc['code'] ?? '') ?>] <?= htmlspecialchars($sc['name'] ?? '') ?></span>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <span class="badge badge-secondary" style="font-size: 10px;">All Concerns (Consolidated Enterprise)</span>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
         <div class="period-box">

@@ -38,7 +38,7 @@
         .garment-label-card {
             background: #fff;
             border: 2px solid #000;
-            border-radius: 6px;
+            border-radius: 0;
             padding: 8px 10px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.05);
             page-break-inside: avoid;
@@ -99,6 +99,16 @@
             font-weight: 800;
         }
 
+        .label-mrp del {
+            text-decoration-thickness: 1.5px;
+        }
+
+        .no-print,
+        .no-print .btn,
+        .no-print .badge {
+            border-radius: 0 !important;
+        }
+
         @media print {
             body {
                 background: #fff;
@@ -111,6 +121,7 @@
             .garment-label-card {
                 box-shadow: none;
                 border: 1.5px solid #000;
+                border-radius: 0;
             }
             .labels-grid {
                 gap: 8px;
@@ -186,6 +197,18 @@
                         <?php endif; ?>
                         <?php if (!empty($batch['size_name'])): ?>
                         <div><strong>Size:</strong> <span class="badge bg-dark text-white px-1 py-0"><?= e($batch['size_name']) ?></span></div>
+                        <?php endif; ?>
+                        <?php if (!empty($item['color_name'])): ?>
+                        <div><strong>Col:</strong> <?= e($item['color_name']) ?></div>
+                        <?php endif; ?>
+                        <?php if (!empty($item['size_name'])): ?>
+                        <div><strong>Size:</strong> <?= e($item['size_name']) ?></div>
+                        <?php endif; ?>
+                        <?php if ((float)($item['mrp'] ?? 0) > 0): ?>
+                        <div class="label-mrp"><strong>MRP:</strong> <del>₹<?= number_format((float)$item['mrp'], 2) ?></del></div>
+                        <?php endif; ?>
+                        <?php if ((float)($item['selling_price'] ?? 0) > 0): ?>
+                        <div><strong class="text-dark">SALE:</strong> ₹<?= number_format((float)$item['selling_price'], 2) ?></div>
                         <?php endif; ?>
                     </div>
                 </div>

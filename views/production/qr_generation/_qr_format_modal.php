@@ -1,4 +1,22 @@
 <!-- Thermal Printer QR Format & Layout Configuration Modal -->
+<style>
+#printerSettingsModal .modal-content,
+#printerSettingsModal .card,
+#printerSettingsModal .btn,
+#printerSettingsModal .form-control,
+#printerSettingsModal .form-select,
+#printerSettingsModal .badge,
+#printerSettingsModal .rounded,
+#printerSettingsModal .rounded-3,
+#printerSettingsModal .rounded-pill,
+#liveStickerContainer,
+#liveStickerCard1,
+#liveStickerCard2,
+#prevQRBox1,
+#prevQRBox2 {
+    border-radius: 0 !important;
+}
+</style>
 <div class="modal fade" id="printerSettingsModal" tabindex="-1" aria-labelledby="printerSettingsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 1240px; width: 95%;">
         <div class="modal-content shadow-lg border-0">
@@ -151,7 +169,7 @@
                                         <div id="prevCodeTxt1" class="position-absolute fw-bold font-monospace text-dark" style="left: 15px; top: 90px; font-size: 9px;">PRD2611-0001</div>
                                         <div id="prevTitleTxt1" class="position-absolute fw-bold text-dark text-uppercase" style="left: 80px; top: 20px; font-size: 9px;">GRM APPARELS</div>
                                         <div id="prevSkuTxt1" class="position-absolute fw-semibold text-muted text-uppercase" style="left: 80px; top: 40px; font-size: 8.5px;">MEN / SHIRT</div>
-                                        <div id="prevMrpTxt1" class="position-absolute text-muted" style="left: 80px; top: 60px; font-size: 8.5px;">MRP: ₹1,000</div>
+                                        <div id="prevMrpTxt1" class="position-absolute text-muted" style="left: 80px; top: 60px; font-size: 8.5px;">MRP: <del>₹1,000</del></div>
                                         <div id="prevDiscTxt1" class="position-absolute fw-bold text-success" style="left: 80px; top: 80px; font-size: 8.5px;">SALE: ₹500</div>
                                     </div>
 
@@ -164,7 +182,7 @@
                                         <div id="prevCodeTxt2" class="position-absolute fw-bold font-monospace text-dark" style="left: 15px; top: 90px; font-size: 9px;">PRD2611-0002</div>
                                         <div id="prevTitleTxt2" class="position-absolute fw-bold text-dark text-uppercase" style="left: 80px; top: 20px; font-size: 9px;">GRM APPARELS</div>
                                         <div id="prevSkuTxt2" class="position-absolute fw-semibold text-muted text-uppercase" style="left: 80px; top: 40px; font-size: 8.5px;">MEN / SHIRT</div>
-                                        <div id="prevMrpTxt2" class="position-absolute text-muted" style="left: 80px; top: 60px; font-size: 8.5px;">MRP: ₹1,000</div>
+                                        <div id="prevMrpTxt2" class="position-absolute text-muted" style="left: 80px; top: 60px; font-size: 8.5px;">MRP: <del>₹1,000</del></div>
                                         <div id="prevDiscTxt2" class="position-absolute fw-bold text-success" style="left: 80px; top: 80px; font-size: 8.5px;">SALE: ₹500</div>
                                     </div>
                                 </div>

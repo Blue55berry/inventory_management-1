@@ -76,34 +76,95 @@ $taxValueForItem = static function (array $item, string $type): float {
                 <div class="col-md-3"><label class="form-label required">Purchase Date *</label><input type="date" name="purchase_date" class="form-control" value="<?= e($purchase['purchase_date']) ?>" required></div>
                 <div class="col-md-4"><label class="form-label">Invoice / Bill Number</label><input name="invoice_number" class="form-control" maxlength="100" value="<?= e($purchase['invoice_number']) ?>"></div>
                 <div class="col-md-6">
-                    <label class="form-label" for="editPurchaseDocument">Tax Invoice / Bill Attachment (Optional)</label>
-                    <input type="file" name="document" id="editPurchaseDocument" class="form-control" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                    <div class="mt-1">
-                        <small class="text-muted">JPG, PNG, WEBP or PDF up to 5 MB.</small>
-                        <div class="d-flex align-items-center flex-wrap gap-1 mt-1">
-                            <?php if (!empty($purchase['document_url'])): ?>
-                                <span class="small text-muted me-1" id="existingDocWrapper">Current:
-                                    <a href="<?= uploadUrl($purchase['document_url']) ?>" target="_blank" rel="noopener" class="badge bg-primary-subtle text-primary border text-decoration-none px-2 py-1" id="existingDocLink" style="font-size:11px;">
-                                        <i class="bi bi-eye me-1"></i>View File
-                                    </a>
-                                </span>
-                            <?php endif; ?>
-                            <div id="editDocPreviewContainer" class="d-none align-items-center flex-wrap gap-1">
-                                <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1 py-1 px-2" style="font-size:11px;max-width:190px;">
-                                    <i class="bi bi-file-earmark-check flex-shrink-0"></i>
-                                    <span id="editDocPreviewFilename" class="text-truncate" style="max-width: 160px;">file.pdf</span>
-                                </span>
-                                <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" id="btnViewEditSelectedDoc" onclick="viewEditSelectedDoc()" title="View selected document" style="font-size:12px;line-height:1.2;">
-                                    <i class="bi bi-eye me-1"></i>View Selected File
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center p-1" onclick="clearEditSelectedDoc()" title="Clear file" aria-label="Clear selected file" style="width:30px;height:30px;">
-                                    <i class="bi bi-x"></i>
-                                </button>
-                            </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0 fw-semibold" for="editPurchaseDocuments">
+                            <i class="bi bi-receipt-cutoff me-1 text-primary"></i>Tax Invoice / Bill Attachments
+                        </label>
+                        <div class="d-flex gap-1 align-items-center">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:10px;">
+                                <i class="bi bi-files me-1"></i>Multiple Allowed (5+)
+                            </span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;" title="Images convert to AVIF">
+                                <i class="bi bi-lightning-charge me-1"></i>Auto AVIF
+                            </span>
                         </div>
                     </div>
-                    <div id="editDocumentImagePreview" class="d-none mt-2">
-                        <img id="editDocPreviewImage" class="img-thumbnail" alt="Selected invoice image preview" style="max-width:100%;max-height:220px;object-fit:contain;">
+
+                    <?php if (!empty($documents)): ?>
+                        <div class="mb-2 p-2 bg-light border rounded">
+                            <div class="small fw-semibold text-secondary mb-2 d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-paperclip me-1"></i>Attached Invoices (<?= count($documents) ?>)</span>
+                                <span class="text-muted" style="font-size:10px;">Check box to remove upon saving</span>
+                            </div>
+                            <div class="row g-2">
+                                <?php foreach ($documents as $doc): 
+                                    $docUrl = $doc['document_url'] ?? '';
+                                    $isAvif = str_ends_with(strtolower($docUrl), '.avif') || strtolower($doc['file_type'] ?? '') === 'avif';
+                                    $isPdf = str_ends_with(strtolower($docUrl), '.pdf') || strtolower($doc['file_type'] ?? '') === 'pdf';
+                                    $isImg = $isAvif || preg_match('/\.(jpg|jpeg|png|webp|avif)$/i', $docUrl);
+                                ?>
+                                    <div class="col-sm-6" id="existingDocCard_<?= (int)$doc['id'] ?>">
+                                        <div class="card h-100 border shadow-xs bg-white">
+                                            <div class="card-body p-2 d-flex flex-column justify-content-between" style="font-size:11px;">
+                                                <div class="d-flex align-items-center gap-2 mb-1">
+                                                    <div class="rounded border bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;overflow:hidden;">
+                                                        <?php if ($isImg): ?>
+                                                            <img src="<?= uploadUrl($docUrl) ?>" alt="Invoice" style="max-width:42px;max-height:42px;object-fit:cover;">
+                                                        <?php elseif ($isPdf): ?>
+                                                            <i class="bi bi-file-earmark-pdf text-danger fs-4"></i>
+                                                        <?php else: ?>
+                                                            <i class="bi bi-file-earmark-text text-secondary fs-4"></i>
+                                                        <?php endif; ?>
+                                                    </div>
+                                                    <div class="text-truncate flex-grow-1">
+                                                        <div class="fw-semibold text-truncate" title="<?= e($doc['file_name'] ?: 'Invoice') ?>"><?= e($doc['file_name'] ?: 'Invoice') ?></div>
+                                                        <span class="badge <?= $isAvif ? 'bg-success-subtle text-success' : ($isPdf ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary') ?>" style="font-size:9px;">
+                                                            <?= $isAvif ? 'AVIF' : ($isPdf ? 'PDF' : strtoupper($doc['file_type'] ?? 'FILE')) ?>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex justify-content-between align-items-center mt-1 pt-1 border-top">
+                                                    <a href="<?= uploadUrl($docUrl) ?>" target="_blank" rel="noopener" class="btn btn-xs btn-outline-primary py-0 px-2" style="font-size:10px;">
+                                                        <i class="bi bi-eye me-1"></i>View
+                                                    </a>
+                                                    <?php if (!empty($doc['id'])): ?>
+                                                    <label class="form-check-label text-danger small mb-0" style="font-size:10px;cursor:pointer;">
+                                                        <input type="checkbox" name="delete_document_ids[]" value="<?= (int)$doc['id'] ?>" class="form-check-input me-1">Remove
+                                                    </label>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Add new/more invoice documents -->
+                    <input type="file" name="documents[]" id="editPurchaseDocuments" class="form-control" accept=".jpg,.jpeg,.png,.webp,.avif,.pdf" multiple>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <small class="text-muted" style="font-size:11px;">
+                            Upload 1 or multiple new invoices (5+ supported). JPG, PNG, WEBP, AVIF or PDF up to 10 MB. Images automatically convert to <strong>AVIF</strong> format.
+                        </small>
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0 d-none text-decoration-none" id="btnEditClearAllDocs" onclick="clearAllEditSelectedDocFiles()" style="font-size:11px;">
+                            <i class="bi bi-trash3 me-1"></i>Clear New
+                        </button>
+                    </div>
+
+                    <!-- New multi-document preview container -->
+                    <div id="editMultiDocumentPreviewContainer" class="d-none mt-2 p-2 bg-light border rounded">
+                        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                            <span class="small fw-bold text-dark" id="editSelectedDocCountLabel">
+                                <i class="bi bi-paperclip me-1 text-primary"></i>0 new invoices selected
+                            </span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">
+                                <i class="bi bi-check2-circle me-1"></i>AVIF Conversion Active
+                            </span>
+                        </div>
+                        <div class="row g-2" id="editDocPreviewCardsRow">
+                            <!-- Dynamically populated new invoice preview cards -->
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-6"><label class="form-label">Purchase Notes</label><input name="notes" class="form-control" maxlength="500" value="<?= e($purchase['notes']) ?>"></div>
@@ -2821,64 +2882,166 @@ $taxValueForItem = static function (array $item, string $type): float {
         }
     });
 
-    // Tax Invoice Document Preview
-    let selectedDocBlobUrl = null;
-    const docInput = document.getElementById('editPurchaseDocument');
-    const docPreviewContainer = document.getElementById('editDocPreviewContainer');
-    const docFilenameSpan = document.getElementById('editDocPreviewFilename');
-    const docImagePreview = document.getElementById('editDocumentImagePreview');
-    const docPreviewImage = document.getElementById('editDocPreviewImage');
+    // Multiple Invoice Documents Management for Edit
+    let editSelectedDocFiles = [];
+    const editDocInput = document.getElementById('editPurchaseDocuments');
+    const editMultiPreviewContainer = document.getElementById('editMultiDocumentPreviewContainer');
+    const editDocPreviewCardsRow = document.getElementById('editDocPreviewCardsRow');
+    const editSelectedDocCountLabel = document.getElementById('editSelectedDocCountLabel');
+    const btnEditClearAllDocs = document.getElementById('btnEditClearAllDocs');
 
-    if (docInput) {
-        docInput.addEventListener('change', function() {
-            if (selectedDocBlobUrl) {
-                URL.revokeObjectURL(selectedDocBlobUrl);
-                selectedDocBlobUrl = null;
-            }
-            const file = docInput.files && docInput.files[0];
-            if (file) {
-                selectedDocBlobUrl = URL.createObjectURL(file);
-                if (docFilenameSpan) docFilenameSpan.textContent = file.name;
-                const isImage = /^image\/(jpeg|png|webp)$/i.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name);
-                if (docImagePreview && docPreviewImage && isImage) {
-                    docPreviewImage.src = selectedDocBlobUrl;
-                    docImagePreview.classList.remove('d-none');
-                } else if (docImagePreview && docPreviewImage) {
-                    docPreviewImage.removeAttribute('src');
-                    docImagePreview.classList.add('d-none');
-                }
-                if (docPreviewContainer) {
-                    docPreviewContainer.classList.remove('d-none');
-                    docPreviewContainer.classList.add('d-inline-flex');
-                }
+    function syncEditDocInputFiles() {
+        if (!editDocInput) return;
+        try {
+            const dt = new DataTransfer();
+            editSelectedDocFiles.forEach(file => dt.items.add(file));
+            editDocInput.files = dt.files;
+        } catch (e) {
+            console.warn('DataTransfer sync not supported:', e);
+        }
+    }
+
+    function renderEditDocumentPreviews() {
+        if (!editDocPreviewCardsRow || !editMultiPreviewContainer) return;
+        editDocPreviewCardsRow.innerHTML = '';
+
+        if (editSelectedDocFiles.length === 0) {
+            editMultiPreviewContainer.classList.add('d-none');
+            if (btnEditClearAllDocs) btnEditClearAllDocs.classList.add('d-none');
+            return;
+        }
+
+        editMultiPreviewContainer.classList.remove('d-none');
+        if (btnEditClearAllDocs) btnEditClearAllDocs.classList.remove('d-none');
+        if (editSelectedDocCountLabel) {
+            editSelectedDocCountLabel.innerHTML = `<i class="bi bi-paperclip me-1 text-primary"></i>${editSelectedDocFiles.length} new invoice${editSelectedDocFiles.length > 1 ? 's' : ''} selected`;
+        }
+
+        editSelectedDocFiles.forEach((file, index) => {
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext) || file.type.startsWith('image/');
+            const isPdf = ext === 'pdf' || file.type === 'application/pdf';
+            const sizeStr = file.size > 1024 * 1024 
+                ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+                : Math.max(1, Math.round(file.size / 1024)) + ' KB';
+
+            const col = document.createElement('div');
+            col.className = 'col-sm-6';
+
+            const card = document.createElement('div');
+            card.className = 'card h-100 border shadow-xs bg-white';
+            card.style.fontSize = '12px';
+
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body p-2 d-flex flex-column justify-content-between';
+
+            // Preview Thumbnail
+            const thumbBox = document.createElement('div');
+            thumbBox.className = 'd-flex align-items-center justify-content-center mb-1 rounded bg-light border';
+            thumbBox.style.height = '65px';
+            thumbBox.style.overflow = 'hidden';
+
+            if (isImg) {
+                const img = document.createElement('img');
+                img.className = 'img-fluid';
+                img.style.maxHeight = '65px';
+                img.style.objectFit = 'contain';
+                img.src = URL.createObjectURL(file);
+                thumbBox.appendChild(img);
+            } else if (isPdf) {
+                thumbBox.innerHTML = '<i class="bi bi-file-earmark-pdf text-danger fs-3"></i>';
             } else {
-                if (docPreviewImage) docPreviewImage.removeAttribute('src');
-                if (docImagePreview) docImagePreview.classList.add('d-none');
-                if (docPreviewContainer) {
-                    docPreviewContainer.classList.add('d-none');
-                    docPreviewContainer.classList.remove('d-inline-flex');
-                }
+                thumbBox.innerHTML = '<i class="bi bi-file-earmark-text text-secondary fs-3"></i>';
+            }
+
+            // Info
+            const infoBox = document.createElement('div');
+            infoBox.innerHTML = `
+                <div class="fw-semibold text-truncate" title="${file.name}">${file.name}</div>
+                <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size:10px;">
+                    <span>${sizeStr}</span>
+                    <span class="badge ${isImg ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'}" style="font-size:9px;">
+                        ${isImg ? 'AVIF Auto' : 'PDF'}
+                    </span>
+                </div>
+            `;
+
+            // Actions
+            const actionsBox = document.createElement('div');
+            actionsBox.className = 'd-flex justify-content-between align-items-center mt-2 pt-1 border-top';
+
+            const btnView = document.createElement('button');
+            btnView.type = 'button';
+            btnView.className = 'btn btn-xs btn-outline-primary py-0 px-2';
+            btnView.style.fontSize = '10px';
+            btnView.innerHTML = '<i class="bi bi-eye me-1"></i>View';
+            btnView.onclick = function() {
+                const url = URL.createObjectURL(file);
+                window.open(url, '_blank', 'noopener,noreferrer');
+            };
+
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button';
+            btnDel.className = 'btn btn-xs btn-outline-danger py-0 px-1';
+            btnDel.title = 'Remove invoice';
+            btnDel.innerHTML = '<i class="bi bi-trash"></i>';
+            btnDel.onclick = function() {
+                removeEditSelectedDocFile(index);
+            };
+
+            actionsBox.appendChild(btnView);
+            actionsBox.appendChild(btnDel);
+
+            cardBody.appendChild(thumbBox);
+            cardBody.appendChild(infoBox);
+            cardBody.appendChild(actionsBox);
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            editDocPreviewCardsRow.appendChild(col);
+        });
+    }
+
+    if (editDocInput) {
+        editDocInput.addEventListener('change', function() {
+            if (editDocInput.files && editDocInput.files.length > 0) {
+                Array.from(editDocInput.files).forEach(f => {
+                    const exists = editSelectedDocFiles.some(existing => 
+                        existing.name === f.name && existing.size === f.size && existing.lastModified === f.lastModified
+                    );
+                    if (!exists) {
+                        editSelectedDocFiles.push(f);
+                    }
+                });
+                syncEditDocInputFiles();
+                renderEditDocumentPreviews();
             }
         });
     }
 
-    window.viewEditSelectedDoc = function() {
-        if (selectedDocBlobUrl) {
-            window.open(selectedDocBlobUrl, '_blank', 'noopener,noreferrer');
+    window.removeEditSelectedDocFile = function(index) {
+        if (index >= 0 && index < editSelectedDocFiles.length) {
+            editSelectedDocFiles.splice(index, 1);
+            syncEditDocInputFiles();
+            renderEditDocumentPreviews();
         }
     };
 
-    window.clearEditSelectedDoc = function() {
-        if (docInput) docInput.value = '';
-        if (selectedDocBlobUrl) {
-            URL.revokeObjectURL(selectedDocBlobUrl);
-            selectedDocBlobUrl = null;
-        }
-        if (docPreviewImage) docPreviewImage.removeAttribute('src');
-        if (docImagePreview) docImagePreview.classList.add('d-none');
-        if (docPreviewContainer) {
-            docPreviewContainer.classList.add('d-none');
-            docPreviewContainer.classList.remove('d-inline-flex');
+    window.clearAllEditSelectedDocFiles = function() {
+        editSelectedDocFiles = [];
+        if (editDocInput) editDocInput.value = '';
+        renderEditDocumentPreviews();
+    };
+
+    window.toggleDocMarkDelete = function(checkbox, docId) {
+        const card = document.getElementById('existingDocCard_' + docId);
+        if (card) {
+            if (checkbox.checked) {
+                card.style.opacity = '0.5';
+                card.classList.add('border-danger');
+            } else {
+                card.style.opacity = '1';
+                card.classList.remove('border-danger');
+            }
         }
     };
 

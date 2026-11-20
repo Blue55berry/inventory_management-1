@@ -129,12 +129,24 @@ class CloudinaryService {
         $effectiveResourceType = ($uploadMime === 'image/avif' || str_starts_with($uploadMime, 'image/')) ? 'image' : $resourceType;
 
         try {
-            // Strictly upload to Cloudinary (No local storage)
+            // Upload to Cloudinary if configured
             if (self::isConfigured()) {
                 $cloudinaryUrl = self::uploadToCloudinaryApi($uploadPath, $folder, $uploadName, $uploadMime, $effectiveResourceType);
                 if ($cloudinaryUrl) {
                     return $cloudinaryUrl;
                 }
+            }
+
+            // Reliable local storage fallback (stores in AVIF format)
+            $cleanFolder = trim(str_replace('..', '', $folder), '/');
+            $uploadDir = (defined('BASE_PATH') ? BASE_PATH : dirname(__DIR__, 2)) . '/public/uploads/' . $cleanFolder;
+            if (!is_dir($uploadDir)) {
+                @mkdir($uploadDir, 0777, true);
+            }
+            $uniqueName = time() . '_' . bin2hex(random_bytes(4)) . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '_', $uploadName);
+            $destination = $uploadDir . '/' . $uniqueName;
+            if (@copy($uploadPath, $destination)) {
+                return 'uploads/' . $cleanFolder . '/' . $uniqueName;
             }
 
             error_log("[CloudinaryService] Upload failed or Cloudinary not configured. File not saved locally.");

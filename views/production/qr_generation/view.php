@@ -1,3 +1,4 @@
+<div class="qr-generation-ui">
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
     <div>
         <div class="d-flex align-items-center gap-2">
@@ -46,7 +47,7 @@
         <?php elseif ($canAddToStock): ?>
             <?php if ($alreadyAdded): ?>
                 <span class="btn btn-success fw-bold disabled" title="Stock already added">
-                    <i class="bi bi-check2-circle me-1"></i> Added to Purchased Stock
+                    <i class="bi bi-check2-circle me-1"></i> Moved to Purchased Stock
                 </span>
                 <a href="<?= url('production/purchased-stock') ?>" class="btn btn-outline-success fw-bold">
                     <i class="bi bi-boxes me-1"></i> Purchased Stock
@@ -114,6 +115,13 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body p-4">
         <div class="row g-3">
+            <?php if ($alreadyAdded): ?>
+            <div class="col-12">
+                <span class="badge bg-success text-white px-3 py-2">
+                    <i class="bi bi-check2-circle me-1"></i> This product has moved to Purchased Stock
+                </span>
+            </div>
+            <?php endif; ?>
             <div class="col-md-4">
                 <div class="text-muted small fw-semibold text-uppercase">Printed Brand Name</div>
                 <div class="fs-5 fw-bold text-dark mt-1 text-uppercase"><?= e($batch['brand_name']) ?></div>
@@ -183,6 +191,21 @@
                         <div class="font-monospace fw-bold text-primary text-truncate" style="font-size: 11px;">
                             <?= e($displayQrLabel) ?>
                         </div>
+                        <?php if (!empty($item['color_name']) || !empty($item['size_name'])): ?>
+                        <div class="small text-muted mt-1">
+                            <?= e($item['color_name'] ?: '') ?><?= !empty($item['color_name']) && !empty($item['size_name']) ? ' / ' : '' ?><?= e($item['size_name'] ?: '') ?>
+                        </div>
+                        <?php endif; ?>
+                        <?php if ((float)($item['mrp'] ?? 0) > 0 || (float)($item['selling_price'] ?? 0) > 0): ?>
+                        <div class="small fw-bold mt-1">
+                            <?php if ((float)($item['mrp'] ?? 0) > 0): ?>
+                            MRP: <del>₹<?= number_format((float)$item['mrp'], 2) ?></del>
+                            <?php endif; ?>
+                            <?php if ((float)($item['selling_price'] ?? 0) > 0): ?>
+                            <span class="text-primary ms-1">SALE: ₹<?= number_format((float)$item['selling_price'], 2) ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                     <?php if (!$isFabricBatch): ?>
                     <div class="w-100 d-flex justify-content-start align-items-center mt-2 pt-1 border-top small">
@@ -214,7 +237,7 @@
         <div class="d-flex align-items-center gap-2">
             <?php if ($canAddToStock): ?>
                 <?php if ($alreadyAdded): ?>
-                    <span class="btn btn-success fw-bold disabled"><i class="bi bi-check2-circle me-1"></i> Added to Purchased Stock</span>
+                    <span class="btn btn-success fw-bold disabled"><i class="bi bi-check2-circle me-1"></i> Moved to Purchased Stock</span>
                     <a href="<?= url('production/purchased-stock') ?>" class="btn btn-outline-primary fw-bold">
                         <i class="bi bi-boxes me-1"></i> View in Purchased Stock
                     </a>
@@ -247,3 +270,4 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <?php require __DIR__ . '/_qr_format_modal.php'; ?>
+</div>

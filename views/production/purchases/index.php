@@ -254,10 +254,46 @@
                             <?php else: ?>
                                 <span class="text-muted small">—</span>
                             <?php endif; ?>
-                            <?php if (!empty($purchase['document_url'])): ?>
-                                <a class="btn btn-xs btn-link p-0 text-decoration-none d-block small mt-1" href="<?= uploadUrl($purchase['document_url']) ?>" target="_blank" rel="noopener">
-                                    <i class="bi bi-file-earmark-pdf me-1 text-danger"></i>View Bill
+                            <?php 
+                                $docUrls = [];
+                                if (!empty($purchase['document_urls'])) {
+                                    $decoded = json_decode($purchase['document_urls'], true);
+                                    if (is_array($decoded)) $docUrls = $decoded;
+                                }
+                                if (empty($docUrls) && !empty($purchase['document_url'])) {
+                                    $docUrls = [$purchase['document_url']];
+                                }
+                                $docCount = count($docUrls);
+                            ?>
+                            <?php if ($docCount === 1): 
+                                $isAvif = str_ends_with(strtolower($docUrls[0]), '.avif');
+                                $isPdf = str_ends_with(strtolower($docUrls[0]), '.pdf');
+                            ?>
+                                <a class="btn btn-xs btn-link p-0 text-decoration-none d-block small mt-1" href="<?= uploadUrl($docUrls[0]) ?>" target="_blank" rel="noopener">
+                                    <i class="bi <?= $isPdf ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-check text-success' ?> me-1"></i>View Bill <?= $isAvif ? '(AVIF)' : '' ?>
                                 </a>
+                            <?php elseif ($docCount > 1): ?>
+                                <div class="dropdown mt-1">
+                                    <button class="btn btn-xs btn-outline-primary dropdown-toggle py-0 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size:11px;">
+                                        <i class="bi bi-images me-1"></i><?= $docCount ?> Invoices
+                                    </button>
+                                    <ul class="dropdown-menu shadow-sm" style="font-size:12px;">
+                                        <li><h6 class="dropdown-header small py-1">Invoices (<?= $docCount ?> files)</h6></li>
+                                        <?php foreach ($docUrls as $i => $u): 
+                                            $isAvif = str_ends_with(strtolower($u), '.avif');
+                                            $isPdf = str_ends_with(strtolower($u), '.pdf');
+                                        ?>
+                                            <li>
+                                                <a class="dropdown-item py-1 d-flex align-items-center justify-content-between gap-2" href="<?= uploadUrl($u) ?>" target="_blank" rel="noopener">
+                                                    <span><i class="bi <?= $isPdf ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary' ?> me-1"></i>Invoice #<?= $i + 1 ?></span>
+                                                    <span class="badge <?= $isAvif ? 'bg-success-subtle text-success' : ($isPdf ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle') ?>" style="font-size:9px;">
+                                                        <?= $isAvif ? 'AVIF' : ($isPdf ? 'PDF' : 'FILE') ?>
+                                                    </span>
+                                                </a>
+                                            </li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
                             <?php endif; ?>
                         </td>
                         <td class="text-end fw-bold text-success fs-6">

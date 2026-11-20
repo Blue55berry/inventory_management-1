@@ -1,3 +1,4 @@
+<div class="qr-generation-ui">
 <div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
     <div>
         <h2 class="mb-1"><i class="bi bi-qr-code-scan me-2 text-primary"></i>QR Code Generations</h2>
@@ -235,6 +236,8 @@
             </table>
         </div>
     </div>
+</div>
+
 </div>
 
 <?php require __DIR__ . '/_qr_format_modal.php'; ?>

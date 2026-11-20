@@ -76,25 +76,42 @@
                     <input type="text" class="form-control" name="invoice_number" id="invoiceNumber" maxlength="100">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label" for="purchaseDocument">Tax Invoice / Bill Attachment (Optional)</label>
-                    <input type="file" class="form-control" name="document" id="purchaseDocument" accept=".jpg,.jpeg,.png,.webp,.pdf">
-                    <div class="mt-1">
-                        <small class="text-muted">JPG, PNG, WEBP or PDF up to 5 MB.</small>
-                        <div id="documentFilePreviewContainer" class="d-none align-items-center flex-wrap gap-1 mt-1">
-                            <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1 py-1 px-2" style="font-size:11px;max-width:190px;">
-                                <i class="bi bi-file-earmark-check flex-shrink-0"></i>
-                                <span id="docPreviewFilename" class="text-truncate" style="max-width: 160px;">invoice.pdf</span>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0 fw-semibold" for="purchaseDocuments">
+                            <i class="bi bi-receipt-cutoff me-1 text-primary"></i>Tax Invoice / Bill Attachments (Optional)
+                        </label>
+                        <div class="d-flex gap-1 align-items-center">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size:10px;">
+                                <i class="bi bi-files me-1"></i>Multiple Supported (5+)
                             </span>
-                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" id="btnViewSelectedDocument" onclick="viewSelectedDocumentFile()" title="View selected document" style="font-size:12px;line-height:1.2;">
-                                <i class="bi bi-eye me-1"></i>View Selected File
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center p-1" onclick="clearSelectedDocumentFile()" title="Clear file" aria-label="Clear selected file" style="width:30px;height:30px;">
-                                <i class="bi bi-x"></i>
-                            </button>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;" title="All images are converted to AVIF format for high compression and quality">
+                                <i class="bi bi-lightning-charge me-1"></i>Auto AVIF
+                            </span>
                         </div>
                     </div>
-                    <div id="documentImagePreview" class="d-none mt-2">
-                        <img id="docPreviewImage" class="img-thumbnail" alt="Selected invoice image preview" style="max-width:100%;max-height:220px;object-fit:contain;">
+                    <input type="file" class="form-control" name="documents[]" id="purchaseDocuments" accept=".jpg,.jpeg,.png,.webp,.avif,.pdf" multiple>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <small class="text-muted" style="font-size:11px;">
+                            Select 1 or multiple invoices (5+ supported). JPG, PNG, WEBP, AVIF or PDF up to 10 MB each. Images automatically convert to <strong>AVIF</strong> format.
+                        </small>
+                        <button type="button" class="btn btn-link btn-sm text-danger p-0 d-none text-decoration-none" id="btnClearAllDocs" onclick="clearAllSelectedDocumentFiles()" style="font-size:11px;">
+                            <i class="bi bi-trash3 me-1"></i>Clear All
+                        </button>
+                    </div>
+
+                    <!-- Multi-document preview container -->
+                    <div id="multiDocumentPreviewContainer" class="d-none mt-2 p-2 bg-light border rounded">
+                        <div class="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom">
+                            <span class="small fw-bold text-dark" id="selectedDocCountLabel">
+                                <i class="bi bi-paperclip me-1 text-primary"></i>0 invoices selected
+                            </span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10px;">
+                                <i class="bi bi-check2-circle me-1"></i>AVIF Conversion Active
+                            </span>
+                        </div>
+                        <div class="row g-2" id="docPreviewCardsRow">
+                            <!-- Dynamically populated invoice preview cards -->
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-6">
@@ -2814,65 +2831,157 @@
         lockPurchaseSubmitState();
     });
 
-    // Tax Invoice Document Preview
-    let selectedDocBlobUrl = null;
-    const docInput = document.getElementById('purchaseDocument');
-    const docPreviewContainer = document.getElementById('documentFilePreviewContainer');
-    const docFilenameSpan = document.getElementById('docPreviewFilename');
-    const docImagePreview = document.getElementById('documentImagePreview');
-    const docPreviewImage = document.getElementById('docPreviewImage');
+    // Multiple Invoice Documents Management with AVIF Conversion indicator
+    let selectedDocFiles = [];
+    const docInput = document.getElementById('purchaseDocuments');
+    const multiPreviewContainer = document.getElementById('multiDocumentPreviewContainer');
+    const docPreviewCardsRow = document.getElementById('docPreviewCardsRow');
+    const selectedDocCountLabel = document.getElementById('selectedDocCountLabel');
+    const btnClearAllDocs = document.getElementById('btnClearAllDocs');
+
+    function syncDocInputFiles() {
+        if (!docInput) return;
+        try {
+            const dt = new DataTransfer();
+            selectedDocFiles.forEach(file => dt.items.add(file));
+            docInput.files = dt.files;
+        } catch (e) {
+            console.warn('DataTransfer sync not supported:', e);
+        }
+    }
+
+    function renderDocumentPreviews() {
+        if (!docPreviewCardsRow || !multiPreviewContainer) return;
+        docPreviewCardsRow.innerHTML = '';
+
+        if (selectedDocFiles.length === 0) {
+            multiPreviewContainer.classList.add('d-none');
+            if (btnClearAllDocs) btnClearAllDocs.classList.add('d-none');
+            return;
+        }
+
+        multiPreviewContainer.classList.remove('d-none');
+        if (btnClearAllDocs) btnClearAllDocs.classList.remove('d-none');
+        if (selectedDocCountLabel) {
+            selectedDocCountLabel.innerHTML = `<i class="bi bi-paperclip me-1 text-primary"></i>${selectedDocFiles.length} invoice${selectedDocFiles.length > 1 ? 's' : ''} selected`;
+        }
+
+        selectedDocFiles.forEach((file, index) => {
+            const ext = file.name.split('.').pop().toLowerCase();
+            const isImg = ['jpg', 'jpeg', 'png', 'webp', 'avif'].includes(ext) || file.type.startsWith('image/');
+            const isPdf = ext === 'pdf' || file.type === 'application/pdf';
+            const sizeStr = file.size > 1024 * 1024 
+                ? (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+                : Math.max(1, Math.round(file.size / 1024)) + ' KB';
+
+            const col = document.createElement('div');
+            col.className = 'col-sm-6 col-md-4 col-lg-3';
+
+            const card = document.createElement('div');
+            card.className = 'card h-100 border shadow-xs bg-white';
+            card.style.fontSize = '12px';
+
+            const cardBody = document.createElement('div');
+            cardBody.className = 'card-body p-2 d-flex flex-column justify-content-between';
+
+            // Preview Thumbnail
+            const thumbBox = document.createElement('div');
+            thumbBox.className = 'd-flex align-items-center justify-content-center mb-1 rounded bg-light border';
+            thumbBox.style.height = '75px';
+            thumbBox.style.overflow = 'hidden';
+            thumbBox.style.position = 'relative';
+
+            if (isImg) {
+                const img = document.createElement('img');
+                img.className = 'img-fluid';
+                img.style.maxHeight = '75px';
+                img.style.objectFit = 'contain';
+                const blobUrl = URL.createObjectURL(file);
+                img.src = blobUrl;
+                thumbBox.appendChild(img);
+            } else if (isPdf) {
+                thumbBox.innerHTML = '<i class="bi bi-file-earmark-pdf text-danger fs-2"></i>';
+            } else {
+                thumbBox.innerHTML = '<i class="bi bi-file-earmark-text text-secondary fs-2"></i>';
+            }
+
+            // Info
+            const infoBox = document.createElement('div');
+            infoBox.innerHTML = `
+                <div class="fw-semibold text-truncate" title="${file.name}">${file.name}</div>
+                <div class="d-flex align-items-center justify-content-between text-muted mt-1" style="font-size:10px;">
+                    <span>${sizeStr}</span>
+                    <span class="badge ${isImg ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'}" style="font-size:9px;">
+                        ${isImg ? 'AVIF Auto' : 'PDF'}
+                    </span>
+                </div>
+            `;
+
+            // Actions
+            const actionsBox = document.createElement('div');
+            actionsBox.className = 'd-flex justify-content-between align-items-center mt-2 pt-1 border-top';
+
+            const btnView = document.createElement('button');
+            btnView.type = 'button';
+            btnView.className = 'btn btn-xs btn-outline-primary py-0 px-2';
+            btnView.style.fontSize = '11px';
+            btnView.innerHTML = '<i class="bi bi-eye me-1"></i>View';
+            btnView.onclick = function() {
+                const url = URL.createObjectURL(file);
+                window.open(url, '_blank', 'noopener,noreferrer');
+            };
+
+            const btnDel = document.createElement('button');
+            btnDel.type = 'button';
+            btnDel.className = 'btn btn-xs btn-outline-danger py-0 px-1';
+            btnDel.title = 'Remove invoice';
+            btnDel.innerHTML = '<i class="bi bi-trash"></i>';
+            btnDel.onclick = function() {
+                removeSelectedDocFile(index);
+            };
+
+            actionsBox.appendChild(btnView);
+            actionsBox.appendChild(btnDel);
+
+            cardBody.appendChild(thumbBox);
+            cardBody.appendChild(infoBox);
+            cardBody.appendChild(actionsBox);
+            card.appendChild(cardBody);
+            col.appendChild(card);
+            docPreviewCardsRow.appendChild(col);
+        });
+    }
 
     if (docInput) {
         docInput.addEventListener('change', function() {
-            if (selectedDocBlobUrl) {
-                URL.revokeObjectURL(selectedDocBlobUrl);
-                selectedDocBlobUrl = null;
-            }
-            const file = docInput.files && docInput.files[0];
-            if (file) {
-                selectedDocBlobUrl = URL.createObjectURL(file);
-                if (docFilenameSpan) docFilenameSpan.textContent = file.name;
-                const isImage = /^image\/(jpeg|png|webp)$/i.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name);
-                if (docImagePreview && docPreviewImage && isImage) {
-                    docPreviewImage.src = selectedDocBlobUrl;
-                    docImagePreview.classList.remove('d-none');
-                } else if (docImagePreview && docPreviewImage) {
-                    docPreviewImage.removeAttribute('src');
-                    docImagePreview.classList.add('d-none');
-                }
-                if (docPreviewContainer) {
-                    docPreviewContainer.classList.remove('d-none');
-                    docPreviewContainer.classList.add('d-inline-flex');
-                }
-            } else {
-                if (docPreviewImage) docPreviewImage.removeAttribute('src');
-                if (docImagePreview) docImagePreview.classList.add('d-none');
-                if (docPreviewContainer) {
-                    docPreviewContainer.classList.add('d-none');
-                    docPreviewContainer.classList.remove('d-inline-flex');
-                }
+            if (docInput.files && docInput.files.length > 0) {
+                Array.from(docInput.files).forEach(f => {
+                    // Avoid duplicate additions with same name, size, lastModified
+                    const exists = selectedDocFiles.some(existing => 
+                        existing.name === f.name && existing.size === f.size && existing.lastModified === f.lastModified
+                    );
+                    if (!exists) {
+                        selectedDocFiles.push(f);
+                    }
+                });
+                syncDocInputFiles();
+                renderDocumentPreviews();
             }
         });
     }
 
-    window.viewSelectedDocumentFile = function() {
-        if (selectedDocBlobUrl) {
-            window.open(selectedDocBlobUrl, '_blank', 'noopener,noreferrer');
+    window.removeSelectedDocFile = function(index) {
+        if (index >= 0 && index < selectedDocFiles.length) {
+            selectedDocFiles.splice(index, 1);
+            syncDocInputFiles();
+            renderDocumentPreviews();
         }
     };
 
-    window.clearSelectedDocumentFile = function() {
+    window.clearAllSelectedDocumentFiles = function() {
+        selectedDocFiles = [];
         if (docInput) docInput.value = '';
-        if (selectedDocBlobUrl) {
-            URL.revokeObjectURL(selectedDocBlobUrl);
-            selectedDocBlobUrl = null;
-        }
-        if (docPreviewImage) docPreviewImage.removeAttribute('src');
-        if (docImagePreview) docImagePreview.classList.add('d-none');
-        if (docPreviewContainer) {
-            docPreviewContainer.classList.add('d-none');
-            docPreviewContainer.classList.remove('d-inline-flex');
-        }
+        renderDocumentPreviews();
     };
 
     addRoll();

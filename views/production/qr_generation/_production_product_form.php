@@ -103,6 +103,7 @@ $stitchingData = json_encode(array_values($stitchingBatches ?? []), JSON_UNESCAP
                                     <thead class="table-light small">
                                         <tr>
                                             <th>#</th>
+                                            <th>Variant / SKU</th>
                                             <th>Size</th>
                                             <th>Color</th>
                                             <th class="text-end pe-3">Stitched Pieces</th>
@@ -149,8 +150,14 @@ $stitchingData = json_encode(array_values($stitchingBatches ?? []), JSON_UNESCAP
                     </div>
                     <div class="font-monospace fw-bold text-dark" style="font-size: 11px;" id="prodStickerCode">PRD<?= date('ym') ?>-0001</div>
                     <div class="d-flex justify-content-between align-items-center mt-2 pt-1 border-top border-dark small fw-bold">
-                        <div>STITCHED PIECE</div>
-                        <div class="text-success"><i class="bi bi-patch-check me-1"></i>QC REQ</div>
+                        <div>
+                            <div id="prodStickerVariant">VARIANT</div>
+                            <div class="label-mrp" id="prodStickerMrp"></div>
+                        </div>
+                        <div class="text-success text-end">
+                            <div id="prodStickerSale"></div>
+                            <div><i class="bi bi-patch-check me-1"></i>QC REQ</div>
+                        </div>
                     </div>
                 </div>
 
@@ -210,8 +217,9 @@ function onStitchingBatchChanged() {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${idx + 1}</td>
-                    <td><span class="badge bg-light text-dark border">${it.size_name || 'Standard'}</span></td>
-                    <td><span class="badge bg-light text-dark border">${it.color_name || 'Default'}</span></td>
+                    <td><span class="badge bg-light text-dark border">${it.sku || it.variant_code || 'Not assigned'}</span></td>
+                    <td><span class="badge bg-light text-dark border">${it.variant_size_name || it.size_name || 'Standard'}</span></td>
+                    <td><span class="badge bg-light text-dark border">${it.variant_color_name || it.color_name || 'Default'}</span></td>
                     <td class="text-end pe-3 fw-bold">${it.qty || 0}</td>
                 `;
                 tbody.appendChild(tr);
@@ -222,6 +230,31 @@ function onStitchingBatchChanged() {
     const itemLabel = document.getElementById('prodStickerItem');
     if (itemLabel) {
         itemLabel.textContent = (batch.product_name || hierText || 'FINISHED GARMENT').substring(0, 24);
+    }
+
+    const firstVariant = (batch.items || []).find(it => it.variant_id || it.sku || it.variant_code);
+    const variantEl = document.getElementById('prodStickerVariant');
+    if (variantEl) {
+        variantEl.textContent = firstVariant
+            ? (firstVariant.sku || firstVariant.variant_code || 'VARIANT')
+            : 'VARIANT';
+    }
+    const mrpEl = document.getElementById('prodStickerMrp');
+    if (mrpEl) {
+        const mrp = Number(firstVariant && (firstVariant.variant_mrp || firstVariant.base_price) || 0);
+        mrpEl.innerHTML = mrp > 0 ? 'MRP: <del>₹' + mrp.toFixed(2) + '</del>' : '';
+    }
+    const saleEl = document.getElementById('prodStickerSale');
+    if (saleEl) {
+        const sale = Number(firstVariant && (firstVariant.variant_selling_price || firstVariant.discount_price) || 0);
+        saleEl.textContent = sale > 0 ? 'SALE: ₹' + sale.toFixed(2) : '';
+    }
+
+    const prefixInput = document.getElementById('prodQrPrefix');
+    if (prefixInput && firstVariant) {
+        const sku = firstVariant.sku || firstVariant.variant_code;
+        if (sku) prefixInput.value = ((document.getElementById('prodBrandName').value.trim() || 'GRM APPARELS').toUpperCase()
+            + '-' + sku.toString().replace(/[^A-Za-z0-9]+/g, '-')).replace(/-+$/, '');
     }
 
     updateProdPreview();
