@@ -12,15 +12,34 @@
 $activeItemId = (int)($activeItem['id'] ?? 0);
 $purchasedQty = (float)($activeItem['quantity'] ?? 0);
 $unitPrice = (float)($activeItem['unit_price'] ?? 0);
-$taxAmount = (float)($activeItem['tax_amount'] ?? 0);
-$totalValuation = (float)($activeItem['total_price'] ?? ($purchasedQty * $unitPrice + $taxAmount));
-if ($totalValuation <= 0) {
-    $totalValuation = $purchasedQty * $unitPrice + $taxAmount;
-}
 
+// Accurately compute GST Rate
 $gstRate = (float)($activeItem['cgst_value'] ?? 0) + (float)($activeItem['sgst_value'] ?? 0) + (float)($activeItem['igst_value'] ?? 0);
+
+// Accurately compute Tax Amount from database columns or valuation difference
+$taxAmount = (float)($activeItem['tax_amount'] ?? 0);
+if ($taxAmount <= 0) {
+    $taxAmount = (float)($activeItem['sgst_amount'] ?? 0) + (float)($activeItem['cgst_amount'] ?? 0) + (float)($activeItem['igst_amount'] ?? 0);
+}
+if ($taxAmount <= 0) {
+    $subtotal = $purchasedQty * $unitPrice;
+    $totalVal = (float)($activeItem['total_price'] ?? 0);
+    $taxTreatment = strtoupper($activeItem['tax_treatment'] ?? 'EXCLUDED');
+    if ($taxTreatment === 'EXCLUDED' && $totalVal > $subtotal) {
+        $taxAmount = round($totalVal - $subtotal, 2);
+    } elseif ($taxTreatment === 'EXCLUDED' && $gstRate > 0 && $subtotal > 0) {
+        $taxAmount = round($subtotal * ($gstRate / 100), 2);
+    } elseif ($taxTreatment === 'INCLUDED' && $gstRate > 0 && $totalVal > 0) {
+        $taxAmount = round($totalVal - ($totalVal / (1 + ($gstRate / 100))), 2);
+    }
+}
 if ($gstRate <= 0 && $taxAmount > 0 && ($purchasedQty * $unitPrice) > 0) {
     $gstRate = round(($taxAmount / ($purchasedQty * $unitPrice)) * 100, 2);
+}
+
+$totalValuation = (float)($activeItem['total_price'] ?? 0);
+if ($totalValuation <= 0) {
+    $totalValuation = ($purchasedQty * $unitPrice) + $taxAmount;
 }
 
 $taxModeLabel = ($activeItem['tax_treatment'] ?? '') === 'INCLUDED' ? 'Include GST' : 'Exclude GST';
@@ -114,6 +133,14 @@ if ($defaultSp <= 0) {
 
 <div class="container-fluid px-3 px-md-4 py-3">
 <style>
+.matrix-qty::-webkit-inner-spin-button,
+.matrix-qty::-webkit-outer-spin-button {
+    -webkit-appearance: none !important;
+    margin: 0 !important;
+}
+.matrix-qty {
+    -moz-appearance: textfield !important;
+}
 .matrix-mrp.is-invalid, .matrix-sp.is-invalid, #batchInputMrp.is-invalid, #batchInputSp.is-invalid {
     border-color: #dc3545 !important;
     background-color: #fff8f8 !important;
@@ -225,6 +252,7 @@ tr.table-danger, tr.table-danger > td {
     <!-- Main Mapping Form -->
     <form method="POST" action="<?= url('purchases/mapping/save') ?>" id="formMapProductBill">
         <?= CSRF::field() ?>
+        <input type="hidden" name="csrf_token" value="<?= CSRF::token() ?>">
         <input type="hidden" name="purchase_id" value="<?= (int)$purchase['id'] ?>">
         <input type="hidden" name="item_id" id="hiddenItemId" value="<?= $activeItemId ?>">
         <input type="hidden" name="mapping_action" value="create_new">
@@ -652,8 +680,11 @@ tr.table-danger, tr.table-danger > td {
                         <span class="input-group-text bg-light text-muted">SP ₹</span>
                         <input type="text" inputmode="decimal" class="form-control text-end numeric-text-input" id="batchInputSp" value="<?= number_format($defaultSp, 2, '.', '') ?>" placeholder="0.00">
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="btnReplicatePricing" title="Copy MRP & Selling Price to all variant rows">
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" id="btnReplicatePricing" title="Copy MRP & Selling Price to all variant rows">
                         <i class="bi bi-arrow-repeat me-1"></i>Replicate to All
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success fw-semibold" id="btnHeaderAutoDistribute" onclick="autoDistributeQuantities()" title="Evenly distribute purchased bill quantity (<?= (int)$purchasedQty ?> pcs) across all active variants">
+                        <i class="bi bi-magic me-1"></i>Auto-Distribute Qty
                     </button>
                     <div id="batchPriceError" class="d-none w-100 text-end text-danger small fw-semibold" style="font-size: 11px;">
                         <i class="bi bi-exclamation-triangle-fill me-1"></i>MRP cannot be lower than Selling Price!
@@ -691,6 +722,9 @@ tr.table-danger, tr.table-danger > td {
                         <div class="fs-6" id="labelAllocationStatus">
                             <!-- JS updates this -->
                         </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" id="btnAutoDistributeQty" onclick="autoDistributeQuantities()" title="Evenly distribute purchased quantity across active variants">
+                            <i class="bi bi-distribute-vertical me-1"></i>Auto-Distribute Exact Qty
+                        </button>
                         <div id="labelPricingStatus" class="fs-6 d-none">
                             <!-- JS updates this with pricing error badge -->
                         </div>
@@ -1115,9 +1149,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const stateMap = {};
         tbodyVariantMatrix.querySelectorAll('tr[data-key]').forEach(tr => {
             const key = tr.getAttribute('data-key');
+            const qtyRaw = tr.querySelector('.matrix-qty')?.value;
             stateMap[key] = {
                 sku: tr.querySelector('.matrix-sku')?.value || '',
-                qty: parseFloat(tr.querySelector('.matrix-qty')?.value) || 0,
+                rawQty: qtyRaw,
+                qty: (qtyRaw !== undefined && qtyRaw !== null && qtyRaw.trim() !== '' && !isNaN(parseInt(qtyRaw, 10))) ? parseInt(qtyRaw, 10) : null,
                 rate: parseFloat(tr.querySelector('.matrix-rate')?.value) || defaultRate,
                 mrp: parseFloat(tr.querySelector('.matrix-mrp')?.value) || defaultMrp,
                 sp: parseFloat(tr.querySelector('.matrix-sp')?.value) || defaultSp,
@@ -1141,7 +1177,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const totalCombinations = sizes.length * colors.length;
-        const autoSplitQty = totalCombinations > 0 ? Math.max(1, Math.round(purchasedQty / totalCombinations)) : 1;
+        const totalIntQty = Math.round(purchasedQty);
+        const baseQty = totalCombinations > 0 ? Math.floor(totalIntQty / totalCombinations) : 0;
+        const remainderQty = totalCombinations > 0 ? (totalIntQty % totalCombinations) : 0;
 
         let rowIndex = 0;
         colors.forEach(col => {
@@ -1156,8 +1194,11 @@ document.addEventListener('DOMContentLoaded', function () {
                     defaultSku = `${baseStyleCode}-${colShort}-${sz}`;
                 }
 
+                const defaultAlloc = baseQty + (rowIndex < remainderQty ? 1 : 0);
                 const vSku = existingState?.sku || preExisting?.sku || defaultSku;
-                const vQty = existingState?.qty || preExisting?.allocated_qty || autoSplitQty;
+                const vQty = (existingState && existingState.qty !== null && !isNaN(existingState.qty)) 
+                    ? existingState.qty 
+                    : (existingState && existingState.rawQty === '' ? '' : (preExisting?.allocated_qty !== undefined ? preExisting.allocated_qty : defaultAlloc));
                 const vRate = existingState?.rate || preExisting?.purchase_rate || defaultRate;
                 const vMrp = existingState?.mrp || preExisting?.mrp || defaultMrp;
                 const vSp = existingState?.sp || preExisting?.selling_price || defaultSp;
@@ -1190,8 +1231,9 @@ document.addEventListener('DOMContentLoaded', function () {
                                name="variants[${rowIndex}][sku]" value="${vSku}" required>
                     </td>
                     <td>
-                        <input type="text" inputmode="numeric" class="form-control form-control-sm text-end fw-bold text-primary matrix-qty numeric-text-input"
-                               name="variants[${rowIndex}][allocated_qty]" value="${vQty}" required>
+                        <input type="text" inputmode="numeric" pattern="[0-9]*" class="form-control form-control-sm text-end fw-bold text-primary matrix-qty"
+                               name="variants[${rowIndex}][allocated_qty]" value="${vQty}" required
+                               placeholder="0" autocomplete="off" onfocus="this.select()">
                     </td>
                     <td>
                         <input type="text" inputmode="decimal" class="form-control form-control-sm text-end matrix-rate numeric-text-input"
@@ -1313,17 +1355,54 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function attachMatrixEventListeners() {
         tbodyVariantMatrix.querySelectorAll('.numeric-text-input').forEach(input => {
+            if (input.classList.contains('matrix-qty')) return;
             input.addEventListener('input', function () {
-                if (this.classList.contains('matrix-qty')) {
-                    this.value = this.value.replace(/[^0-9]/g, '');
-                } else {
-                    this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
-                }
+                this.value = this.value.replace(/[^0-9.]/g, '').replace(/(\..*?)\..*/g, '$1');
             });
         });
 
         tbodyVariantMatrix.querySelectorAll('.matrix-qty').forEach(input => {
-            input.addEventListener('input', updateAllocationStatus);
+            // Strict numeric validation: only digits (0-9) allowed on keypress
+            input.addEventListener('keypress', function (e) {
+                if (e.which !== 0 && e.charCode !== 0) {
+                    if (e.which < 48 || e.which > 57) {
+                        e.preventDefault();
+                    }
+                }
+            });
+
+            // Prevent pasting non-digits
+            input.addEventListener('paste', function (e) {
+                const pasteText = (e.clipboardData || window.clipboardData)?.getData('text') || '';
+                if (!/^\d+$/.test(pasteText.trim())) {
+                    e.preventDefault();
+                    const digits = pasteText.replace(/[^0-9]/g, '');
+                    if (digits) {
+                        document.execCommand('insertText', false, digits);
+                    }
+                }
+            });
+
+            // Sanitize input in real-time (e.g. mobile keypad, drag & drop)
+            input.addEventListener('input', function () {
+                const cleaned = this.value.replace(/[^0-9]/g, '');
+                if (this.value !== cleaned) {
+                    this.value = cleaned;
+                }
+                updateAllocationStatus();
+            });
+
+            // Ensure valid number on change / blur
+            input.addEventListener('change', function () {
+                if (this.value.trim() === '' || isNaN(parseInt(this.value, 10))) {
+                    this.value = '0';
+                } else {
+                    this.value = String(parseInt(this.value, 10));
+                }
+                updateAllocationStatus();
+            });
+
+            input.addEventListener('keyup', updateAllocationStatus);
         });
 
         tbodyVariantMatrix.querySelectorAll('.matrix-rate, .matrix-sp, .matrix-mrp').forEach(input => {
@@ -1352,25 +1431,44 @@ document.addEventListener('DOMContentLoaded', function () {
     function updateAllocationStatus() {
         let totalAllocated = 0;
         tbodyVariantMatrix.querySelectorAll('.matrix-qty').forEach(input => {
-            totalAllocated += (parseFloat(input.value) || 0);
+            totalAllocated += (parseInt(input.value, 10) || 0);
         });
 
-        const isMatch = Math.abs(totalAllocated - purchasedQty) < 0.001;
+        const targetQty = Math.round(purchasedQty);
+        const diff = totalAllocated - targetQty;
+        const isMatch = (diff === 0);
 
         if (isMatch) {
             labelAllocationStatus.innerHTML = `
                 <span class="badge bg-success text-white py-1.5 px-3">
-                    <i class="bi bi-check-circle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${purchasedQty} Pieces (Exact Match)
+                    <i class="bi bi-check-circle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${targetQty} Pieces (Exact Match)
                 </span>
             `;
         } else {
             labelAllocationStatus.innerHTML = `
                 <span class="badge bg-warning text-dark py-1.5 px-3">
-                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${purchasedQty} Pieces (${(totalAllocated > purchasedQty ? '+' : '') + (totalAllocated - purchasedQty)} variance)
+                    <i class="bi bi-exclamation-triangle-fill me-1.5"></i>Allocated: ${totalAllocated} / ${targetQty} Pieces (${(diff > 0 ? '+' : '') + diff} variance)
                 </span>
             `;
         }
     }
+
+    // Auto-Distribute Quantities evenly across active variants
+    window.autoDistributeQuantities = function () {
+        const qtyInputs = Array.from(tbodyVariantMatrix.querySelectorAll('.matrix-qty'));
+        const count = qtyInputs.length;
+        if (count === 0) return;
+
+        const totalInt = Math.round(purchasedQty);
+        const base = Math.floor(totalInt / count);
+        const remainder = totalInt % count;
+
+        qtyInputs.forEach((inp, idx) => {
+            inp.value = base + (idx < remainder ? 1 : 0);
+        });
+
+        updateAllocationStatus();
+    };
 
     // Batch Replicate Pricing & Validation
     [batchInputMrp, batchInputSp].forEach(input => {
@@ -1442,7 +1540,8 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('name', name);
         formData.append('code', code);
         formData.append('catalog_source', 'THIRD_PARTY');
-        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
+        formData.append('_csrf_token', '<?= CSRF::token() ?>');
+        formData.append('csrf_token', '<?= CSRF::token() ?>');
 
         fetch(`${BASE_URL}/api/categories/quick-add`, {
             method: 'POST',
@@ -1491,7 +1590,8 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('name', name);
         formData.append('code', code);
         formData.append('catalog_source', 'THIRD_PARTY');
-        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
+        formData.append('_csrf_token', '<?= CSRF::token() ?>');
+        formData.append('csrf_token', '<?= CSRF::token() ?>');
 
         fetch(`${BASE_URL}/api/subcategories/quick-add`, {
             method: 'POST',
@@ -1540,7 +1640,8 @@ document.addEventListener('DOMContentLoaded', function () {
         formData.append('name', name);
         formData.append('code', code);
         formData.append('catalog_source', 'THIRD_PARTY');
-        formData.append('csrf_token', '<?= CSRF::generateToken() ?>');
+        formData.append('_csrf_token', '<?= CSRF::token() ?>');
+        formData.append('csrf_token', '<?= CSRF::token() ?>');
 
         fetch(`${BASE_URL}/api/sub-subcategories/quick-add`, {
             method: 'POST',
