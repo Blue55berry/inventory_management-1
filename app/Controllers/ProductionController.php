@@ -10688,7 +10688,7 @@ class ProductionController {
             $totalCutQty = (int)$batch['cut_qty'];
         }
 
-        $defaultUnitWeight = ($usedWeight > 0 && $totalCutQty > 0) ? round($usedWeight / $totalCutQty, 3) : 0.000;
+        $defaultUnitWeight = ($usedWeight > 0 && $totalCutQty > 0) ? round($usedWeight / $totalCutQty, 4) : 0.0000;
 
         $distinctCatalogs = $this->resolveItemsCatalogHierarchy($items, $rolls, [
             'name'               => $defaultCatalogHierarchy,
@@ -10697,10 +10697,29 @@ class ProductionController {
             'sub_subcategory_id' => $batch['sub_subcategory_id'] ?? ($program['sub_subcategory_id'] ?? null),
         ], 'cut_qty');
 
-        // Enhance items with prices and default unit weight derived from cutting used weight
-        foreach ($items as &$item) {
+        // Enhance items with prices and distribute cutting usable weight proportionally so the sum of item weights matches usedWeight exactly
+        $activeItemIndices = [];
+        foreach ($items as $k => $it) {
+            if ((int)($it['cut_qty'] ?? 0) > 0) {
+                $activeItemIndices[] = $k;
+            }
+        }
+        $totalActive = count($activeItemIndices);
+        $allocatedWeight = 0.0;
+
+        foreach ($items as $k => &$item) {
             $itemCutQty = (int)($item['cut_qty'] ?? 0);
-            if ($defaultUnitWeight > 0) {
+            if ($itemCutQty > 0 && $usedWeight > 0 && $totalCutQty > 0) {
+                $pos = array_search($k, $activeItemIndices, true);
+                if ($pos === $totalActive - 1) {
+                    $itemWeight = round(max(0.01, $usedWeight - $allocatedWeight), 2);
+                } else {
+                    $itemWeight = round($usedWeight * ($itemCutQty / $totalCutQty), 2);
+                    $allocatedWeight += $itemWeight;
+                }
+                $item['weight'] = $itemWeight;
+                $item['weight_per_piece'] = round($itemWeight / $itemCutQty, 4);
+            } elseif ($defaultUnitWeight > 0) {
                 $item['weight_per_piece'] = $defaultUnitWeight;
                 if ($itemCutQty > 0) {
                     $item['weight'] = round($itemCutQty * $defaultUnitWeight, 2);
@@ -11855,7 +11874,7 @@ class ProductionController {
                 $stitchedQty = (int)($vals['stitched_qty'] ?? ($vals['qty'] ?? 0));
                 $receivedQty = (int)($vals['received_qty'] ?? $stitchedQty);
                 $weight = max(0.0, (float)($vals['weight'] ?? 0));
-                $unitWeight = isset($vals['weight_per_piece']) ? max(0.0, (float)$vals['weight_per_piece']) : ($stitchedQty > 0 ? round($weight / $stitchedQty, 3) : 0.000);
+                $unitWeight = isset($vals['weight_per_piece']) ? max(0.0, (float)$vals['weight_per_piece']) : ($stitchedQty > 0 ? round($weight / $stitchedQty, 4) : 0.0000);
                 if ($weight <= 0 && $stitchedQty > 0 && $unitWeight > 0) {
                     $weight = round($stitchedQty * $unitWeight, 2);
                 }
@@ -11922,7 +11941,8 @@ class ProductionController {
             $cb = CuttingBatch::find($cuttingBatchId);
             if ($cb) {
                 $cuttingUsedWeight = (float)($cb['used_weight'] > 0 ? $cb['used_weight'] : max(0.0, (float)($cb['roll_weight'] ?? 0) - (float)($cb['wastage_weight'] ?? 0)));
-                if ($cuttingUsedWeight > 0 && $totalWeight > round($cuttingUsedWeight + 0.01, 2)) {
+                $maxAllowedWeight = round($cuttingUsedWeight + 0.05, 2);
+                if ($cuttingUsedWeight > 0 && $totalWeight > $maxAllowedWeight) {
                     Session::flash('error', "Validation Error: Total Stitching Weight (" . number_format($totalWeight, 2) . " kg) exceeds Cutting Batch Usable Weight (" . number_format($cuttingUsedWeight, 2) . " kg). The stitching weight must match the cutting weight.");
                     Response::back();
                     return;
@@ -12090,7 +12110,7 @@ class ProductionController {
                 $stitchedQty = (int)($vals['stitched_qty'] ?? ($vals['qty'] ?? 0));
                 $receivedQty = (int)($vals['received_qty'] ?? $stitchedQty);
                 $weight = max(0.0, (float)($vals['weight'] ?? 0));
-                $unitWeight = isset($vals['weight_per_piece']) ? max(0.0, (float)$vals['weight_per_piece']) : ($stitchedQty > 0 ? round($weight / $stitchedQty, 3) : 0.000);
+                $unitWeight = isset($vals['weight_per_piece']) ? max(0.0, (float)$vals['weight_per_piece']) : ($stitchedQty > 0 ? round($weight / $stitchedQty, 4) : 0.0000);
                 if ($weight <= 0 && $stitchedQty > 0 && $unitWeight > 0) {
                     $weight = round($stitchedQty * $unitWeight, 2);
                 }
@@ -12159,7 +12179,8 @@ class ProductionController {
             $cb = CuttingBatch::find((int)$targetCuttingId);
             if ($cb) {
                 $cuttingUsedWeight = (float)($cb['used_weight'] > 0 ? $cb['used_weight'] : max(0.0, (float)($cb['roll_weight'] ?? 0) - (float)($cb['wastage_weight'] ?? 0)));
-                if ($cuttingUsedWeight > 0 && $totalWeight > round($cuttingUsedWeight + 0.01, 2)) {
+                $maxAllowedWeight = round($cuttingUsedWeight + 0.05, 2);
+                if ($cuttingUsedWeight > 0 && $totalWeight > $maxAllowedWeight) {
                     Session::flash('error', "Validation Error: Total Stitching Weight (" . number_format($totalWeight, 2) . " kg) exceeds Cutting Batch Usable Weight (" . number_format($cuttingUsedWeight, 2) . " kg). The stitching weight must match the cutting weight.");
                     Response::back();
                     return;

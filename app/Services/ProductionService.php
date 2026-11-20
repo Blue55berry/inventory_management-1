@@ -339,7 +339,7 @@ class ProductionService {
             foreach ($items as $item) {
                 $itemStitchedQty = (int)($item['stitched_qty'] ?? 0);
                 $itemWeight = (float)($item['weight'] ?? 0.00);
-                $itemUnitWeight = isset($item['weight_per_piece']) ? (float)$item['weight_per_piece'] : ($itemStitchedQty > 0 ? round($itemWeight / $itemStitchedQty, 3) : 0.000);
+                $itemUnitWeight = isset($item['weight_per_piece']) ? (float)$item['weight_per_piece'] : ($itemStitchedQty > 0 ? round($itemWeight / $itemStitchedQty, 4) : 0.0000);
 
                 StitchingItem::create([
                     'stitching_batch_id' => $batchId,
@@ -388,7 +388,7 @@ class ProductionService {
             foreach ($items as $item) {
                 $itemStitchedQty = (int)($item['stitched_qty'] ?? 0);
                 $itemWeight = (float)($item['weight'] ?? 0.00);
-                $itemUnitWeight = isset($item['weight_per_piece']) ? (float)$item['weight_per_piece'] : ($itemStitchedQty > 0 ? round($itemWeight / $itemStitchedQty, 3) : 0.000);
+                $itemUnitWeight = isset($item['weight_per_piece']) ? (float)$item['weight_per_piece'] : ($itemStitchedQty > 0 ? round($itemWeight / $itemStitchedQty, 4) : 0.0000);
 
                 StitchingItem::create([
                     'stitching_batch_id' => $id,

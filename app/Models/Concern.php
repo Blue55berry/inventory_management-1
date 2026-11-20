@@ -52,6 +52,7 @@ class Concern {
                 `id` INT AUTO_INCREMENT PRIMARY KEY,
                 `name` VARCHAR(150) NOT NULL,
                 `code` VARCHAR(50) NOT NULL UNIQUE,
+                `concern_type` ENUM('HEAD_OFFICE','PRODUCTION','WAREHOUSE','RETAIL') NOT NULL DEFAULT 'HEAD_OFFICE',
                 `legal_name` VARCHAR(255) NULL,
                 `gst_number` VARCHAR(15) NULL,
                 `pan_number` VARCHAR(10) NULL,
@@ -83,6 +84,9 @@ class Concern {
                 CONSTRAINT `fk_concern_module_concern` FOREIGN KEY (`concern_id`)
                     REFERENCES `concerns`(`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+            // Ensure concern_type exists on concerns
+            Database::ensureColumn('concerns', 'concern_type', "ENUM('HEAD_OFFICE','PRODUCTION','WAREHOUSE','RETAIL') NOT NULL DEFAULT 'HEAD_OFFICE' AFTER `code`");
 
             // Referenced by isProductionConcern(); absent on older installs.
             Database::ensureColumn('production_units', 'concern_id', 'INT NULL AFTER `id`');
