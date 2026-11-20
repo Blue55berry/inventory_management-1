@@ -72,12 +72,6 @@ $activeMeta = $tabs[$activeTab] ?? reset($tabs);
     </div>
     <?php endif; ?>
 
-    <?php if (isset($tabs['return'])): ?>
-    <!-- RETURN QR (UI ONLY) -->
-    <div class="tab-pane fade <?= $activeTab === 'return' ? 'show active' : '' ?>" id="returnMode" role="tabpanel">
-        <?php require __DIR__ . '/_return_form.php'; ?>
-    </div>
-    <?php endif; ?>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>

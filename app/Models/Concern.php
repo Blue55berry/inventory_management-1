@@ -28,6 +28,7 @@ class Concern {
         'qc_batches',
         'qr_generations',
         'roll_damages',
+        'sellers',
         'stitching_batches',
         'stock_adjustments',
         'stock_balances',

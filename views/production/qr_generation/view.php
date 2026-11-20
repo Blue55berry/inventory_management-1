@@ -158,6 +158,28 @@
                 <?php if (!empty($batch['size_name'])): ?><span class="badge bg-light text-dark border">Size: <?= e($batch['size_name']) ?></span><?php endif; ?>
             </div>
             <?php endif; ?>
+            <?php if (!empty($batch['stitching_variant_items'])): ?>
+            <div class="col-12 pt-3 border-top">
+                <div class="text-muted small fw-semibold text-uppercase mb-2">Stitched Variant Details</div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <?php foreach ($batch['stitching_variant_items'] as $variantItem): ?>
+                    <div class="border px-3 py-2 bg-light">
+                        <div class="fw-bold font-monospace">
+                            Variant ID: <?= (int)$variantItem['variant_id'] ?> · SKU: <?= e($variantItem['sku'] ?: ($variantItem['variant_code'] ?: '—')) ?>
+                        </div>
+                        <div class="small mt-1">
+                            Size: <?= e($variantItem['variant_size_name'] ?: ($variantItem['size_name'] ?: '—')) ?>
+                            · Color: <?= e($variantItem['variant_color_name'] ?: ($variantItem['color_name'] ?: '—')) ?>
+                        </div>
+                        <div class="small fw-bold mt-1">
+                            MRP: <del>₹<?= number_format((float)(($variantItem['variant_mrp'] ?? 0) > 0 ? $variantItem['variant_mrp'] : ($variantItem['base_price'] ?? 0)), 2) ?></del>
+                            · Selling: ₹<?= number_format((float)(($variantItem['variant_selling_price'] ?? 0) > 0 ? $variantItem['variant_selling_price'] : ($variantItem['discount_price'] ?? 0)), 2) ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>

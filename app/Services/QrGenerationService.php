@@ -26,11 +26,8 @@ class QrGenerationService {
     public const SOURCE_RAW         = 'RAW_MATERIAL';
     public const SOURCE_THIRD_PARTY = 'THIRD_PARTY';
     public const SOURCE_PRODUCTION  = 'PRODUCTION_PRODUCT';
-    public const SOURCE_RETURN      = 'RETURN';
-
     /**
      * The QR Generation areas. Keys are used in ?tab= URLs.
-     * Return QR remains unavailable for Production concerns until its workflow is enabled.
      */
     public static function sourceTabs(?int $concernId = null): array {
         $tabs = [
@@ -38,7 +35,6 @@ class QrGenerationService {
             'raw_material'       => ['key' => 'raw_material',       'label' => 'Raw Materials',       'source' => self::SOURCE_RAW,         'icon' => 'bi-boxes',          'color' => 'warning'],
             'third_party'        => ['key' => 'third_party',        'label' => 'Third-Party Products','source' => self::SOURCE_THIRD_PARTY, 'icon' => 'bi-box-seam',       'color' => 'info'],
             'production_product' => ['key' => 'production_product', 'label' => 'Production Products', 'source' => self::SOURCE_PRODUCTION,  'icon' => 'bi-scissors',       'color' => 'success'],
-            'return'             => ['key' => 'return',             'label' => 'Return QR',           'source' => self::SOURCE_RETURN,      'icon' => 'bi-arrow-return-left', 'color' => 'danger'],
         ];
 
         $cid = $concernId ?: (function_exists('currentConcernId') ? currentConcernId() : null);
@@ -1228,6 +1224,8 @@ class QrGenerationService {
      * Get a generation batch with items.
      */
     public static function getBatch(int $id): ?array {
+        self::ensureSourceSchema();
+
         $gen = Database::fetchOne(
             "SELECT qrg.*, pv.variant_code, pv.sku as variant_sku, p.name as product_name, p.code as product_code,
                     sb.batch_number as stitching_batch_number, sb.name as stitching_batch_name,
@@ -1248,6 +1246,79 @@ class QrGenerationService {
         if (!$gen) return null;
 
         $items = Database::fetchAll("SELECT * FROM qr_generation_items WHERE generation_id = ? ORDER BY sequence_num ASC", [$id]);
+
+        $stitchingBatchId = (int)($gen['stitching_batch_id'] ?? 0);
+        if ($stitchingBatchId > 0) {
+            $stitchingItems = Database::fetchAll("
+                SELECT si.variant_id, si.size_name, si.color_name, si.base_price, si.discount_price,
+                       COALESCE(NULLIF(si.stitched_qty, 0), NULLIF(si.stitched_quantity, 0), NULLIF(si.received_qty, 0), 0) AS stitched_qty,
+                       pv.variant_code, pv.sku, pv.mrp AS variant_mrp, pv.selling_price AS variant_selling_price,
+                       col.name AS variant_color_name, sz.name AS variant_size_name
+                FROM stitching_items si
+                LEFT JOIN product_variants pv ON pv.id = si.variant_id
+                LEFT JOIN colors col ON col.id = pv.color_id
+                LEFT JOIN sizes sz ON sz.id = pv.size_id
+                WHERE si.stitching_batch_id = ?
+                ORDER BY si.id ASC
+            ", [$stitchingBatchId]);
+
+            $remainingByItem = [];
+            foreach ($stitchingItems as $si) {
+                $remainingByItem[] = max(0, (int)$si['stitched_qty']);
+            }
+
+            $itemCursor = 0;
+            $usedInCursor = 0;
+            $variantIds = [];
+            foreach ($items as &$item) {
+                while ($itemCursor < count($stitchingItems)
+                    && $usedInCursor >= (int)$remainingByItem[$itemCursor]) {
+                    $itemCursor++;
+                    $usedInCursor = 0;
+                }
+
+                $si = $stitchingItems[$itemCursor] ?? null;
+                if (!$si) continue;
+
+                $variantId = (int)($item['variant_id'] ?: $si['variant_id']);
+                $sizeName = trim((string)($item['size_name'] ?: ($si['variant_size_name'] ?: $si['size_name'])));
+                $colorName = trim((string)($item['color_name'] ?: ($si['variant_color_name'] ?: $si['color_name'])));
+                $mrp = (float)($item['mrp'] ?: (($si['variant_mrp'] ?? 0) > 0 ? $si['variant_mrp'] : $si['base_price']));
+                $sellingPrice = (float)($item['selling_price'] ?: (($si['variant_selling_price'] ?? 0) > 0 ? $si['variant_selling_price'] : $si['discount_price']));
+
+                $item['variant_id'] = $variantId ?: null;
+                $item['variant_code'] = $si['variant_code'] ?? null;
+                $item['variant_sku'] = $si['sku'] ?? null;
+                $item['size_name'] = $sizeName ?: null;
+                $item['color_name'] = $colorName ?: null;
+                $item['mrp'] = $mrp;
+                $item['selling_price'] = $sellingPrice;
+
+                if ($variantId > 0) $variantIds[$variantId] = true;
+                $usedInCursor++;
+
+                Database::execute("
+                    UPDATE qr_generation_items
+                    SET variant_id = ?, size_name = ?, color_name = ?, mrp = ?, selling_price = ?
+                    WHERE id = ?
+                ", [
+                    $variantId ?: null,
+                    $sizeName ?: null,
+                    $colorName ?: null,
+                    $mrp,
+                    $sellingPrice,
+                    (int)$item['id']
+                ]);
+            }
+            unset($item);
+
+            if (count($variantIds) === 1) {
+                $gen['variant_id'] = (int)array_key_first($variantIds);
+                Database::execute("UPDATE qr_generations SET variant_id = ? WHERE id = ?", [$gen['variant_id'], $id]);
+            }
+            $gen['stitching_variant_items'] = $stitchingItems;
+        }
+
         return array_merge($gen, ['items' => $items]);
     }
 

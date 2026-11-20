@@ -65,7 +65,12 @@
                             </div>
                         </div>
                     </div>
-                    <?php if (empty($sellers)): ?><small class="text-danger d-block mt-1">Add a supplier profile before recording a purchase.</small><?php endif; ?>
+                    <?php if (empty($sellers)): ?>
+                        <small class="text-danger d-block mt-1">
+                            <i class="bi bi-exclamation-circle me-1"></i>No registered suppliers found for this business concern. 
+                            <a href="<?= url('production/sellers/create') ?>" class="fw-bold text-primary text-decoration-underline">Add New Supplier</a> before recording a purchase.
+                        </small>
+                    <?php endif; ?>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label required" for="purchaseDate">Purchase Date *</label>

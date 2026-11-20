@@ -211,7 +211,7 @@ function onStitchingBatchChanged() {
         tbody.innerHTML = '';
         const items = batch.items || [];
         if (items.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Total Batch: ${batch.total_pieces} Pcs</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Total Batch: ${batch.total_pieces} Pcs</td></tr>`;
         } else {
             items.forEach((it, idx) => {
                 const tr = document.createElement('tr');
@@ -236,7 +236,7 @@ function onStitchingBatchChanged() {
     const variantEl = document.getElementById('prodStickerVariant');
     if (variantEl) {
         variantEl.textContent = firstVariant
-            ? (firstVariant.sku || firstVariant.variant_code || 'VARIANT')
+            ? ('VARIANT #' + (firstVariant.variant_id || '—') + ' · ' + (firstVariant.sku || firstVariant.variant_code || '—'))
             : 'VARIANT';
     }
     const mrpEl = document.getElementById('prodStickerMrp');

@@ -1,12 +1,21 @@
-RewriteEngine On
+Options -Indexes -MultiViews
+DirectoryIndex index.php
 
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+<IfModule mod_rewrite.c>
+    RewriteEngine On
 
-# ==========================================
-# PERFORMANCE OPTIMIZATIONS (GZIP & CACHING)
-# ==========================================
+    # Prevent direct access to dotfiles and implementation PHP scripts.
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,NC,L]
+    RewriteCond %{THE_REQUEST} \s/+[^\s?]*\.php(?:[?\s]) [NC]
+    RewriteCond %{REQUEST_URI} !/index\.php$ [NC]
+    RewriteRule ^ - [F,L]
+
+    # Route application URLs through the front controller; serve assets directly.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+</IfModule>
+
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
     AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript

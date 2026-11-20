@@ -45,8 +45,12 @@ class ProductionController {
             if (!$col3) {
                 Database::execute("ALTER TABLE sellers ADD COLUMN production_deleted_at DATETIME DEFAULT NULL AFTER is_active");
             }
+            $colConcern = Database::fetchOne("SHOW COLUMNS FROM sellers LIKE 'concern_id'");
+            if (!$colConcern) {
+                Database::execute("ALTER TABLE sellers ADD COLUMN concern_id INT NULL DEFAULT 1 AFTER id, ADD INDEX idx_sellers_concern_id (concern_id)");
+            }
         } catch (\Throwable $e) {
-            error_log('Unable to ensure production supplier archive column: ' . $e->getMessage());
+            error_log('Unable to ensure production supplier archive/concern column: ' . $e->getMessage());
         }
         try {
             $colInwItems = Database::fetchOne("SHOW COLUMNS FROM production_purchase_items LIKE 'is_inwarded'");
@@ -352,16 +356,19 @@ class ProductionController {
             $company = $name;
         }
 
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : 1;
+        $cWhere = ($activeCid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?";
+
         $cleanPhone = preg_replace('/\D/', '', $phone);
         if ($cleanPhone !== '') {
             $phone = substr($cleanPhone, 0, 15);
             $dupPhone = Database::fetchOne(
-                "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL",
-                ['%' . substr($cleanPhone, -10)]
+                "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL" . $cWhere,
+                ['%' . substr($cleanPhone, -10), $activeCid]
             );
             if ($dupPhone) {
                 $dupName = !empty($dupPhone['company']) ? $dupPhone['company'] . ' (' . $dupPhone['name'] . ')' : $dupPhone['name'];
-                Session::flash('error', "Phone number is already registered to material supplier '{$dupName}'. Duplicate phone is not allowed.");
+                Session::flash('error', "Phone number is already registered to material supplier '{$dupName}' in the active concern. Duplicate phone is not allowed.");
                 Response::back();
                 return;
             }
@@ -369,12 +376,12 @@ class ProductionController {
 
         if ($gstNumber !== '') {
             $dupGst = Database::fetchOne(
-                "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL",
-                [$gstNumber]
+                "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL" . $cWhere,
+                [$gstNumber, $activeCid]
             );
             if ($dupGst) {
                 $dupName = !empty($dupGst['company']) ? $dupGst['company'] . ' (' . $dupGst['name'] . ')' : $dupGst['name'];
-                Session::flash('error', "GSTIN is already registered to material supplier '{$dupName}'. Duplicate GSTIN is not allowed.");
+                Session::flash('error', "GSTIN is already registered to material supplier '{$dupName}' in the active concern. Duplicate GSTIN is not allowed.");
                 Response::back();
                 return;
             }
@@ -392,9 +399,9 @@ class ProductionController {
         }
 
         Database::execute(
-            "INSERT INTO sellers (name, company, phone, email, gst_number, city, state, address, seller_type, is_active)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'MATERIAL_SUPPLIER', 1)",
-            [$name, $company, $phone ?: null, $email !== '' ? $email : null, $gstNumber !== '' ? $gstNumber : null,
+            "INSERT INTO sellers (concern_id, name, company, phone, email, gst_number, city, state, address, seller_type, is_active)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'MATERIAL_SUPPLIER', 1)",
+            [$activeCid, $name, $company, $phone ?: null, $email !== '' ? $email : null, $gstNumber !== '' ? $gstNumber : null,
                 $city ?: null, $state ?: null, $address ?: null]
         );
         $sellerId = (int)Database::lastInsertId();
@@ -408,12 +415,23 @@ class ProductionController {
 
     private function updateSupplierProfile(int $sellerId): void {
         self::ensureDatabaseSchema();
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $cParams = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $cParams[] = $activeCid;
+        }
         $existing = Database::fetchOne(
-            "SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL",
-            [$sellerId]
+            "SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL" . $cWhere,
+            $cParams
         );
         if (!$existing) {
-            Session::flash('error', 'Supplier not found.');
+            Session::flash('error', 'Supplier not found or does not belong to the active concern.');
             Response::redirect(url('production/sellers'));
             return;
         }
@@ -437,16 +455,19 @@ class ProductionController {
             $company = $name;
         }
 
+        $cid = $activeCid ?: ($existing['concern_id'] ?? 1);
+        $dupCWhere = ($cid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?";
+
         $cleanPhone = preg_replace('/\D/', '', $phone);
         if ($cleanPhone !== '') {
             $phone = substr($cleanPhone, 0, 15);
             $dupPhone = Database::fetchOne(
-                "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND id != ?",
-                ['%' . substr($cleanPhone, -10), $sellerId]
+                "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND id != ?" . $dupCWhere,
+                ['%' . substr($cleanPhone, -10), $sellerId, $cid]
             );
             if ($dupPhone) {
                 $dupName = !empty($dupPhone['company']) ? $dupPhone['company'] . ' (' . $dupPhone['name'] . ')' : $dupPhone['name'];
-                Session::flash('error', "Phone number is already registered to material supplier '{$dupName}'. Duplicate phone is not allowed.");
+                Session::flash('error', "Phone number is already registered to material supplier '{$dupName}' in this concern. Duplicate phone is not allowed.");
                 Response::back();
                 return;
             }
@@ -454,12 +475,12 @@ class ProductionController {
 
         if ($gstNumber !== '') {
             $dupGst = Database::fetchOne(
-                "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND id != ?",
-                [$gstNumber, $sellerId]
+                "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND id != ?" . $dupCWhere,
+                [$gstNumber, $sellerId, $cid]
             );
             if ($dupGst) {
                 $dupName = !empty($dupGst['company']) ? $dupGst['company'] . ' (' . $dupGst['name'] . ')' : $dupGst['name'];
-                Session::flash('error', "GSTIN is already registered to material supplier '{$dupName}'. Duplicate GSTIN is not allowed.");
+                Session::flash('error', "GSTIN is already registered to material supplier '{$dupName}' in this concern. Duplicate GSTIN is not allowed.");
                 Response::back();
                 return;
             }
@@ -520,6 +541,16 @@ class ProductionController {
                   AND s.production_deleted_at IS NULL";
         $params = [];
 
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $sql .= " AND (s.concern_id = ? OR s.concern_id IS NULL)";
+            } else {
+                $sql .= " AND s.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         if ($search !== '') {
             $sql .= " AND (s.name LIKE ? OR s.company LIKE ? OR s.phone LIKE ? OR s.city LIKE ?
                 OR s.state LIKE ? OR s.gst_number LIKE ? OR s.address LIKE ?)";
@@ -543,7 +574,17 @@ class ProductionController {
         $sql .= " ORDER BY s.created_at DESC";
         $sellers = Database::fetchAll($sql, $params);
 
-        $cities = Database::fetchAll("SELECT DISTINCT city FROM sellers WHERE seller_type = 'MATERIAL_SUPPLIER' AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND city IS NOT NULL AND TRIM(city) != '' ORDER BY city ASC");
+        $cityWhere = "WHERE seller_type = 'MATERIAL_SUPPLIER' AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL AND city IS NOT NULL AND TRIM(city) != ''";
+        $cityParams = [];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cityWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cityWhere .= " AND concern_id = ?";
+            }
+            $cityParams[] = $activeCid;
+        }
+        $cities = Database::fetchAll("SELECT DISTINCT city FROM sellers $cityWhere ORDER BY city ASC", $cityParams);
 
         Response::view('production.sellers.index', [
             'pageTitle'      => 'Production Suppliers',
@@ -752,16 +793,27 @@ class ProductionController {
     public function viewSeller(string $id): void {
         self::ensureDatabaseSchema();
         $sellerId = (int)$id;
-        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER'", [$sellerId]);
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $sellerParams = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $sellerParams[] = $activeCid;
+        }
+        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER'" . $cWhere, $sellerParams);
         if (!$seller) {
-            Response::error(404, 'Material Supplier not found.');
+            Session::flash('error', 'Material Supplier not found or does not belong to the active concern.');
+            Response::redirect(url('production/sellers'));
             return;
         }
 
-        $activeCid = currentConcernId();
         $concernClausePp = '';
         $purchParams = [$sellerId];
-        if ($activeCid && !isSuperAdmin()) {
+        if ($activeCid) {
             if ($activeCid === 1) {
                 $concernClausePp = " AND (pp.concern_id = ? OR pp.concern_id IS NULL)";
             } else {
@@ -1049,9 +1101,23 @@ class ProductionController {
 
     public function editSeller(string $id): void {
         self::ensureDatabaseSchema();
-        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL", [(int)$id]);
+        $sellerId = (int)$id;
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $params = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL" . $cWhere, $params);
         if (!$seller) {
-            Response::error(404, 'Supplier not found.');
+            Session::flash('error', 'Supplier not found or does not belong to active concern.');
+            Response::redirect(url('production/sellers'));
+            return;
         }
 
         Response::view('production.sellers.profile_edit', [
@@ -1200,9 +1266,21 @@ class ProductionController {
      */
     public function confirmDeleteSeller(string $id): void {
         self::ensureDatabaseSchema();
-        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL", [(int)$id]);
+        $sellerId = (int)$id;
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $params = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL" . $cWhere, $params);
         if (!$seller) {
-            Session::flash('error', 'Supplier not found.');
+            Session::flash('error', 'Supplier not found or does not belong to active concern.');
             Response::redirect(url('production/sellers'));
             return;
         }
@@ -1230,9 +1308,20 @@ class ProductionController {
     public function ajaxCheckSupplierDeletable(): void {
         self::ensureDatabaseSchema();
         $id = (int)($_GET['id'] ?? 0);
-        $seller = Database::fetchOne("SELECT id, name, company FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL", [$id]);
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $params = [$id];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+        $seller = Database::fetchOne("SELECT id, name, company FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL" . $cWhere, $params);
         if (!$seller) {
-            Response::json(['success' => false, 'message' => 'Supplier not found.'], 404);
+            Response::json(['success' => false, 'message' => 'Supplier not found or does not belong to active concern.'], 404);
             return;
         }
 
@@ -1248,6 +1337,7 @@ class ProductionController {
 
     public function deleteSeller(string $id): void {
         self::ensureDatabaseSchema();
+        $sellerId = (int)$id;
         $isAjax = (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
                   || (isset($_SERVER['HTTP_ACCEPT']) && str_contains($_SERVER['HTTP_ACCEPT'], 'application/json'));
 
@@ -1261,13 +1351,24 @@ class ProductionController {
             return;
         }
 
-        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL", [(int)$id]);
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $cWhere = "";
+        $params = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $cWhere = " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $cWhere = " AND concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+        $seller = Database::fetchOne("SELECT * FROM sellers WHERE id = ? AND seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL" . $cWhere, $params);
         if (!$seller) {
             if ($isAjax) {
-                Response::json(['success' => false, 'message' => 'Supplier not found.'], 404);
+                Response::json(['success' => false, 'message' => 'Supplier not found or does not belong to active concern.'], 404);
                 return;
             }
-            Session::flash('error', 'Supplier not found.');
+            Session::flash('error', 'Supplier not found or does not belong to active concern.');
             Response::redirect(url('production/sellers'));
             return;
         }
@@ -2406,11 +2507,23 @@ class ProductionController {
 
     public function createProductionPurchase(): void {
         self::ensureDatabaseSchema();
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $sellerWhere = "WHERE (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL";
+        $sellerParams = [];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $sellerWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $sellerWhere .= " AND concern_id = ?";
+            }
+            $sellerParams[] = $activeCid;
+        }
         $sellers = Database::fetchAll(
-            "SELECT id, name, company, phone, email, gst_number, city, state, address, seller_type
+            "SELECT id, name, company, phone, email, gst_number, city, state, address, seller_type, concern_id
              FROM sellers
-             WHERE (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL
-             ORDER BY company, name"
+             $sellerWhere
+             ORDER BY company, name",
+            $sellerParams
         );
         $masterProducts = Database::fetchAll(
             "SELECT id, name, code, catalog_code, product_code, brand_id, category_id, subcategory_id
@@ -2463,13 +2576,23 @@ class ProductionController {
         }
 
         $sellerId = (int)($_POST['seller_id'] ?? 0);
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $sellerWhere = "WHERE id = ? AND production_deleted_at IS NULL";
+        $sellerParams = [$sellerId];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $sellerWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $sellerWhere .= " AND concern_id = ?";
+            }
+            $sellerParams[] = $activeCid;
+        }
         $seller = Database::fetchOne(
-            "SELECT id, name, company, seller_type FROM sellers
-             WHERE id = ? AND production_deleted_at IS NULL",
-            [$sellerId]
+            "SELECT id, name, company, seller_type FROM sellers $sellerWhere",
+            $sellerParams
         );
         if (!$seller) {
-            Session::flash('error', 'Select a valid registered supplier.');
+            Session::flash('error', 'Select a valid registered supplier belonging to the active business concern.');
             Response::back();
             return;
         }
@@ -6463,7 +6586,18 @@ class ProductionController {
         ];
 
         // Suppliers list for dropdown
-        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL ORDER BY name ASC");
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $damSellerWhere = "WHERE seller_type = 'MATERIAL_SUPPLIER' AND production_deleted_at IS NULL";
+        $damSellerParams = [];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $damSellerWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $damSellerWhere .= " AND concern_id = ?";
+            }
+            $damSellerParams[] = $activeCid;
+        }
+        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers $damSellerWhere ORDER BY name ASC", $damSellerParams);
         $hsnCodes = Database::fetchAll("SELECT id, hsn_code, description, gst_rate FROM hsn_codes ORDER BY hsn_code ASC");
 
         Response::view('production.damages.index', [
@@ -16219,6 +16353,16 @@ class ProductionController {
         
         $params = [];
 
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $sql .= " AND (ws.concern_id = ? OR ws.concern_id IS NULL)";
+            } else {
+                $sql .= " AND ws.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
+
         if ($search !== '') {
             $sql .= " AND (
                 ws.sale_number LIKE ?
@@ -16888,6 +17032,16 @@ class ProductionController {
                 WHERE 1=1";
         
         $params = [];
+
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $sql .= " AND (sws.concern_id = ? OR sws.concern_id IS NULL)";
+            } else {
+                $sql .= " AND sws.concern_id = ?";
+            }
+            $params[] = $activeCid;
+        }
 
         if ($search !== '') {
             $sql .= " AND (
@@ -19592,6 +19746,8 @@ class ProductionController {
         $field = trim((string)($_GET['field'] ?? ''));
         $value = trim((string)($_GET['value'] ?? ''));
         $exceptId = !empty($_GET['except_id']) ? (int)$_GET['except_id'] : null;
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : 1;
+        $cWhere = ($activeCid === 1) ? " AND (concern_id = ? OR concern_id IS NULL)" : " AND concern_id = ?";
 
         if ($field === '' || $value === '') {
             Response::json(['valid' => true, 'available' => true, 'message' => '']);
@@ -19610,8 +19766,8 @@ class ProductionController {
                 return;
             }
 
-            $sql = "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL";
-            $params = ['%' . $clean];
+            $sql = "SELECT id, name, company FROM sellers WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', ''), ')', '') LIKE ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL" . $cWhere;
+            $params = ['%' . $clean, $activeCid];
             if ($exceptId !== null) {
                 $sql .= " AND id != ?";
                 $params[] = $exceptId;
@@ -19622,7 +19778,7 @@ class ProductionController {
                 Response::json([
                     'valid' => true,
                     'available' => false,
-                    'message' => "Phone number is already registered to material supplier '{$name}'."
+                    'message' => "Phone number is already registered to material supplier '{$name}' in this concern."
                 ]);
                 return;
             }
@@ -19636,8 +19792,8 @@ class ProductionController {
                 Response::json(['valid' => false, 'available' => false, 'message' => 'Invalid GSTIN format (15 characters alphanumeric).']);
                 return;
             }
-            $sql = "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL";
-            $params = [$gst];
+            $sql = "SELECT id, name, company FROM sellers WHERE UPPER(gst_number) = ? AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL" . $cWhere;
+            $params = [$gst, $activeCid];
             if ($exceptId !== null) {
                 $sql .= " AND id != ?";
                 $params[] = $exceptId;
@@ -19648,7 +19804,7 @@ class ProductionController {
                 Response::json([
                     'valid' => true,
                     'available' => false,
-                    'message' => "GSTIN is already registered to material supplier '{$name}'."
+                    'message' => "GSTIN is already registered to material supplier '{$name}' in this concern."
                 ]);
                 return;
             }
@@ -19662,8 +19818,8 @@ class ProductionController {
                 return;
             }
             $col = ($field === 'company') ? 'company' : 'name';
-            $sql = "SELECT id, name, company FROM sellers WHERE LOWER({$col}) = LOWER(?) AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL";
-            $params = [$value];
+            $sql = "SELECT id, name, company FROM sellers WHERE LOWER({$col}) = LOWER(?) AND (is_active = 1 OR is_active IS NULL) AND production_deleted_at IS NULL" . $cWhere;
+            $params = [$value, $activeCid];
             if ($exceptId !== null) {
                 $sql .= " AND id != ?";
                 $params[] = $exceptId;
@@ -19673,7 +19829,7 @@ class ProductionController {
                 Response::json([
                     'valid' => true,
                     'available' => false,
-                    'message' => "A material supplier with this " . ($field === 'company' ? 'company' : 'contact') . " name already exists ('{$existing['name']}')."
+                    'message' => "A material supplier with this " . ($field === 'company' ? 'company' : 'contact') . " name already exists in this concern ('{$existing['name']}')."
                 ]);
                 return;
             }
@@ -19771,7 +19927,18 @@ class ProductionController {
     public function createThirdPartyCatalog(): void {
         PurchaseMappingFulfillmentService::ensureSchema();
         $categories = Database::fetchAll("SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC");
-        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $tpSellerWhere = "WHERE is_active = 1 AND (production_deleted_at IS NULL)";
+        $tpSellerParams = [];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $tpSellerWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $tpSellerWhere .= " AND concern_id = ?";
+            }
+            $tpSellerParams[] = $activeCid;
+        }
+        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers $tpSellerWhere ORDER BY name ASC", $tpSellerParams);
 
         Response::view('production.third_party_catalog.create', [
             'pageTitle'    => 'Add Third-Party Catalog Style',
@@ -19875,7 +20042,18 @@ class ProductionController {
         $categories = Database::fetchAll("SELECT id, name, code FROM third_party_categories WHERE is_active = 1 ORDER BY name ASC");
         $subcategories = $product['third_party_category_id'] ? Database::fetchAll("SELECT id, name, code FROM third_party_subcategories WHERE category_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['third_party_category_id']]) : [];
         $subSubcategories = $product['third_party_subcategory_id'] ? Database::fetchAll("SELECT id, name, code FROM third_party_sub_subcategories WHERE subcategory_id = ? AND is_active = 1 ORDER BY name ASC", [(int)$product['third_party_subcategory_id']]) : [];
-        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers WHERE is_active = 1 AND (production_deleted_at IS NULL) ORDER BY name ASC");
+        $activeCid = function_exists('currentConcernId') ? currentConcernId() : null;
+        $tpSellerWhere = "WHERE is_active = 1 AND (production_deleted_at IS NULL)";
+        $tpSellerParams = [];
+        if ($activeCid) {
+            if ($activeCid === 1) {
+                $tpSellerWhere .= " AND (concern_id = ? OR concern_id IS NULL)";
+            } else {
+                $tpSellerWhere .= " AND concern_id = ?";
+            }
+            $tpSellerParams[] = $activeCid;
+        }
+        $sellers = Database::fetchAll("SELECT id, name, company FROM sellers $tpSellerWhere ORDER BY name ASC", $tpSellerParams);
 
         $parsedAttrs = !empty($product['attributes']) ? (json_decode($product['attributes'], true) ?: []) : [];
 

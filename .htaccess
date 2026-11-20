@@ -1,25 +1,31 @@
-RewriteEngine On
+Options -Indexes -MultiViews
+DirectoryIndex index.php
 
-# DirectoryIndex configuration
-DirectoryIndex index.php public/index.php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
 
-# Block direct access to internal directories
-RewriteRule ^(views|app|config|database|scratch|storage)/ - [F,L]
-RewriteRule ^(\.env|\.git|composer\.(json|lock)|package(-lock)?\.json) - [F,L]
+    # Protect application source, configuration, and repository metadata.
+    RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,NC,L]
+    RewriteRule ^(?:app|config|database|routes|views|storage|scratch|printer_service|vendor|node_modules)(?:/|$) - [F,NC,L]
+    RewriteRule ^(?:\.env(?:\..*)?|\.git|\.svn|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml(?:\.dist)?)(?:/|$) - [F,NC,L]
+    RewriteRule \.(?:sql|ini|log|md|ya?ml|bak|backup|dist|example)$ - [F,NC,L]
+    RewriteRule ^[^/]+\.pdf$ - [F,NC,L]
 
-# Directly serve uploads and assets from public folder
-RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
-RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+    # Do not expose implementation PHP files directly; the front controllers remain reachable.
+    RewriteCond %{THE_REQUEST} \s/+[^\s?]*\.php(?:[?\s]) [NC]
+    RewriteCond %{REQUEST_URI} !/(?:public/)?index\.php$ [NC]
+    RewriteRule ^ - [F,L]
 
-# If the request is not for an existing file or directory
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-# Route everything to public/index.php
-RewriteRule ^(.*)$ public/index.php?url=$1 [QSA,L]
+    # Serve public assets and uploads when the repository root is the document root.
+    RewriteRule ^assets/(.*)$ public/assets/$1 [L]
+    RewriteRule ^uploads/(.*)$ public/uploads/$1 [L]
 
-# ==========================================
-# PERFORMANCE OPTIMIZATIONS (GZIP & CACHING)
-# ==========================================
+    # Route application URLs through the public front controller.
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ public/index.php?url=$1 [QSA,L]
+</IfModule>
+
 <IfModule mod_deflate.c>
     AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
     AddOutputFilterByType DEFLATE application/javascript application/x-javascript text/javascript

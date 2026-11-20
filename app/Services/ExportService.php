@@ -468,15 +468,23 @@ class ExportService
         // 15. Suppliers & Mills Directory
         if (in_array('suppliers', $selectedModules, true)) {
             $suppOrdersFilter = $hasConcerns ? " AND pp.concern_id IN ($concernPlaceholders)" : "";
+            $suppParams = array_merge(
+                $hasConcerns ? $concernIds : [],
+                $hasConcerns ? $concernIds : [],
+                $hasConcerns ? $concernIds : []
+            );
             $data['suppliers'] = Database::fetchAll(
                 "SELECT s.id, s.name, s.company, s.seller_type, s.phone, s.email, s.gstin, s.gst_number,
+                        c.code AS concern_code, c.name AS concern_name,
                         s.address, s.city, s.state, s.payment_terms, s.material_type, s.created_at,
                         (SELECT COUNT(*) FROM production_purchases pp WHERE pp.seller_id = s.id $suppOrdersFilter) AS total_orders,
                         (SELECT COALESCE(SUM(total_amount), 0) FROM production_purchases pp WHERE pp.seller_id = s.id $suppOrdersFilter) AS total_order_value
                  FROM sellers s
+                 LEFT JOIN concerns c ON c.id = s.concern_id
                  WHERE s.production_deleted_at IS NULL
+                 " . $cWhere('s.concern_id') . "
                  ORDER BY s.id DESC",
-                $hasConcerns ? array_merge($concernIds, $concernIds) : []
+                $suppParams
             );
         }
 
@@ -1366,7 +1374,7 @@ class ExportService
         // 16. Suppliers & Mills Directory
         if (!empty($data['suppliers'])) {
             fputcsv($out, ['=== 16. SUPPLIERS & MILLS DIRECTORY ===']);
-            fputcsv($out, ['Supplier / Mill Name', 'Company', 'Type', 'Phone', 'Email', 'GSTIN', 'City', 'State', 'Payment Terms', 'Total Orders Placed', 'Total Inward Value (INR)', 'Registered Date']);
+            fputcsv($out, ['Supplier / Mill Name', 'Company', 'Type', 'Phone', 'Email', 'GSTIN', 'City', 'State', 'Payment Terms', 'Total Orders Placed', 'Total Inward Value (INR)', 'Registered Date', 'Concern']);
             foreach ($data['suppliers'] as $sup) {
                 fputcsv($out, [
                     $sup['name'],
@@ -1381,6 +1389,7 @@ class ExportService
                     (int)($sup['total_orders'] ?? 0),
                     number_format((float)($sup['total_order_value'] ?? 0), 2, '.', ''),
                     !empty($sup['created_at']) ? date('d M Y', strtotime($sup['created_at'])) : '-',
+                    $sup['concern_code'] ?? '-',
                 ]);
             }
             fputcsv($out, []);
