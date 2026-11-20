@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS `concerns` (
   `id` INT AUTO_INCREMENT PRIMARY KEY,
   `name` VARCHAR(150) NOT NULL COMMENT 'Display Name (e.g. GRM Apparels Unit 1)',
   `code` VARCHAR(50) NOT NULL UNIQUE COMMENT 'Short unique code (e.g. CN-01, GRM-MFG)',
+  `concern_type` ENUM('HEAD_OFFICE','PRODUCTION','WAREHOUSE','RETAIL') NOT NULL DEFAULT 'HEAD_OFFICE',
   `legal_name` VARCHAR(255) NULL COMMENT 'Registered Company Name',
   `gst_number` VARCHAR(15) NULL COMMENT '15-digit GSTIN',
   `pan_number` VARCHAR(10) NULL COMMENT '10-digit PAN',

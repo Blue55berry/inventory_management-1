@@ -93,12 +93,6 @@ $taxValueForItem = static function (array $item, string $type): float {
                                     <i class="bi bi-file-earmark-check flex-shrink-0"></i>
                                     <span id="editDocPreviewFilename" class="text-truncate" style="max-width: 160px;">file.pdf</span>
                                 </span>
-                                <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" id="btnViewEditSelectedDoc" onclick="viewEditSelectedDoc()" title="View selected document" style="font-size:12px;line-height:1.2;">
-                                    <i class="bi bi-eye me-1"></i>View Selected File
-                                </button>
-                                <button type="button" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center p-1" onclick="clearEditSelectedDoc()" title="Clear file" aria-label="Clear selected file" style="width:30px;height:30px;">
-                                    <i class="bi bi-x"></i>
-                                </button>
                             </div>
                         </div>
                     </div>

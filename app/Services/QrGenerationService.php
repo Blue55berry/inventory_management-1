@@ -85,7 +85,7 @@ class QrGenerationService {
 
         Database::ensureColumn('stitching_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER status');
         Database::ensureColumn('stitching_batches', 'qr_batch_code', 'VARCHAR(50) DEFAULT NULL AFTER qr_generation_id');
-        Database::ensureColumn('qc_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER label_batch_id');
+        Database::ensureColumn('qc_batches', 'qr_generation_id', 'INT UNSIGNED DEFAULT NULL AFTER stitching_batch_id');
 
         foreach ([
             'ALTER TABLE qr_generations ADD KEY idx_qrg_source (qr_source)',

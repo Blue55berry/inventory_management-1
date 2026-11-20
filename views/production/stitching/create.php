@@ -179,6 +179,9 @@
                         <span class="badge bg-success text-white border border-success px-2 py-1 fs-7" id="weightMatchBadge" style="display: none;">
                             <i class="bi bi-check2-circle me-1"></i>Weight Matched
                         </span>
+                        <button type="button" class="btn btn-sm btn-outline-info fw-semibold py-1 px-2 fs-7" id="btnAutoBalanceWeight" onclick="autoBalanceStitchingWeights()" title="Auto distribute cutting usable weight proportionally across all stitching rows" style="display: none;">
+                            <i class="bi bi-magic me-1"></i>Auto-Balance Wt
+                        </button>
                     </div>
                 </div>
 
@@ -755,7 +758,7 @@ function renderVariants(items, catalogs = []) {
         const catalogHierarchy = it.catalog_hierarchy || 'General Apparel';
         const cutQty = parseInt(it.cut_qty) || 0;
 
-        const unitWeightVal = it.weight_per_piece && parseFloat(it.weight_per_piece) > 0 ? parseFloat(it.weight_per_piece).toFixed(3) : '';
+        const unitWeightVal = it.weight_per_piece && parseFloat(it.weight_per_piece) > 0 ? parseFloat(parseFloat(it.weight_per_piece).toFixed(4)).toString() : '';
         const totalWeightVal = it.weight && parseFloat(it.weight) > 0 ? parseFloat(it.weight).toFixed(2) : '';
         const basePriceVal = it.base_price && parseFloat(it.base_price) > 0 ? parseFloat(it.base_price).toFixed(2) : '';
         const discountPriceVal = it.discount_price && parseFloat(it.discount_price) > 0 ? parseFloat(it.discount_price).toFixed(2) : '';
@@ -803,7 +806,7 @@ function renderVariants(items, catalogs = []) {
             <td>
                 <input type="number" name="items[${idx}][weight_per_piece]" 
                     class="form-control form-control-sm text-center stitching-unit-weight-input" 
-                    min="0.001" step="0.001" value="${unitWeightVal}" placeholder="0.000" required oninput="onRowQtyOrUnitWeightChange(this.closest('tr'))">
+                    min="0.0001" step="any" value="${unitWeightVal}" placeholder="0.0000" required oninput="onRowQtyOrUnitWeightChange(this.closest('tr'))">
             </td>
             <td>
                 <input type="number" name="items[${idx}][weight]" 
@@ -869,7 +872,7 @@ function onRowQtyOrUnitWeightChange(row) {
     const unitWeight = parseFloat(unitWeightInp?.value) || 0;
 
     if (qty > 0 && unitWeight > 0) {
-        const total = qty * unitWeight;
+        const total = Math.round(qty * unitWeight * 100) / 100;
         if (totalWeightInp) {
             totalWeightInp.value = total.toFixed(2);
             totalWeightInp.classList.remove('is-invalid', 'border-danger');
@@ -895,9 +898,59 @@ function onRowTotalWeightChange(row) {
     const totalWeight = parseFloat(totalWeightInp?.value) || 0;
 
     if (qty > 0 && totalWeight > 0 && unitWeightInp) {
-        unitWeightInp.value = (totalWeight / qty).toFixed(3);
+        unitWeightInp.value = parseFloat((totalWeight / qty).toFixed(4)).toString();
         unitWeightInp.classList.remove('is-invalid', 'border-danger');
     }
+    calcStitchingTotals();
+}
+
+function autoBalanceStitchingWeights() {
+    if (!currentCuttingUsableWeight || currentCuttingUsableWeight <= 0) {
+        alert('Please select a valid Cutting Batch first.');
+        return;
+    }
+    const rows = Array.from(document.querySelectorAll('#variantsTableBody tr.variant-item-row'));
+    if (rows.length === 0) return;
+
+    let totalQty = 0;
+    const activeRows = [];
+    rows.forEach(tr => {
+        const qty = parseInt(tr.querySelector('.stitching-qty-input')?.value) || 0;
+        if (qty > 0) {
+            totalQty += qty;
+            activeRows.push({ row: tr, qty: qty });
+        }
+    });
+
+    if (totalQty <= 0) {
+        alert('Please enter stitching quantities for variant rows first.');
+        return;
+    }
+
+    let allocatedWeight = 0.0;
+    activeRows.forEach((item, idx) => {
+        let itemWeight;
+        if (idx === activeRows.length - 1) {
+            itemWeight = Math.round((currentCuttingUsableWeight - allocatedWeight) * 100) / 100;
+            if (itemWeight <= 0) itemWeight = 0.01;
+        } else {
+            itemWeight = Math.round((currentCuttingUsableWeight * (item.qty / totalQty)) * 100) / 100;
+            allocatedWeight += itemWeight;
+        }
+        const unitWeight = parseFloat((itemWeight / item.qty).toFixed(4));
+        const totalWeightInp = item.row.querySelector('.stitching-weight-input');
+        const unitWeightInp = item.row.querySelector('.stitching-unit-weight-input');
+        if (totalWeightInp) {
+            totalWeightInp.value = itemWeight.toFixed(2);
+            totalWeightInp.dataset.manual = '1';
+            totalWeightInp.classList.remove('is-invalid', 'border-danger');
+        }
+        if (unitWeightInp) {
+            unitWeightInp.value = unitWeight.toString();
+            unitWeightInp.classList.remove('is-invalid', 'border-danger');
+        }
+    });
+
     calcStitchingTotals();
 }
 
@@ -940,15 +993,20 @@ function calcStitchingTotals() {
         weightBadge.innerHTML = '<i class="bi bi-speedometer2 me-1"></i>Stitch Wt: ' + totalWeight.toFixed(2) + ' kg';
     }
 
+    const btnAutoBal = document.getElementById('btnAutoBalanceWeight');
+    if (btnAutoBal) {
+        btnAutoBal.style.display = currentCuttingUsableWeight > 0 ? 'inline-block' : 'none';
+    }
+
     const matchBadge = document.getElementById('weightMatchBadge');
     if (matchBadge) {
         if (currentCuttingUsableWeight > 0) {
             matchBadge.style.display = 'inline-block';
             const diff = Math.round((totalWeight - currentCuttingUsableWeight) * 100) / 100;
-            if (Math.abs(diff) <= 0.01) {
+            if (Math.abs(diff) <= 0.05) {
                 matchBadge.className = 'badge bg-success text-white border border-success px-2 py-1 fs-7';
                 matchBadge.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>Weight Matched (${totalWeight.toFixed(2)} kg)`;
-            } else if (diff > 0.01) {
+            } else if (diff > 0.05) {
                 matchBadge.className = 'badge bg-danger text-white border border-danger px-2 py-1 fs-7';
                 matchBadge.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>Weight Exceeded (+${diff.toFixed(2)} kg vs Cut ${currentCuttingUsableWeight.toFixed(2)} kg)`;
             } else {
@@ -1113,7 +1171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     sumStitchWeight += parseFloat(inp.value) || 0;
                 });
                 sumStitchWeight = Math.round(sumStitchWeight * 100) / 100;
-                const maxAllowedWeight = Math.round((currentCuttingUsableWeight + 0.01) * 100) / 100;
+                const maxAllowedWeight = Math.round((currentCuttingUsableWeight + 0.05) * 100) / 100;
 
                 if (sumStitchWeight > maxAllowedWeight) {
                     e.preventDefault();

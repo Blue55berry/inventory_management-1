@@ -122,6 +122,22 @@ if ($defaultSp <= 0) {
 tr.table-danger, tr.table-danger > td {
     background-color: #fff1f2 !important;
 }
+#containerColorPills, #containerSizePills {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 12px !important;
+    column-gap: 8px !important;
+}
+#containerColorPills .form-check, #containerSizePills .form-check {
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline-flex !important;
+}
+#containerColorPills .btn, #containerSizePills .btn {
+    line-height: 1.4 !important;
+    white-space: nowrap !important;
+}
 </style>
 
     <!-- Top Breadcrumbs & Action Bar (Image 4: Scan/Labels button removed) -->
@@ -528,11 +544,11 @@ tr.table-danger, tr.table-danger > td {
 
                             <!-- Color / Fabric Variation (Multi-select + Custom Add Input) -->
                             <tr>
-                                <td>
+                                <td class="py-3 align-top">
                                     <div class="fw-bold text-dark">Color / Fabric Variation <span class="text-danger">*</span></div>
                                     <small class="text-muted">(Visual / Aesthetic Attr)</small>
                                 </td>
-                                <td>
+                                <td class="py-3">
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <div class="small fw-bold text-uppercase text-muted">Choose Colors (Multiple Selection):</div>
                                         <div class="d-flex gap-2">
@@ -543,7 +559,7 @@ tr.table-danger, tr.table-danger > td {
                                     </div>
 
                                     <!-- Standard Color Toggle Buttons -->
-                                    <div class="d-flex flex-wrap gap-1.5 mb-3" id="containerColorPills">
+                                    <div class="d-flex flex-wrap my-3" id="containerColorPills" style="row-gap: 12px; column-gap: 8px;">
                                         <?php foreach ($standardColors as $col): ?>
                                             <?php $isColChecked = in_array(strtolower($col), array_map('strtolower', $activeColors), true); ?>
                                             <div class="form-check form-check-inline m-0">
@@ -560,7 +576,7 @@ tr.table-danger, tr.table-danger > td {
                                     </div>
 
                                     <!-- Custom Color Adder Input Field -->
-                                    <div class="input-group input-group-sm" style="max-width: 400px;">
+                                    <div class="input-group input-group-sm mt-3 mb-1" style="max-width: 420px;">
                                         <input type="text" class="form-control" id="inputCustomColor" placeholder="Add custom color name (e.g. Lavender, Mint, Peach)">
                                         <button class="btn btn-outline-primary fw-semibold" type="button" id="btnAddCustomColor">
                                             <i class="bi bi-plus-circle me-1"></i>Add Color
@@ -571,11 +587,11 @@ tr.table-danger, tr.table-danger > td {
 
                             <!-- Size Attributes & Sizing Matrix -->
                             <tr>
-                                <td>
+                                <td class="py-3 align-top">
                                     <div class="fw-bold text-dark">Size Attributes <span class="text-danger">*</span></div>
                                     <small class="text-muted">(Variant Sizing Matrix)</small>
                                 </td>
-                                <td>
+                                <td class="py-3">
                                     <div class="d-flex align-items-center justify-content-between mb-2">
                                         <div class="small fw-bold text-uppercase text-muted">Choose Sizes:</div>
                                         <div class="d-flex gap-2">
@@ -586,7 +602,7 @@ tr.table-danger, tr.table-danger > td {
                                     </div>
 
                                     <!-- Standard Size Toggle Buttons -->
-                                    <div class="d-flex flex-wrap gap-1.5 mb-3" id="containerSizePills">
+                                    <div class="d-flex flex-wrap my-3" id="containerSizePills" style="row-gap: 12px; column-gap: 8px;">
                                         <?php foreach ($standardSizes as $size): ?>
                                             <?php $isSizeChecked = in_array($size, $selectedSizes, true); ?>
                                             <div class="form-check form-check-inline m-0">
@@ -603,7 +619,7 @@ tr.table-danger, tr.table-danger > td {
                                     </div>
 
                                     <!-- Custom Size Adder -->
-                                    <div class="input-group input-group-sm" style="max-width: 400px;">
+                                    <div class="input-group input-group-sm mt-3 mb-1" style="max-width: 420px;">
                                         <input type="text" class="form-control" id="inputCustomSize" placeholder="Add custom size (e.g. 4XL, 32, 34)">
                                         <button class="btn btn-outline-primary fw-semibold" type="button" id="btnAddCustomSize">
                                             <i class="bi bi-plus-circle me-1"></i>Add Size

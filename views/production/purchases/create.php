@@ -85,12 +85,6 @@
                                 <i class="bi bi-file-earmark-check flex-shrink-0"></i>
                                 <span id="docPreviewFilename" class="text-truncate" style="max-width: 160px;">invoice.pdf</span>
                             </span>
-                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" id="btnViewSelectedDocument" onclick="viewSelectedDocumentFile()" title="View selected document" style="font-size:12px;line-height:1.2;">
-                                <i class="bi bi-eye me-1"></i>View Selected File
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center justify-content-center p-1" onclick="clearSelectedDocumentFile()" title="Clear file" aria-label="Clear selected file" style="width:30px;height:30px;">
-                                <i class="bi bi-x"></i>
-                            </button>
                         </div>
                     </div>
                     <div id="documentImagePreview" class="d-none mt-2">

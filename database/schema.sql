@@ -348,6 +348,7 @@ CREATE TABLE `cutting_batches` (
   KEY `production_unit_id` (`production_unit_id`),
   KEY `idx_cutting_batches_created_at` (`created_at`),
   KEY `idx_cutting_batches_concern_id` (`concern_id`),
+  KEY `idx_cutting_batches_concern` (`concern_id`),
   CONSTRAINT `cutting_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`),
   CONSTRAINT `cutting_batches_ibfk_2` FOREIGN KEY (`operator_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `cutting_batches_ibfk_3` FOREIGN KEY (`production_unit_id`) REFERENCES `production_units` (`id`)
@@ -371,7 +372,7 @@ CREATE TABLE `cutting_items` (
   `cut_qty` int(11) DEFAULT 0,
   `rejected_qty` int(11) DEFAULT 0,
   `wastage_qty` int(11) DEFAULT 0,
-  `weight_per_piece` decimal(10,3) DEFAULT 0.000,
+  `weight_per_piece` decimal(10,4) DEFAULT 0.0000,
   `weight` decimal(10,2) DEFAULT 0.00,
   `base_price` decimal(10,2) DEFAULT 0.00,
   `discount_price` decimal(10,2) DEFAULT 0.00,
@@ -432,67 +433,35 @@ CREATE TABLE `hsn_codes` (
 ) ENGINE=InnoDB AUTO_INCREMENT=17466 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- [17/89] Table structure for `label_batches`
+-- Table structure for `product_price_logs`
 -- ------------------------------------------------------------
-DROP TABLE IF EXISTS `label_batches`;
-CREATE TABLE `label_batches` (
+DROP TABLE IF EXISTS `product_price_logs`;
+CREATE TABLE `product_price_logs` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `program_id` int(10) unsigned NOT NULL,
-  `stitching_batch_id` int(10) unsigned DEFAULT NULL,
-  `batch_number` varchar(50) NOT NULL,
-  `required_qty` int(11) NOT NULL DEFAULT 0,
-  `printed_qty` int(11) DEFAULT 0,
-  `used_qty` int(11) DEFAULT 0,
-  `damaged_qty` int(11) DEFAULT 0,
-  `status` enum('PENDING','IN_PROGRESS','COMPLETED') DEFAULT 'PENDING',
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `total_qty` int(11) NOT NULL DEFAULT 0,
-  `applied_qty` int(11) DEFAULT 0,
-  `session_data` longtext DEFAULT NULL,
-  `notes` text DEFAULT NULL,
-  `created_by` int(10) unsigned DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `batch_number` (`batch_number`),
-  KEY `program_id` (`program_id`),
-  KEY `fk_label_batches_stitching` (`stitching_batch_id`),
-  CONSTRAINT `fk_label_batches_stitching` FOREIGN KEY (`stitching_batch_id`) REFERENCES `stitching_batches` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `label_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ------------------------------------------------------------
--- [18/89] Table structure for `label_items`
--- ------------------------------------------------------------
-DROP TABLE IF EXISTS `label_items`;
-CREATE TABLE `label_items` (
-  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `label_batch_id` int(10) unsigned NOT NULL,
   `variant_id` int(10) unsigned DEFAULT NULL,
-  `category_id` int(10) unsigned DEFAULT NULL,
-  `subcategory_id` int(10) unsigned DEFAULT NULL,
-  `sub_subcategory_id` int(10) unsigned DEFAULT NULL,
-  `catalog_hierarchy` varchar(255) DEFAULT NULL,
-  `size_name` varchar(100) DEFAULT NULL,
-  `color_name` varchar(100) DEFAULT NULL,
-  `base_price` decimal(10,2) DEFAULT 0.00,
-  `discount_price` decimal(10,2) DEFAULT 0.00,
-  `required_qty` int(11) NOT NULL DEFAULT 0,
-  `printed_qty` int(11) DEFAULT 0,
-  `used_qty` int(11) DEFAULT 0,
-  `damaged_qty` int(11) DEFAULT 0,
-  `start_seq` int(11) DEFAULT 1,
-  `end_seq` int(11) DEFAULT 1,
-  `start_code` varchar(50) DEFAULT NULL,
-  `end_code` varchar(50) DEFAULT NULL,
+  `product_id` int(10) unsigned DEFAULT NULL,
+  `sku` varchar(100) NOT NULL,
+  `old_selling_price` decimal(10,2) NOT NULL,
+  `new_selling_price` decimal(10,2) NOT NULL,
+  `old_mrp` decimal(10,2) NOT NULL,
+  `new_mrp` decimal(10,2) NOT NULL,
+  `cost_price` decimal(10,2) NOT NULL,
+  `markup_percentage` decimal(10,4) DEFAULT NULL,
+  `discount_percentage` decimal(10,4) NOT NULL,
+  `revision_notes` text NOT NULL,
+  `user_id` int(10) unsigned DEFAULT NULL,
+  `user_name` varchar(200) NOT NULL,
+  `created_at` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
-  KEY `label_batch_id` (`label_batch_id`),
-  KEY `variant_id` (`variant_id`),
-  CONSTRAINT `label_items_ibfk_1` FOREIGN KEY (`label_batch_id`) REFERENCES `label_batches` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `label_items_ibfk_2` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`)
+  KEY `idx_price_logs_variant_created` (`variant_id`,`created_at`),
+  KEY `idx_price_logs_product` (`product_id`),
+  KEY `idx_price_logs_user` (`user_id`),
+  CONSTRAINT `product_price_logs_ibfk_1` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `product_price_logs_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
--- [19/89] Table structure for `notifications`
+-- Table structure for `notifications`
 -- ------------------------------------------------------------
 DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
@@ -642,6 +611,7 @@ CREATE TABLE `production_batches` (
   KEY `idx_production_batches_bill` (`production_bill_id`),
   KEY `idx_production_batches_packed_created` (`packed_date`,`created_at`),
   KEY `idx_production_batches_concern_id` (`concern_id`),
+  KEY `idx_production_batches_concern` (`concern_id`),
   CONSTRAINT `production_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`),
   CONSTRAINT `production_batches_ibfk_2` FOREIGN KEY (`qc_batch_id`) REFERENCES `qc_batches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `production_batches_ibfk_3` FOREIGN KEY (`destination_warehouse_id`) REFERENCES `warehouses` (`id`),
@@ -756,6 +726,7 @@ CREATE TABLE `production_bills` (
   KEY `production_bills_ibfk_1` (`created_by`),
   KEY `idx_production_bills_unit` (`production_unit_id`),
   KEY `idx_production_bills_concern_id` (`concern_id`),
+  KEY `idx_production_bills_concern` (`concern_id`),
   CONSTRAINT `production_bills_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -843,7 +814,8 @@ CREATE TABLE `production_expenses` (
   UNIQUE KEY `uniq_production_expenses_number` (`expense_number`),
   KEY `idx_production_expenses_program` (`program_id`),
   KEY `idx_production_expenses_date` (`expense_date`),
-  KEY `idx_production_expenses_concern_id` (`concern_id`)
+  KEY `idx_production_expenses_concern_id` (`concern_id`),
+  KEY `idx_production_expenses_concern` (`concern_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -899,6 +871,7 @@ CREATE TABLE `production_outwards` (
   KEY `created_by` (`created_by`),
   KEY `idx_production_outwards_dispatch_created` (`dispatch_date`,`created_at`),
   KEY `idx_production_outwards_concern_id` (`concern_id`),
+  KEY `idx_production_outwards_concern` (`concern_id`),
   CONSTRAINT `production_outwards_ibfk_1` FOREIGN KEY (`production_batch_id`) REFERENCES `production_batches` (`id`),
   CONSTRAINT `production_outwards_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1000,6 +973,7 @@ CREATE TABLE `production_programs` (
   KEY `created_by` (`created_by`),
   KEY `idx_production_programs_created_at` (`created_at`),
   KEY `idx_production_programs_concern_id` (`concern_id`),
+  KEY `idx_production_programs_concern` (`concern_id`),
   CONSTRAINT `production_programs_ibfk_1` FOREIGN KEY (`production_unit_id`) REFERENCES `production_units` (`id`),
   CONSTRAINT `production_programs_ibfk_2` FOREIGN KEY (`product_id`) REFERENCES `products` (`id`),
   CONSTRAINT `production_programs_ibfk_3` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL,
@@ -1073,6 +1047,8 @@ CREATE TABLE `production_purchase_items` (
   KEY `idx_production_purchase_items_stock` (`item_type`,`item_name`,`unit`),
   KEY `idx_ppi_variant_id` (`variant_id`),
   KEY `idx_ppi_type_mapped_qrg` (`item_type`,`is_mapped`,`qr_generation_id`),
+  KEY `idx_ppi_qr_generation` (`qr_generation_id`),
+  KEY `idx_ppi_grn` (`grn_id`),
   CONSTRAINT `fk_ppi_variant` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
   CONSTRAINT `production_purchase_items_ibfk_1` FOREIGN KEY (`purchase_id`) REFERENCES `production_purchases` (`id`) ON DELETE CASCADE,
   CONSTRAINT `production_purchase_items_ibfk_2` FOREIGN KEY (`seller_roll_id`) REFERENCES `seller_rolls` (`id`) ON DELETE SET NULL
@@ -1105,6 +1081,8 @@ CREATE TABLE `production_purchases` (
   UNIQUE KEY `uniq_production_purchase_number` (`purchase_number`),
   KEY `idx_production_purchases_seller_date` (`seller_id`,`purchase_date`),
   KEY `idx_purchases_type_date` (`purchase_type`,`purchase_date`,`seller_id`),
+  KEY `idx_pp_grn` (`grn_id`),
+  KEY `idx_production_purchases_concern` (`concern_id`),
   KEY `idx_production_purchases_concern_id` (`concern_id`),
   KEY `idx_pp_concern_date` (`concern_id`,`purchase_date`),
   CONSTRAINT `production_purchases_ibfk_1` FOREIGN KEY (`seller_id`) REFERENCES `sellers` (`id`)
@@ -1256,6 +1234,7 @@ CREATE TABLE `production_units` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
   KEY `manager_id` (`manager_id`),
+  KEY `idx_production_units_concern` (`concern_id`),
   CONSTRAINT `production_units_ibfk_1` FOREIGN KEY (`manager_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -1385,6 +1364,7 @@ CREATE TABLE `purchase_inward_items` (
   `rejection_reason` varchar(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `purchase_inward_id` (`purchase_inward_id`),
+  KEY `idx_pii_production_purchase_item` (`production_purchase_item_id`),
   KEY `variant_id` (`variant_id`),
   KEY `location_id` (`location_id`),
   CONSTRAINT `purchase_inward_items_ibfk_1` FOREIGN KEY (`purchase_inward_id`) REFERENCES `purchase_inwards` (`id`) ON DELETE CASCADE,
@@ -1443,6 +1423,7 @@ CREATE TABLE `purchase_items` (
   `unit_price` decimal(10,2) NOT NULL,
   `discount_percentage` decimal(5,2) DEFAULT 0.00,
   `gst_percentage` decimal(5,2) DEFAULT 0.00,
+  `hsn_code` varchar(20) DEFAULT NULL,
   `cgst_amount` decimal(10,2) DEFAULT 0.00,
   `sgst_amount` decimal(10,2) DEFAULT 0.00,
   `igst_amount` decimal(10,2) DEFAULT 0.00,
@@ -1499,6 +1480,7 @@ CREATE TABLE `purchase_orders` (
   `warehouse_supplier_id` int(10) unsigned DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `po_number` (`po_number`),
+  KEY `idx_po_production_purchase` (`production_purchase_id`),
   KEY `seller_id` (`seller_id`),
   KEY `warehouse_id` (`warehouse_id`),
   KEY `created_by` (`created_by`),
@@ -1518,7 +1500,6 @@ CREATE TABLE `qc_batches` (
   `qc_number` varchar(50) DEFAULT NULL,
   `program_id` int(10) unsigned NOT NULL,
   `stitching_batch_id` int(10) unsigned DEFAULT NULL,
-  `label_batch_id` int(10) unsigned DEFAULT NULL,
   `qr_generation_id` int(10) unsigned DEFAULT NULL,
   `inspector_id` int(10) unsigned DEFAULT NULL,
   `total_qty` int(11) NOT NULL DEFAULT 0,
@@ -1540,12 +1521,11 @@ CREATE TABLE `qc_batches` (
   KEY `program_id` (`program_id`),
   KEY `stitching_batch_id` (`stitching_batch_id`),
   KEY `inspector_id` (`inspector_id`),
-  KEY `fk_qc_label_batch` (`label_batch_id`),
   KEY `idx_qc_batches_created_at` (`created_at`),
   KEY `idx_qc_batches_concern_id` (`concern_id`),
+  KEY `idx_qc_batches_concern` (`concern_id`),
   KEY `idx_qcb_stitching_status` (`stitching_batch_id`,`status`),
   KEY `idx_qcb_qr_generation` (`qr_generation_id`),
-  CONSTRAINT `fk_qc_label_batch` FOREIGN KEY (`label_batch_id`) REFERENCES `label_batches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `qc_batches_ibfk_1` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`),
   CONSTRAINT `qc_batches_ibfk_2` FOREIGN KEY (`stitching_batch_id`) REFERENCES `stitching_batches` (`id`) ON DELETE SET NULL,
   CONSTRAINT `qc_batches_ibfk_3` FOREIGN KEY (`inspector_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
@@ -1565,6 +1545,7 @@ CREATE TABLE `qc_items` (
   `catalog_hierarchy` varchar(255) DEFAULT NULL,
   `size_name` varchar(100) DEFAULT NULL,
   `color_name` varchar(100) DEFAULT NULL,
+  `total_qty` int(11) NOT NULL DEFAULT 0,
   `tag_code` varchar(100) DEFAULT NULL,
   `base_price` decimal(10,2) DEFAULT 0.00,
   `discount_price` decimal(10,2) DEFAULT 0.00,
@@ -1746,6 +1727,7 @@ CREATE TABLE `roll_damages` (
   UNIQUE KEY `uniq_roll_damages_number` (`damage_number`),
   KEY `idx_roll_damages_seller` (`seller_id`),
   KEY `idx_roll_damages_roll` (`seller_roll_id`),
+  UNIQUE KEY `uniq_roll_damages_qr_code` (`qr_code`),
   KEY `idx_roll_damages_qr_code` (`qr_code`),
   KEY `idx_roll_damages_concern_id` (`concern_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1952,6 +1934,7 @@ CREATE TABLE `stitching_batches` (
   KEY `worker_id` (`worker_id`),
   KEY `idx_stitching_batches_created_at` (`created_at`),
   KEY `idx_stitching_batches_concern_id` (`concern_id`),
+  KEY `idx_stitching_batches_concern` (`concern_id`),
   KEY `idx_sb_qrg_concern_status` (`qr_generation_id`,`concern_id`,`status`),
   CONSTRAINT `stitching_batches_ibfk_1` FOREIGN KEY (`cutting_batch_id`) REFERENCES `cutting_batches` (`id`),
   CONSTRAINT `stitching_batches_ibfk_2` FOREIGN KEY (`program_id`) REFERENCES `production_programs` (`id`),
@@ -1974,7 +1957,7 @@ CREATE TABLE `stitching_items` (
   `color_name` varchar(100) DEFAULT NULL,
   `received_qty` int(11) NOT NULL DEFAULT 0,
   `stitched_qty` int(11) DEFAULT 0,
-  `weight_per_piece` decimal(10,3) DEFAULT 0.000,
+  `weight_per_piece` decimal(10,4) DEFAULT 0.0000,
   `weight` decimal(10,2) DEFAULT 0.00,
   `base_price` decimal(10,2) DEFAULT 0.00,
   `discount_price` decimal(10,2) DEFAULT 0.00,
@@ -2084,6 +2067,7 @@ CREATE TABLE `stock_balances` (
   KEY `idx_stock_location` (`location_type`,`location_id`),
   KEY `idx_stock_variant` (`variant_id`),
   KEY `idx_stock_balances_concern_id` (`concern_id`),
+  KEY `idx_stock_balances_concern` (`concern_id`),
   CONSTRAINT `stock_balances_ibfk_1` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -2099,6 +2083,8 @@ CREATE TABLE `stock_transactions` (
   `stock_state` enum('AVAILABLE','RESERVED','DAMAGED','RETURNED') NOT NULL,
   `transaction_type` varchar(50) NOT NULL,
   `quantity` decimal(10,2) NOT NULL,
+  `before_quantity` decimal(10,2) DEFAULT NULL,
+  `after_quantity` decimal(10,2) DEFAULT NULL,
   `balance_after` decimal(10,2) NOT NULL DEFAULT 0.00,
   `reference_type` varchar(50) DEFAULT NULL,
   `reference_id` int(10) unsigned DEFAULT NULL,
@@ -2109,6 +2095,10 @@ CREATE TABLE `stock_transactions` (
   `source_id` int(10) unsigned DEFAULT NULL,
   `dest_type` enum('PRODUCTION','PURCHASE','WAREHOUSE','SHOP','CUSTOMER','SUPPLIER','ADJUSTMENT','CHANNEL','OFFICE') DEFAULT NULL,
   `dest_id` int(10) unsigned DEFAULT NULL,
+  `from_location_type` varchar(50) DEFAULT NULL,
+  `from_location_id` int(10) unsigned DEFAULT NULL,
+  `to_location_type` varchar(50) DEFAULT NULL,
+  `to_location_id` int(10) unsigned DEFAULT NULL,
   `created_by` int(10) unsigned DEFAULT NULL,
   `concern_id` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -2119,6 +2109,7 @@ CREATE TABLE `stock_transactions` (
   KEY `idx_txn_date` (`created_at`),
   KEY `user_id` (`user_id`),
   KEY `idx_stock_transactions_concern_id` (`concern_id`),
+  KEY `idx_stock_transactions_concern` (`concern_id`),
   CONSTRAINT `stock_transactions_ibfk_1` FOREIGN KEY (`variant_id`) REFERENCES `product_variants` (`id`),
   CONSTRAINT `stock_transactions_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -2221,10 +2212,39 @@ CREATE TABLE `third_party_products` (
   `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `code` (`code`),
+  KEY `idx_tp_code` (`code`),
+  KEY `idx_tp_name` (`name`),
+  KEY `idx_tp_category` (`third_party_category_id`),
   KEY `idx_tp_cat` (`category_id`),
   KEY `idx_tp_subcat` (`subcategory_id`),
   KEY `idx_tp_seller` (`seller_id`),
   KEY `idx_tp_concern` (`concern_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ------------------------------------------------------------
+-- Table structure for `third_party_product_variants`
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `third_party_product_variants`;
+CREATE TABLE `third_party_product_variants` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `third_party_product_id` int(10) unsigned NOT NULL,
+  `purchase_item_id` int(10) unsigned DEFAULT NULL,
+  `sku` varchar(100) NOT NULL,
+  `size` varchar(50) NOT NULL,
+  `color` varchar(50) DEFAULT NULL,
+  `allocated_qty` decimal(12,3) NOT NULL DEFAULT 0.000,
+  `purchase_rate` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `mrp` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `selling_price` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `barcode` varchar(100) DEFAULT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_tppv_product` (`third_party_product_id`),
+  KEY `idx_tppv_item` (`purchase_item_id`),
+  KEY `idx_tppv_sku` (`sku`),
+  CONSTRAINT `third_party_product_variants_ibfk_1` FOREIGN KEY (`third_party_product_id`) REFERENCES `third_party_products` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ------------------------------------------------------------
@@ -2545,6 +2565,7 @@ CREATE TABLE `warehouses` (
   UNIQUE KEY `code` (`code`),
   KEY `manager_id` (`manager_id`),
   KEY `idx_warehouses_concern_id` (`concern_id`),
+  KEY `idx_warehouses_concern` (`concern_id`),
   CONSTRAINT `warehouses_ibfk_1` FOREIGN KEY (`manager_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

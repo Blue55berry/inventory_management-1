@@ -217,6 +217,61 @@ require_once BASE_PATH . '/app/Models/Concern.php';
 Concern::ensureSchema();
 echo "  Concern architecture migration applied and verified.\n";
 
+// 2f. third_party_product_variants table
+if (!tableExists($db, 'third_party_product_variants')) {
+    echo "  Creating table `third_party_product_variants`...\n";
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS `third_party_product_variants` (
+          `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+          `third_party_product_id` int(10) unsigned NOT NULL,
+          `purchase_item_id` int(10) unsigned DEFAULT NULL,
+          `sku` varchar(100) NOT NULL,
+          `size` varchar(50) NOT NULL,
+          `color` varchar(50) DEFAULT NULL,
+          `allocated_qty` decimal(12,3) NOT NULL DEFAULT 0.000,
+          `purchase_rate` decimal(12,2) NOT NULL DEFAULT 0.00,
+          `mrp` decimal(12,2) NOT NULL DEFAULT 0.00,
+          `selling_price` decimal(12,2) NOT NULL DEFAULT 0.00,
+          `barcode` varchar(100) DEFAULT NULL,
+          `is_active` tinyint(1) NOT NULL DEFAULT 1,
+          `created_at` datetime DEFAULT current_timestamp(),
+          `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+          PRIMARY KEY (`id`),
+          KEY `idx_tppv_product` (`third_party_product_id`),
+          KEY `idx_tppv_item` (`purchase_item_id`),
+          KEY `idx_tppv_sku` (`sku`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ");
+}
+
+// 2g. product_price_logs table
+if (!tableExists($db, 'product_price_logs')) {
+    echo "  Creating table `product_price_logs`...\n";
+    $db->exec("
+        CREATE TABLE IF NOT EXISTS `product_price_logs` (
+          `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+          `variant_id` int(10) unsigned DEFAULT NULL,
+          `product_id` int(10) unsigned DEFAULT NULL,
+          `sku` varchar(100) NOT NULL,
+          `old_selling_price` decimal(10,2) NOT NULL,
+          `new_selling_price` decimal(10,2) NOT NULL,
+          `old_mrp` decimal(10,2) NOT NULL,
+          `new_mrp` decimal(10,2) NOT NULL,
+          `cost_price` decimal(10,2) NOT NULL,
+          `markup_percentage` decimal(10,4) DEFAULT NULL,
+          `discount_percentage` decimal(10,4) NOT NULL,
+          `revision_notes` text NOT NULL,
+          `user_id` int(10) unsigned DEFAULT NULL,
+          `user_name` varchar(200) NOT NULL,
+          `created_at` datetime NOT NULL DEFAULT current_timestamp(),
+          PRIMARY KEY (`id`),
+          KEY `idx_price_logs_variant_created` (`variant_id`,`created_at`),
+          KEY `idx_price_logs_product` (`product_id`),
+          KEY `idx_price_logs_user` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ");
+}
+
 // -------------------------------------------------------------
 // STEP 3: ADD NEW COLUMNS TO EXISTING TABLES
 // -------------------------------------------------------------
@@ -281,6 +336,82 @@ foreach ($partitionTables as $pt) {
         echo "  Adding `partition_id` to `{$pt}`...\n";
         $db->exec("ALTER TABLE `{$pt}` ADD COLUMN `partition_id` int(10) unsigned DEFAULT 1 AFTER `id`");
     }
+}
+
+// 3f. concerns: concern_type
+if (tableExists($db, 'concerns') && !columnExists($db, 'concerns', 'concern_type')) {
+    echo "  Adding `concern_type` to `concerns`...\n";
+    $db->exec("ALTER TABLE `concerns` ADD COLUMN `concern_type` ENUM('HEAD_OFFICE','PRODUCTION','WAREHOUSE','RETAIL') NOT NULL DEFAULT 'HEAD_OFFICE' AFTER `code`");
+}
+
+// 3g. roles: concern_scope, applicable_concerns
+if (tableExists($db, 'roles')) {
+    if (!columnExists($db, 'roles', 'concern_scope')) {
+        echo "  Adding `concern_scope` to `roles`...\n";
+        $db->exec("ALTER TABLE `roles` ADD COLUMN `concern_scope` VARCHAR(20) NOT NULL DEFAULT 'ALL' AFTER `description`");
+    }
+    if (!columnExists($db, 'roles', 'applicable_concerns')) {
+        echo "  Adding `applicable_concerns` to `roles`...\n";
+        $db->exec("ALTER TABLE `roles` ADD COLUMN `applicable_concerns` TEXT DEFAULT NULL AFTER `concern_scope`");
+    }
+}
+
+// 3h. purchase_items: hsn_code
+if (tableExists($db, 'purchase_items') && !columnExists($db, 'purchase_items', 'hsn_code')) {
+    echo "  Adding `hsn_code` to `purchase_items`...\n";
+    $db->exec("ALTER TABLE `purchase_items` ADD COLUMN `hsn_code` VARCHAR(20) DEFAULT NULL AFTER `gst_percentage`");
+}
+
+// 3i. qc_batches: qr_generation_id
+if (tableExists($db, 'qc_batches') && !columnExists($db, 'qc_batches', 'qr_generation_id')) {
+    echo "  Adding `qr_generation_id` to `qc_batches`...\n";
+    $db->exec("ALTER TABLE `qc_batches` ADD COLUMN `qr_generation_id` INT UNSIGNED DEFAULT NULL AFTER `stitching_batch_id`, ADD KEY `idx_qcb_qr_generation` (`qr_generation_id`)");
+}
+
+// 3j. qc_items: total_qty
+if (tableExists($db, 'qc_items') && !columnExists($db, 'qc_items', 'total_qty')) {
+    echo "  Adding `total_qty` to `qc_items`...\n";
+    $db->exec("ALTER TABLE `qc_items` ADD COLUMN `total_qty` INT(11) NOT NULL DEFAULT 0 AFTER `color_name`");
+}
+
+// 3k. production_program_rolls: attributes
+if (tableExists($db, 'production_program_rolls') && !columnExists($db, 'production_program_rolls', 'attributes')) {
+    echo "  Adding `attributes` to `production_program_rolls`...\n";
+    $db->exec("ALTER TABLE `production_program_rolls` ADD COLUMN `attributes` TEXT DEFAULT NULL AFTER `allocated_qr_codes`");
+}
+
+// 3l. stock_transactions: before_quantity, after_quantity, from/to location cols
+if (tableExists($db, 'stock_transactions')) {
+    if (!columnExists($db, 'stock_transactions', 'before_quantity')) {
+        echo "  Adding `before_quantity` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `before_quantity` DECIMAL(10,2) DEFAULT NULL AFTER `quantity`");
+    }
+    if (!columnExists($db, 'stock_transactions', 'after_quantity')) {
+        echo "  Adding `after_quantity` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `after_quantity` DECIMAL(10,2) DEFAULT NULL AFTER `before_quantity`");
+    }
+    if (!columnExists($db, 'stock_transactions', 'from_location_type')) {
+        echo "  Adding `from_location_type` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `from_location_type` VARCHAR(50) DEFAULT NULL AFTER `dest_id`");
+    }
+    if (!columnExists($db, 'stock_transactions', 'from_location_id')) {
+        echo "  Adding `from_location_id` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `from_location_id` INT UNSIGNED DEFAULT NULL AFTER `from_location_type`");
+    }
+    if (!columnExists($db, 'stock_transactions', 'to_location_type')) {
+        echo "  Adding `to_location_type` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `to_location_type` VARCHAR(50) DEFAULT NULL AFTER `from_location_id`");
+    }
+    if (!columnExists($db, 'stock_transactions', 'to_location_id')) {
+        echo "  Adding `to_location_id` to `stock_transactions`...\n";
+        $db->exec("ALTER TABLE `stock_transactions` ADD COLUMN `to_location_id` INT UNSIGNED DEFAULT NULL AFTER `to_location_type`");
+    }
+}
+
+// 3m. third_party_products: brand_id
+if (tableExists($db, 'third_party_products') && !columnExists($db, 'third_party_products', 'brand_id')) {
+    echo "  Adding `brand_id` to `third_party_products`...\n";
+    $db->exec("ALTER TABLE `third_party_products` ADD COLUMN `brand_id` INT UNSIGNED DEFAULT NULL AFTER `sub_subcategory_code`");
 }
 
 // -------------------------------------------------------------
@@ -491,6 +622,144 @@ if (tableExists($db, 'production_stock_request_items')) {
     }
     try {
         $db->exec("ALTER TABLE `production_stock_request_items` MODIFY COLUMN `status` ENUM('PENDING','RECEIVED_BY_SEND_AREA','PARTIAL','ALLOCATED','DISPATCHED','FULFILLED','REJECTED') NOT NULL DEFAULT 'PENDING'");
+    } catch (Exception $e) {}
+}
+
+// Migration 12: 2026_11_18_remove_production_label_management.sql
+echo "  Applying 2026_11_18_remove_production_label_management.sql...\n";
+$removeLabelsMigration = BASE_PATH . '/database/migrations/2026_11_18_remove_production_label_management.sql';
+if (file_exists($removeLabelsMigration)) {
+    try {
+        $db->exec(file_get_contents($removeLabelsMigration));
+    } catch (Exception $e) {}
+}
+
+// Migration 13: 2026_11_18_add_complementary_to_items.sql
+echo "  Applying 2026_11_18_add_complementary_to_items.sql...\n";
+if (tableExists($db, 'production_purchase_items') && !columnExists($db, 'production_purchase_items', 'is_complementary')) {
+    $db->exec("ALTER TABLE `production_purchase_items` ADD COLUMN `is_complementary` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_mapped`");
+}
+if (tableExists($db, 'production_bill_items') && !columnExists($db, 'production_bill_items', 'is_complementary')) {
+    $db->exec("ALTER TABLE `production_bill_items` ADD COLUMN `is_complementary` TINYINT(1) NOT NULL DEFAULT 0 AFTER `unit_price`");
+}
+
+// Migration 14: 2026_11_18_add_raw_material_purchase_type.sql
+echo "  Applying 2026_11_18_add_raw_material_purchase_type.sql...\n";
+if (tableExists($db, 'production_purchases')) {
+    try {
+        $db->exec("ALTER TABLE `production_purchases` MODIFY COLUMN `purchase_type` ENUM('FABRIC_ROLL','RAW_MATERIAL','THIRD_PARTY','OWN_PRODUCT') NOT NULL DEFAULT 'FABRIC_ROLL'");
+    } catch (Exception $e) {}
+}
+if (tableExists($db, 'production_purchase_items')) {
+    try {
+        $db->exec("ALTER TABLE `production_purchase_items` MODIFY COLUMN `item_type` ENUM('FABRIC_ROLL','RAW_MATERIAL','THIRD_PARTY','OWN_PRODUCT') NOT NULL DEFAULT 'FABRIC_ROLL'");
+    } catch (Exception $e) {}
+}
+
+// Migration 15: 2026_11_18_modify_hsn_codes_nullable_gst.sql
+echo "  Applying 2026_11_18_modify_hsn_codes_nullable_gst.sql...\n";
+if (tableExists($db, 'hsn_codes')) {
+    try {
+        $db->exec("ALTER TABLE `hsn_codes` MODIFY COLUMN `description` TEXT NOT NULL, MODIFY COLUMN `gst_rate` DECIMAL(5,2) DEFAULT NULL");
+    } catch (Exception $e) {}
+}
+
+// Migration 16: 2026_11_18_add_purchase_mapping_fulfillment.sql
+echo "  Applying 2026_11_18_add_purchase_mapping_fulfillment.sql...\n";
+if (tableExists($db, 'production_purchase_items')) {
+    if (!columnExists($db, 'production_purchase_items', 'qr_generation_id')) {
+        $db->exec("ALTER TABLE `production_purchase_items` ADD COLUMN `qr_generation_id` INT UNSIGNED DEFAULT NULL AFTER `mapped_by`");
+        $db->exec("ALTER TABLE `production_purchase_items` ADD KEY `idx_ppi_qr_generation` (`qr_generation_id`)");
+    }
+    if (!columnExists($db, 'production_purchase_items', 'qr_batch_code')) {
+        $db->exec("ALTER TABLE `production_purchase_items` ADD COLUMN `qr_batch_code` VARCHAR(50) DEFAULT NULL AFTER `qr_generation_id`");
+    }
+    if (!columnExists($db, 'production_purchase_items', 'grn_id')) {
+        $db->exec("ALTER TABLE `production_purchase_items` ADD COLUMN `grn_id` INT UNSIGNED DEFAULT NULL AFTER `qr_batch_code`");
+        $db->exec("ALTER TABLE `production_purchase_items` ADD KEY `idx_ppi_grn` (`grn_id`)");
+    }
+    if (!columnExists($db, 'production_purchase_items', 'grn_number')) {
+        $db->exec("ALTER TABLE `production_purchase_items` ADD COLUMN `grn_number` VARCHAR(50) DEFAULT NULL AFTER `grn_id`");
+    }
+}
+if (tableExists($db, 'production_purchases')) {
+    if (!columnExists($db, 'production_purchases', 'grn_id')) {
+        $db->exec("ALTER TABLE `production_purchases` ADD COLUMN `grn_id` INT UNSIGNED DEFAULT NULL AFTER `total_amount`");
+        $db->exec("ALTER TABLE `production_purchases` ADD KEY `idx_pp_grn` (`grn_id`)");
+    }
+    if (!columnExists($db, 'production_purchases', 'grn_number')) {
+        $db->exec("ALTER TABLE `production_purchases` ADD COLUMN `grn_number` VARCHAR(50) DEFAULT NULL AFTER `grn_id`");
+    }
+}
+if (tableExists($db, 'purchase_orders') && !columnExists($db, 'purchase_orders', 'production_purchase_id')) {
+    $db->exec("ALTER TABLE `purchase_orders` ADD COLUMN `production_purchase_id` INT UNSIGNED DEFAULT NULL AFTER `id`");
+    $db->exec("ALTER TABLE `purchase_orders` ADD KEY `idx_po_production_purchase` (`production_purchase_id`)");
+}
+if (tableExists($db, 'purchase_inward_items') && !columnExists($db, 'purchase_inward_items', 'production_purchase_item_id')) {
+    $db->exec("ALTER TABLE `purchase_inward_items` ADD COLUMN `production_purchase_item_id` INT UNSIGNED DEFAULT NULL AFTER `purchase_inward_id`");
+    $db->exec("ALTER TABLE `purchase_inward_items` ADD KEY `idx_pii_production_purchase_item` (`production_purchase_item_id`)");
+}
+if (tableExists($db, 'products') && !columnExists($db, 'products', 'attributes')) {
+    $db->exec("ALTER TABLE `products` ADD COLUMN `attributes` TEXT DEFAULT NULL AFTER `description`");
+}
+if (tableExists($db, 'product_variants') && !columnExists($db, 'product_variants', 'attributes')) {
+    $db->exec("ALTER TABLE `product_variants` ADD COLUMN `attributes` TEXT DEFAULT NULL AFTER `image`");
+}
+
+// Migration 17: 2026_11_18_add_qr_generation_source_tabs.sql
+echo "  Applying 2026_11_18_add_qr_generation_source_tabs.sql...\n";
+if (tableExists($db, 'qr_generations')) {
+    $qrgCols = [
+        'qr_source' => "VARCHAR(30) NOT NULL DEFAULT 'THIRD_PARTY' AFTER `generation_type`",
+        'source_purchase_id' => "INT UNSIGNED DEFAULT NULL AFTER `qr_source`",
+        'source_purchase_item_id' => "INT UNSIGNED DEFAULT NULL AFTER `source_purchase_id`",
+        'stock_added' => "TINYINT(1) NOT NULL DEFAULT 0 AFTER `source_purchase_item_id`",
+        'stock_added_at' => "DATETIME DEFAULT NULL AFTER `stock_added`",
+        'stock_added_by' => "INT UNSIGNED DEFAULT NULL AFTER `stock_added_at`",
+    ];
+    foreach ($qrgCols as $col => $def) {
+        if (!columnExists($db, 'qr_generations', $col)) {
+            $db->exec("ALTER TABLE `qr_generations` ADD COLUMN `{$col}` {$def}");
+        }
+    }
+}
+
+// Migration 18: 2026_11_18_add_export_performance_indexes.sql
+echo "  Applying 2026_11_18_add_export_performance_indexes.sql...\n";
+$exportIndexes = [
+    'seller_rolls' => 'idx_seller_rolls_created_at (`created_at`)',
+    'production_programs' => 'idx_production_programs_created_at (`created_at`)',
+    'cutting_batches' => 'idx_cutting_batches_created_at (`created_at`)',
+    'stitching_batches' => 'idx_stitching_batches_created_at (`created_at`)',
+    'qc_batches' => 'idx_qc_batches_created_at (`created_at`)',
+    'production_batches' => 'idx_production_batches_packed_created (`packed_date`, `created_at`)',
+    'production_outwards' => 'idx_production_outwards_dispatch_created (`dispatch_date`, `created_at`)',
+    'production_expenses' => 'idx_production_expenses_date (`expense_date`)',
+    'wastage_sales' => 'idx_wastage_sales_date (`sale_date`)',
+    'stitching_wastage_sales' => 'idx_stitching_wastage_sales_date (`sale_date`)',
+    'production_stock_requests' => 'idx_production_stock_requests_created_at (`created_at`)',
+];
+foreach ($exportIndexes as $tbl => $idxDef) {
+    if (tableExists($db, $tbl)) {
+        try {
+            $db->exec("ALTER TABLE `{$tbl}` ADD KEY {$idxDef}");
+        } catch (Exception $e) {}
+    }
+}
+
+// Migration 19: 2026_11_18_seed_garment_textile_maintenance_hsn.php
+echo "  Applying 2026_11_18_seed_garment_textile_maintenance_hsn.php...\n";
+$seedHsnScript = BASE_PATH . '/database/migrations/2026_11_18_seed_garment_textile_maintenance_hsn.php';
+if (file_exists($seedHsnScript)) {
+    require_once $seedHsnScript;
+}
+
+// Migration 23: 2026_12_04_increase_weight_per_piece_precision.sql
+echo "  Applying 2026_12_04_increase_weight_per_piece_precision.sql...\n";
+$precisionMigration = BASE_PATH . '/database/migrations/2026_12_04_increase_weight_per_piece_precision.sql';
+if (file_exists($precisionMigration)) {
+    try {
+        $db->exec(file_get_contents($precisionMigration));
     } catch (Exception $e) {}
 }
 
